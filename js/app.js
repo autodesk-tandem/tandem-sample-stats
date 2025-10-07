@@ -26,6 +26,23 @@ let accounts = [];
 let currentFacilityURN = null;
 
 /**
+ * Check if a model is the default model for a facility
+ * The default model URN is derived from the facility URN by swapping the prefix
+ * @param {string} facilityURN - Facility URN (urn:adsk.dtt:...)
+ * @param {string} modelURN - Model URN (urn:adsk.dtm:...)
+ * @returns {boolean} True if this is the default model
+ */
+function isDefaultModel(facilityURN, modelURN) {
+  if (!facilityURN || !modelURN) return false;
+  
+  // Strip prefixes and compare
+  const facilityId = facilityURN.replace('urn:adsk.dtt:', '');
+  const modelId = modelURN.replace('urn:adsk.dtm:', '');
+  
+  return facilityId === modelId;
+}
+
+/**
  * Show/hide loading overlay
  * @param {boolean} show - Whether to show the loading overlay
  */
@@ -236,8 +253,9 @@ async function loadFacility(facilityURN) {
 /**
  * Display models list
  * @param {Array} models - Array of model objects
+ * @param {string} facilityURN - Facility URN to determine default model
  */
-async function displayModels(models) {
+async function displayModels(models, facilityURN) {
   if (!models || models.length === 0) {
     modelsList.innerHTML = '<p class="text-gray-500">No models found in this facility.</p>';
     return;
@@ -248,8 +266,8 @@ async function displayModels(models) {
   
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    // Check if it's the default model - could be labeled "Default Model" or "Untitled Model"
-    const isDefaultModel = model.label === 'Default Model' || model.label === 'Untitled Model' || model.default === true;
+    // Check if it's the default model by comparing URN IDs
+    const isDefault = isDefaultModel(facilityURN, model.modelId);
     const isMainModel = model.main === true;
     const isModelOn = model.on !== false; // Default to true if not specified
     
@@ -267,7 +285,7 @@ async function displayModels(models) {
                 <h3 class="text-lg font-semibold text-gray-900">${model.label || 'Untitled Model'}</h3>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
-                ${isDefaultModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
+                ${isDefault ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
                 ${isMainModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Main</span>' : ''}
                 ${isModelOn ? 
                   '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"><span class="mr-1">●</span>On</span>' : 
@@ -342,7 +360,7 @@ async function loadStats(facilityURN) {
     const models = await getModels(facilityURN);
     
     // Display models (this will load element counts asynchronously)
-    await displayModels(models);
+    await displayModels(models, facilityURN);
     
     // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';
