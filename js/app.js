@@ -529,13 +529,16 @@ async function displayStreams(streams, facilityURN) {
 
   // Fetch last seen values for all streams
   const streamKeys = streams.map(s => s['k']);
+  console.log('Fetching last seen values for stream keys:', streamKeys);
   const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+  console.log('Last seen values received:', lastSeenValues);
 
   // Build detailed view (initially hidden)
   let detailHtml = '<div id="streams-detail" class="hidden space-y-4">';
   
   for (let i = 0; i < streams.length; i++) {
     const stream = streams[i];
+    console.log(`Stream ${i} data:`, stream);
     
     // Name: Use override "n:!n" if present, otherwise "n:n"
     const streamName = stream['n:!n']?.[0] || stream['n:n']?.[0] || 'Unnamed Stream';
@@ -552,6 +555,7 @@ async function displayStreams(streams, facilityURN) {
         break;
       }
     }
+    console.log(`Stream ${i} - Internal ID:`, internalId);
     
     // Get last seen values for this stream
     const streamValues = lastSeenValues[streamKey];
