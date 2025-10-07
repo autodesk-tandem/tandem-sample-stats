@@ -270,24 +270,28 @@ function toggleModelsDetail() {
   const detailSection = document.getElementById('models-detail');
   const summarySection = document.getElementById('models-summary');
   const toggleBtn = document.getElementById('toggle-models-btn');
+  const iconDown = document.getElementById('toggle-icon-down');
+  const iconUp = document.getElementById('toggle-icon-up');
   
   console.log('Toggle clicked', {
     detailHidden: detailSection?.classList.contains('hidden'),
     summaryHidden: summarySection?.classList.contains('hidden')
   });
   
-  if (detailSection && summarySection && toggleBtn) {
+  if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
     if (detailSection.classList.contains('hidden')) {
       // Show detail, hide summary
       detailSection.classList.remove('hidden');
       summarySection.classList.add('hidden');
-      toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>';
+      iconDown.classList.add('hidden');
+      iconUp.classList.remove('hidden');
       toggleBtn.title = 'Show less';
     } else {
       // Show summary, hide detail
       detailSection.classList.add('hidden');
       summarySection.classList.remove('hidden');
-      toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+      iconDown.classList.remove('hidden');
+      iconUp.classList.add('hidden');
       toggleBtn.title = 'Show more';
     }
   }
@@ -318,8 +322,11 @@ async function displayModels(models, facilityURN) {
         <button id="toggle-models-btn"
                 class="p-2 hover:bg-gray-100 rounded-lg transition"
                 title="Show more">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg id="toggle-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+          <svg id="toggle-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
           </svg>
         </button>
       </div>
