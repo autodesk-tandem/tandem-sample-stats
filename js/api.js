@@ -307,3 +307,110 @@ export async function getSchema(modelURN) {
     return { attributes: [] };
   }
 }
+
+/**
+ * Get levels from all models in a facility
+ * Levels have CategoryId === 240
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<Array>} Array of level objects with modelId, key, and name
+ */
+export async function getLevels(facilityURN) {
+  try {
+    const models = await getModels(facilityURN);
+    const allLevels = [];
+    
+    for (const model of models) {
+      const payload = JSON.stringify({
+        qualifiedColumns: ['n:c', 'n:n'], // CategoryId and Name
+        includeHistory: false
+      });
+      
+      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch elements for model ${model.modelId}`);
+        continue;
+      }
+      
+      const elements = await response.json();
+      
+      // Filter for levels (CategoryId === 240)
+      const levels = elements.filter(row => row['n:c']?.[0] === 240);
+      
+      // Add model info to each level
+      levels.forEach(level => {
+        allLevels.push({
+          modelId: model.modelId,
+          modelName: model.label,
+          key: level.k,
+          name: level['n:n']?.[0] || 'Unnamed Level'
+        });
+      });
+    }
+    
+    return allLevels;
+  } catch (error) {
+    console.error('Error fetching levels:', error);
+    return [];
+  }
+}
+
+/**
+ * Get rooms from all models in a facility
+ * Rooms have CategoryId === 160, Spaces have CategoryId === 3600
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<Array>} Array of room objects with modelId, key, name, and type
+ */
+export async function getRooms(facilityURN) {
+  try {
+    const models = await getModels(facilityURN);
+    const allRooms = [];
+    
+    for (const model of models) {
+      const payload = JSON.stringify({
+        qualifiedColumns: ['n:c', 'n:n'], // CategoryId and Name
+        includeHistory: false
+      });
+      
+      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch elements for model ${model.modelId}`);
+        continue;
+      }
+      
+      const elements = await response.json();
+      
+      // Filter for rooms (CategoryId === 160)
+      const rooms = elements.filter(row => row['n:c']?.[0] === 160);
+      rooms.forEach(room => {
+        allRooms.push({
+          modelId: model.modelId,
+          modelName: model.label,
+          key: room.k,
+          name: room['n:n']?.[0] || 'Unnamed Room',
+          type: 'Room'
+        });
+      });
+      
+      // Filter for spaces (CategoryId === 3600)
+      const spaces = elements.filter(row => row['n:c']?.[0] === 3600);
+      spaces.forEach(space => {
+        allRooms.push({
+          modelId: model.modelId,
+          modelName: model.label,
+          key: space.k,
+          name: space['n:n']?.[0] || 'Unnamed Space',
+          type: 'Space'
+        });
+      });
+    }
+    
+    return allRooms;
+  } catch (error) {
+    console.error('Error fetching rooms:', error);
+    return [];
+  }
+}

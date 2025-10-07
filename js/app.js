@@ -10,7 +10,9 @@ import {
   getFacilityThumbnail,
   getStreams,
   getLastSeenStreamValues,
-  getSchema
+  getSchema,
+  getLevels,
+  getRooms
 } from './api.js';
 import { convertLongKeysToShortKeys } from './utils.js';
 
@@ -26,6 +28,8 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
+const levelsList = document.getElementById('levelsList');
+const roomsList = document.getElementById('roomsList');
 
 // State
 let accounts = [];
@@ -538,6 +542,206 @@ function toggleStreamsDetail() {
 }
 
 /**
+ * Toggle levels detail view
+ */
+function toggleLevelsDetail() {
+  const detailSection = document.getElementById('levels-detail');
+  const summarySection = document.getElementById('levels-summary');
+  const toggleBtn = document.getElementById('toggle-levels-btn');
+  const iconDown = document.getElementById('toggle-levels-icon-down');
+  const iconUp = document.getElementById('toggle-levels-icon-up');
+  
+  if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
+    if (detailSection.classList.contains('hidden')) {
+      detailSection.classList.remove('hidden');
+      summarySection.classList.add('hidden');
+      iconDown.classList.add('hidden');
+      iconUp.classList.remove('hidden');
+      toggleBtn.title = 'Show less';
+    } else {
+      detailSection.classList.add('hidden');
+      summarySection.classList.remove('hidden');
+      iconDown.classList.remove('hidden');
+      iconUp.classList.add('hidden');
+      toggleBtn.title = 'Show more';
+    }
+  }
+}
+
+/**
+ * Toggle rooms detail view
+ */
+function toggleRoomsDetail() {
+  const detailSection = document.getElementById('rooms-detail');
+  const summarySection = document.getElementById('rooms-summary');
+  const toggleBtn = document.getElementById('toggle-rooms-btn');
+  const iconDown = document.getElementById('toggle-rooms-icon-down');
+  const iconUp = document.getElementById('toggle-rooms-icon-up');
+  
+  if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
+    if (detailSection.classList.contains('hidden')) {
+      detailSection.classList.remove('hidden');
+      summarySection.classList.add('hidden');
+      iconDown.classList.add('hidden');
+      iconUp.classList.remove('hidden');
+      toggleBtn.title = 'Show less';
+    } else {
+      detailSection.classList.add('hidden');
+      summarySection.classList.remove('hidden');
+      iconDown.classList.remove('hidden');
+      iconUp.classList.add('hidden');
+      toggleBtn.title = 'Show more';
+    }
+  }
+}
+
+/**
+ * Display levels list
+ * @param {Array} levels - Array of level objects
+ */
+async function displayLevels(levels) {
+  if (!levels || levels.length === 0) {
+    levelsList.innerHTML = '<p class="text-gray-500">No levels found in this facility.</p>';
+    return;
+  }
+
+  // Build header with toggle button
+  let headerHtml = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center space-x-2">
+        <div class="text-3xl font-bold text-tandem-blue">${levels.length}</div>
+        <div class="text-sm text-gray-600">
+          <div>Level${levels.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <button id="toggle-levels-btn"
+              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              title="Show more">
+        <svg id="toggle-levels-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+        <svg id="toggle-levels-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  // Build summary view
+  let summaryHtml = `
+    <div id="levels-summary" class="text-center py-4 text-gray-500 text-sm">
+      Click to expand and view level details
+    </div>
+  `;
+
+  // Build detailed view
+  let detailHtml = '<div id="levels-detail" class="hidden space-y-2">';
+  
+  for (let i = 0; i < levels.length; i++) {
+    const level = levels[i];
+    
+    detailHtml += `
+      <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-tandem-blue transition">
+        <div class="flex items-center space-x-3">
+          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded flex items-center justify-center">
+            <span class="text-white font-semibold text-xs">${i + 1}</span>
+          </div>
+          <div>
+            <div class="font-semibold text-gray-900">${level.name}</div>
+            <div class="text-xs text-gray-500">${level.modelName}</div>
+          </div>
+        </div>
+        <div class="text-xs font-mono text-gray-400">${level.key.substring(0, 12)}...</div>
+      </div>
+    `;
+  }
+  
+  detailHtml += '</div>';
+  
+  levelsList.innerHTML = headerHtml + summaryHtml + detailHtml;
+  
+  const toggleBtn = document.getElementById('toggle-levels-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleLevelsDetail);
+  }
+}
+
+/**
+ * Display rooms list
+ * @param {Array} rooms - Array of room objects
+ */
+async function displayRooms(rooms) {
+  if (!rooms || rooms.length === 0) {
+    roomsList.innerHTML = '<p class="text-gray-500">No rooms or spaces found in this facility.</p>';
+    return;
+  }
+
+  // Build header with toggle button
+  let headerHtml = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center space-x-2">
+        <div class="text-3xl font-bold text-tandem-blue">${rooms.length}</div>
+        <div class="text-sm text-gray-600">
+          <div>Room${rooms.length !== 1 ? 's' : ''} & Space${rooms.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <button id="toggle-rooms-btn"
+              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              title="Show more">
+        <svg id="toggle-rooms-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+        <svg id="toggle-rooms-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  // Build summary view
+  let summaryHtml = `
+    <div id="rooms-summary" class="text-center py-4 text-gray-500 text-sm">
+      Click to expand and view room details
+    </div>
+  `;
+
+  // Build detailed view
+  let detailHtml = '<div id="rooms-detail" class="hidden space-y-2">';
+  
+  for (let i = 0; i < rooms.length; i++) {
+    const room = rooms[i];
+    const isSpace = room.type === 'Space';
+    
+    detailHtml += `
+      <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-tandem-blue transition">
+        <div class="flex items-center space-x-3">
+          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br ${isSpace ? 'from-orange-500 to-orange-600' : 'from-indigo-500 to-indigo-600'} rounded flex items-center justify-center">
+            <span class="text-white font-semibold text-xs">${i + 1}</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="font-semibold text-gray-900">${room.name}</span>
+              <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'} rounded">${room.type}</span>
+            </div>
+            <div class="text-xs text-gray-500">${room.modelName}</div>
+          </div>
+        </div>
+        <div class="text-xs font-mono text-gray-400">${room.key.substring(0, 12)}...</div>
+      </div>
+    `;
+  }
+  
+  detailHtml += '</div>';
+  
+  roomsList.innerHTML = headerHtml + summaryHtml + detailHtml;
+  
+  const toggleBtn = document.getElementById('toggle-rooms-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleRoomsDetail);
+  }
+}
+
+/**
  * Display streams list
  * @param {Array} streams - Array of stream objects
  * @param {string} facilityURN - Facility URN to fetch last seen values
@@ -702,6 +906,14 @@ async function loadStats(facilityURN) {
     // Get and display streams (only from default model)
     const streams = await getStreams(facilityURN);
     await displayStreams(streams, facilityURN);
+    
+    // Get and display levels
+    const levels = await getLevels(facilityURN);
+    await displayLevels(levels);
+    
+    // Get and display rooms
+    const rooms = await getRooms(facilityURN);
+    await displayRooms(rooms);
     
     // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';
