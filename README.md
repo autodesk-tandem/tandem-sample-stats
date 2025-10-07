@@ -1,0 +1,101 @@
+# Tandem Stats
+
+A modern, browser-based application for viewing statistics and information about your Autodesk Tandem facilities.
+
+## Features
+
+- **OAuth Authentication**: Secure 3-legged OAuth flow with Autodesk
+- **Account Switcher**: Browse and switch between all your Tandem accounts/teams
+- **Facility Switcher**: Quick access to all facilities you have permissions for
+- **Modern UI**: Clean, responsive interface built with Tailwind CSS
+- **Statistics Dashboard**: View key metrics about your facilities (expandable)
+
+## Prerequisites
+
+- A valid Autodesk Forge application with Client ID
+- Access to at least one Tandem facility
+- A modern web browser
+- A local web server (e.g., Python's `http.server`, Node's `http-server`, or VSCode Live Server)
+
+## Setup
+
+1. **Configure your Forge Client ID**
+   
+   Edit `js/config.js` and add your Forge Client ID:
+   ```javascript
+   forgeKey: "YOUR_FORGE_CLIENT_ID_HERE"
+   ```
+
+2. **Configure OAuth Redirect URI**
+   
+   Make sure your Forge app has the correct redirect URI configured:
+   - For local development: `http://localhost:8000`
+   - Update `loginRedirect` in `js/config.js` if using a different port
+
+3. **Start a local web server**
+
+   Using Python 3:
+   ```bash
+   python3 -m http.server 8000
+   ```
+
+   Or using Node.js:
+   ```bash
+   npx http-server -p 8000
+   ```
+
+4. **Open the application**
+   
+   Navigate to `http://localhost:8000` in your web browser
+
+## Usage
+
+1. Click "Sign In" to authenticate with your Autodesk account
+2. Select an account from the dropdown menu
+3. Select a facility from the facility dropdown
+4. View facility information and statistics
+
+## Project Structure
+
+```
+tandem-stats/
+├── index.html          # Main HTML page
+├── js/
+│   ├── app.js         # Main application logic
+│   ├── auth.js        # Authentication and OAuth handling
+│   ├── api.js         # Tandem API utilities
+│   └── config.js      # Environment configuration
+└── README.md          # This file
+```
+
+## Configuration
+
+The application supports two environments:
+
+- **Production** (default): Uses `https://developer.api.autodesk.com/tandem/v1`
+- **Staging**: Uses `https://tandem-stg.autodesk.com/api/v1`
+
+To switch environments, edit `js/config.js` and change the return value in `getEnv()`.
+
+## Development
+
+This project uses:
+- Vanilla JavaScript (ES6 modules)
+- Tailwind CSS (via CDN)
+- Autodesk Tandem REST API
+
+No build process or package manager is required.
+
+## Browser Compatibility
+
+- Chrome/Edge (latest)
+- Firefox (latest)
+- Safari (latest)
+
+## License
+
+MIT
+
+## Acknowledgments
+
+Based on the Autodesk Tandem REST API and inspired by the [tandem-sample-rest-testbed](https://github.com/autodesk-tandem/tandem-sample-rest-testbed) project.
