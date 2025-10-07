@@ -30,6 +30,7 @@ const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
 const levelsList = document.getElementById('levelsList');
 const roomsList = document.getElementById('roomsList');
+const schemaList = document.getElementById('schemaList');
 
 // State
 let accounts = [];
@@ -596,6 +597,33 @@ function toggleRoomsDetail() {
 }
 
 /**
+ * Toggle schema detail view
+ */
+function toggleSchemaDetail() {
+  const detailSection = document.getElementById('schema-detail');
+  const summarySection = document.getElementById('schema-summary');
+  const toggleBtn = document.getElementById('toggle-schema-btn');
+  const iconDown = document.getElementById('toggle-schema-icon-down');
+  const iconUp = document.getElementById('toggle-schema-icon-up');
+  
+  if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
+    if (detailSection.classList.contains('hidden')) {
+      detailSection.classList.remove('hidden');
+      summarySection.classList.add('hidden');
+      iconDown.classList.add('hidden');
+      iconUp.classList.remove('hidden');
+      toggleBtn.title = 'Show less';
+    } else {
+      detailSection.classList.add('hidden');
+      summarySection.classList.remove('hidden');
+      iconDown.classList.remove('hidden');
+      iconUp.classList.add('hidden');
+      toggleBtn.title = 'Show more';
+    }
+  }
+}
+
+/**
  * Display levels list
  * @param {Array} levels - Array of level objects
  */
@@ -738,6 +766,129 @@ async function displayRooms(rooms) {
   const toggleBtn = document.getElementById('toggle-rooms-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleRoomsDetail);
+  }
+}
+
+/**
+ * Display schema for all models
+ * @param {Array} models - Array of model objects
+ */
+async function displaySchema(models) {
+  if (!models || models.length === 0) {
+    schemaList.innerHTML = '<p class="text-gray-500">No models found.</p>';
+    return;
+  }
+
+  // Count total attributes across all models
+  let totalAttributes = 0;
+  for (const modelURN in schemaCache) {
+    totalAttributes += schemaCache[modelURN].attributes.length;
+  }
+
+  // Build header with toggle button
+  let headerHtml = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center space-x-2">
+        <div class="text-3xl font-bold text-tandem-blue">${totalAttributes}</div>
+        <div class="text-sm text-gray-600">
+          <div>Attribute${totalAttributes !== 1 ? 's' : ''} across ${models.length} model${models.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <button id="toggle-schema-btn"
+              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              title="Show more">
+        <svg id="toggle-schema-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+        <svg id="toggle-schema-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  // Build summary view
+  let summaryHtml = `
+    <div id="schema-summary" class="text-center py-4 text-gray-500 text-sm">
+      Click to expand and view schema details
+    </div>
+  `;
+
+  // Build detailed view
+  let detailHtml = '<div id="schema-detail" class="hidden space-y-6">';
+  
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const schema = schemaCache[model.modelId];
+    
+    if (!schema || !schema.attributes || schema.attributes.length === 0) {
+      continue;
+    }
+
+    detailHtml += `
+      <div class="border border-gray-200 rounded-lg p-4">
+        <h3 class="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+          <span class="flex-shrink-0 w-6 h-6 bg-gradient-to-br from-teal-500 to-teal-600 rounded flex items-center justify-center">
+            <span class="text-white font-semibold text-xs">${i + 1}</span>
+          </span>
+          ${model.label}
+          <span class="text-sm font-normal text-gray-500">(${schema.attributes.length} attributes)</span>
+        </h3>
+        <div class="overflow-x-auto">
+          <table class="min-w-full text-xs">
+            <thead class="bg-gray-50">
+              <tr>
+                <th class="px-3 py-2 text-left font-semibold text-gray-700">ID</th>
+                <th class="px-3 py-2 text-left font-semibold text-gray-700">Category</th>
+                <th class="px-3 py-2 text-left font-semibold text-gray-700">Name</th>
+                <th class="px-3 py-2 text-left font-semibold text-gray-700">Data Type</th>
+                <th class="px-3 py-2 text-left font-semibold text-gray-700">Spec</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-gray-200">
+    `;
+
+    // Show first 50 attributes, then add a "show more" note
+    const displayCount = Math.min(50, schema.attributes.length);
+    
+    for (let j = 0; j < displayCount; j++) {
+      const attr = schema.attributes[j];
+      detailHtml += `
+        <tr class="hover:bg-gray-50">
+          <td class="px-3 py-2 font-mono text-gray-600">${attr.id || ''}</td>
+          <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
+          <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
+          <td class="px-3 py-2 text-gray-600">${attr.dataType || ''}</td>
+          <td class="px-3 py-2 text-gray-600">${attr.spec || ''}</td>
+        </tr>
+      `;
+    }
+
+    if (schema.attributes.length > 50) {
+      detailHtml += `
+        <tr>
+          <td colspan="5" class="px-3 py-2 text-center text-gray-500 italic">
+            ... and ${schema.attributes.length - 50} more attributes
+          </td>
+        </tr>
+      `;
+    }
+
+    detailHtml += `
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+  }
+  
+  detailHtml += '</div>';
+  
+  schemaList.innerHTML = headerHtml + summaryHtml + detailHtml;
+  
+  const toggleBtn = document.getElementById('toggle-schema-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleSchemaDetail);
   }
 }
 
@@ -914,6 +1065,15 @@ async function loadStats(facilityURN) {
     // Get and display rooms
     const rooms = await getRooms(facilityURN);
     await displayRooms(rooms);
+    
+    // Load schemas for all models (they're already being cached from streams display)
+    // but make sure all are loaded
+    for (const model of models) {
+      await loadSchemaForModel(model.modelId);
+    }
+    
+    // Display schema information
+    await displaySchema(models);
     
     // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';
