@@ -828,10 +828,10 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
             </div>
           </th>
           <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
-              data-model="${modelId}" data-column="spec" data-direction="${sortColumn === 'spec' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+              data-model="${modelId}" data-column="forgeUnit" data-direction="${sortColumn === 'forgeUnit' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
             <div class="flex items-center gap-1">
-              <span>Spec</span>
-              ${sortColumn === 'spec' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+              <span>Unit</span>
+              ${sortColumn === 'forgeUnit' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
             </div>
           </th>
         </tr>
@@ -851,7 +851,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
         <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
         <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
         <td class="px-3 py-2 text-gray-600">${dataTypeName}</td>
-        <td class="px-3 py-2 text-gray-600">${attr.spec || ''}</td>
+        <td class="px-3 py-2 text-gray-600">${attr.forgeUnit || ''}</td>
       </tr>
     `;
   }
