@@ -827,13 +827,6 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
               ${sortColumn === 'dataType' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
             </div>
           </th>
-          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
-              data-model="${modelId}" data-column="forgeUnit" data-direction="${sortColumn === 'forgeUnit' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
-            <div class="flex items-center gap-1">
-              <span>Unit</span>
-              ${sortColumn === 'forgeUnit' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </div>
-          </th>
         </tr>
       </thead>
       <tbody class="divide-y divide-gray-200">
@@ -851,7 +844,6 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
         <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
         <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
         <td class="px-3 py-2 text-gray-600">${dataTypeName}</td>
-        <td class="px-3 py-2 text-gray-600">${attr.forgeUnit || ''}</td>
       </tr>
     `;
   }
@@ -859,7 +851,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
   if (sortedAttributes.length > 20 && !showAll) {
     tableHtml += `
       <tr>
-        <td colspan="5" class="px-3 py-2 text-center">
+        <td colspan="4" class="px-3 py-2 text-center">
           <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
                   data-model="${modelId}" data-show-all="true">
             ... and ${sortedAttributes.length - 20} more attributes (click to show all)
@@ -870,7 +862,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
   } else if (showAll && sortedAttributes.length > 20) {
     tableHtml += `
       <tr>
-        <td colspan="5" class="px-3 py-2 text-center">
+        <td colspan="4" class="px-3 py-2 text-center">
           <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
                   data-model="${modelId}" data-show-all="false">
             Show less
@@ -994,11 +986,6 @@ async function displaySchema(models) {
     const schema = schemaCache[model.modelId];
     
     if (schema && schema.attributes && schema.attributes.length > 0) {
-      // Debug: log first attribute to see structure
-      if (i === 0) {
-        console.log('Sample attribute structure:', schema.attributes[0]);
-        console.log('Available properties:', Object.keys(schema.attributes[0]));
-      }
       renderSchemaTable(model.modelId, schema.attributes);
     }
   }
