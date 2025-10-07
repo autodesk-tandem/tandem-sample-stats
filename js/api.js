@@ -284,3 +284,26 @@ export async function getLastSeenStreamValues(facilityURN, streamKeys) {
     return {};
   }
 }
+
+/**
+ * Get schema for a model
+ * Schema contains attribute definitions with id (qualified property), category, name, dataType, etc.
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<Object>} Schema object with attributes array
+ */
+export async function getSchema(modelURN) {
+  try {
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/schema`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch schema: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching schema:', error);
+    return { attributes: [] };
+  }
+}

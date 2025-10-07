@@ -9,7 +9,8 @@ import {
   getElementCount,
   getFacilityThumbnail,
   getStreams,
-  getLastSeenStreamValues
+  getLastSeenStreamValues,
+  getSchema
 } from './api.js';
 import { convertLongKeysToShortKeys } from './utils.js';
 
@@ -30,6 +31,9 @@ const streamsList = document.getElementById('streamsList');
 let accounts = [];
 let currentFacilityURN = null;
 
+// Schema cache: modelURN -> { attributes: [...], lookup: Map(qualifiedProp -> attribute) }
+const schemaCache = {};
+
 /**
  * Check if a model is the default model for a facility
  * The default model URN is derived from the facility URN by swapping the prefix
@@ -45,6 +49,51 @@ function isDefaultModel(facilityURN, modelURN) {
   const modelId = modelURN.replace('urn:adsk.dtm:', '');
   
   return facilityId === modelId;
+}
+
+/**
+ * Load and cache schema for a model
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<Object>} Schema object with attributes array and lookup map
+ */
+async function loadSchemaForModel(modelURN) {
+  if (schemaCache[modelURN]) {
+    return schemaCache[modelURN];
+  }
+  
+  const schema = await getSchema(modelURN);
+  
+  // Create a lookup map for quick property lookups
+  const lookup = new Map();
+  if (schema.attributes) {
+    schema.attributes.forEach(attr => {
+      lookup.set(attr.id, attr);
+    });
+  }
+  
+  schemaCache[modelURN] = {
+    attributes: schema.attributes || [],
+    lookup: lookup
+  };
+  
+  return schemaCache[modelURN];
+}
+
+/**
+ * Get human-readable display name for a qualified property
+ * @param {string} modelURN - Model URN
+ * @param {string} qualifiedProp - Qualified property ID (e.g., "z:LQ")
+ * @returns {Promise<string>} Display name (e.g., "Category.PropertyName") or the qualified prop if not found
+ */
+async function getPropertyDisplayName(modelURN, qualifiedProp) {
+  const schema = await loadSchemaForModel(modelURN);
+  const attr = schema.lookup.get(qualifiedProp);
+  
+  if (attr && attr.category && attr.name) {
+    return `${attr.category}.${attr.name}`;
+  }
+  
+  return qualifiedProp; // Fallback to qualified prop if not found
 }
 
 /**
@@ -528,6 +577,12 @@ async function displayStreams(streams, facilityURN) {
     </div>
   `;
 
+  // Get the default model URN (streams only exist in the default model)
+  const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+  
+  // Load schema for the default model (cached)
+  await loadSchemaForModel(defaultModelURN);
+  
   // Fetch last seen values for all streams
   const streamKeys = streams.map(s => s['k']);
   console.log('Fetching last seen values for stream keys:', streamKeys);
@@ -571,13 +626,20 @@ async function displayStreams(streams, facilityURN) {
       valuesHtml = '<div class="mt-3 pt-3 border-t border-gray-200"><div class="text-xs font-semibold text-gray-700 mb-2">Last Seen Values:</div><div class="space-y-2">';
       
       for (const [propKey, propValues] of Object.entries(streamValues)) {
-        // propKey is like "z:wAc" which is the internal property ID
-        valuesHtml += `<div class="bg-gray-50 rounded p-2"><div class="font-mono text-xs font-semibold text-gray-700 mb-1">${propKey}</div>`;
+        // propKey is like "z:LQ" which is the internal property ID
+        // Get human-readable display name
+        const displayName = await getPropertyDisplayName(defaultModelURN, propKey);
+        
+        valuesHtml += `<div class="bg-gray-50 rounded p-2">`;
+        valuesHtml += `<div class="text-xs mb-1">`;
+        valuesHtml += `<div class="font-semibold text-gray-900">${displayName}</div>`;
+        valuesHtml += `<div class="font-mono text-gray-500 text-xs">${propKey}</div>`;
+        valuesHtml += `</div>`;
         
         for (const [timestamp, value] of Object.entries(propValues)) {
           const date = new Date(parseInt(timestamp));
           valuesHtml += `
-            <div class="flex justify-between items-center text-xs pl-2">
+            <div class="flex justify-between items-center text-xs pl-2 mt-1">
               <span class="text-gray-600">${date.toLocaleString()}</span>
               <span class="font-semibold text-gray-900">${value}</span>
             </div>
