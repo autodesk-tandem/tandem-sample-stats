@@ -12,7 +12,8 @@ import {
   getLastSeenStreamValues,
   getSchema,
   getLevels,
-  getRooms
+  getRooms,
+  getTaggedAssetsCount
 } from './api.js';
 import { convertLongKeysToShortKeys, getDataTypeName } from './utils.js';
 
@@ -1271,20 +1272,18 @@ async function loadStats(facilityURN) {
     document.getElementById('stat2').textContent = models ? models.length : '0';
     document.getElementById('stat2-desc').textContent = `Model${models?.length !== 1 ? 's' : ''} in facility`;
     
-    // Calculate total elements across all models
+    // Calculate tagged assets (elements with user-defined properties)
     if (models && models.length > 0) {
       // Show loading state
       document.getElementById('stat1').innerHTML = '<span class="animate-pulse">...</span>';
       document.getElementById('stat1-desc').textContent = 'Calculating...';
       
-      // Fetch all element counts
-      const countPromises = models.map(model => getElementCount(model.modelId));
-      const counts = await Promise.all(countPromises);
-      const totalElements = counts.reduce((sum, count) => sum + count, 0);
+      // Fetch tagged assets count
+      const taggedAssetsCount = await getTaggedAssetsCount(facilityURN);
       
-      // Update total elements stat
-      document.getElementById('stat1').textContent = totalElements.toLocaleString();
-      document.getElementById('stat1-desc').textContent = 'Total elements across all models';
+      // Update tagged assets stat
+      document.getElementById('stat1').textContent = taggedAssetsCount.toLocaleString();
+      document.getElementById('stat1-desc').textContent = 'Elements with user-defined properties';
     } else {
       document.getElementById('stat1').textContent = '0';
       document.getElementById('stat1-desc').textContent = 'No models';

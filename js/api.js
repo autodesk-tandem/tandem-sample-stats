@@ -421,3 +421,49 @@ export async function getRooms(facilityURN) {
     return [];
   }
 }
+
+/**
+ * Get count of tagged assets (elements with user-defined properties) from all models in a facility
+ * Tagged assets are elements that have at least one property in the 'z' (DtProperties) family
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<number>} Count of tagged assets
+ */
+export async function getTaggedAssetsCount(facilityURN) {
+  try {
+    const models = await getModels(facilityURN);
+    let totalTaggedAssets = 0;
+    
+    for (const model of models) {
+      // Scan for elements with user-defined properties (z family = DtProperties)
+      const payload = JSON.stringify({
+        families: ['z'], // DtProperties column family
+        includeHistory: false,
+        skipArrays: true
+      });
+      
+      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch tagged assets for model ${model.modelId}`);
+        continue;
+      }
+      
+      const elements = await response.json();
+      
+      // Filter for elements that have at least one z: property (user-defined property)
+      const taggedElements = elements.filter(element => {
+        const keys = Object.keys(element);
+        // Check if any key starts with 'z:' (excluding the 'k' key which is the element key)
+        return keys.some(key => key.startsWith('z:'));
+      });
+      
+      totalTaggedAssets += taggedElements.length;
+    }
+    
+    return totalTaggedAssets;
+  } catch (error) {
+    console.error('Error fetching tagged assets:', error);
+    return 0;
+  }
+}
