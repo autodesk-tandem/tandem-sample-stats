@@ -770,6 +770,119 @@ async function displayRooms(rooms) {
 }
 
 /**
+ * Render a schema table for a model
+ * @param {string} modelId - Model ID
+ * @param {Array} attributes - Array of attribute objects
+ * @param {string} sortColumn - Column to sort by
+ * @param {string} sortDirection - 'asc' or 'desc'
+ */
+function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection = 'asc') {
+  const tableContainer = document.getElementById(`schema-table-${modelId}`);
+  if (!tableContainer) return;
+
+  // Sort attributes if sortColumn is specified
+  let sortedAttributes = [...attributes];
+  if (sortColumn) {
+    sortedAttributes.sort((a, b) => {
+      const aVal = (a[sortColumn] || '').toString().toLowerCase();
+      const bVal = (b[sortColumn] || '').toString().toLowerCase();
+      
+      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+  }
+
+  // Build table HTML
+  let tableHtml = `
+    <table class="min-w-full text-xs">
+      <thead class="bg-gray-50">
+        <tr>
+          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+              data-model="${modelId}" data-column="id" data-direction="${sortColumn === 'id' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+            <div class="flex items-center gap-1">
+              <span>ID</span>
+              ${sortColumn === 'id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </div>
+          </th>
+          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+              data-model="${modelId}" data-column="category" data-direction="${sortColumn === 'category' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+            <div class="flex items-center gap-1">
+              <span>Category</span>
+              ${sortColumn === 'category' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </div>
+          </th>
+          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+              data-model="${modelId}" data-column="name" data-direction="${sortColumn === 'name' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+            <div class="flex items-center gap-1">
+              <span>Name</span>
+              ${sortColumn === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </div>
+          </th>
+          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+              data-model="${modelId}" data-column="dataType" data-direction="${sortColumn === 'dataType' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+            <div class="flex items-center gap-1">
+              <span>Data Type</span>
+              ${sortColumn === 'dataType' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </div>
+          </th>
+          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+              data-model="${modelId}" data-column="spec" data-direction="${sortColumn === 'spec' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+            <div class="flex items-center gap-1">
+              <span>Spec</span>
+              ${sortColumn === 'spec' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </div>
+          </th>
+        </tr>
+      </thead>
+      <tbody class="divide-y divide-gray-200">
+  `;
+
+  // Show first 50 attributes
+  const displayCount = Math.min(50, sortedAttributes.length);
+  
+  for (let j = 0; j < displayCount; j++) {
+    const attr = sortedAttributes[j];
+    tableHtml += `
+      <tr class="hover:bg-gray-50">
+        <td class="px-3 py-2 font-mono text-gray-600">${attr.id || ''}</td>
+        <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
+        <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
+        <td class="px-3 py-2 text-gray-600">${attr.dataType || ''}</td>
+        <td class="px-3 py-2 text-gray-600">${attr.spec || ''}</td>
+      </tr>
+    `;
+  }
+
+  if (sortedAttributes.length > 50) {
+    tableHtml += `
+      <tr>
+        <td colspan="5" class="px-3 py-2 text-center text-gray-500 italic">
+          ... and ${sortedAttributes.length - 50} more attributes
+        </td>
+      </tr>
+    `;
+  }
+
+  tableHtml += `
+      </tbody>
+    </table>
+  `;
+
+  tableContainer.innerHTML = tableHtml;
+
+  // Add click handlers to table headers
+  const headers = tableContainer.querySelectorAll('th[data-column]');
+  headers.forEach(header => {
+    header.addEventListener('click', () => {
+      const column = header.getAttribute('data-column');
+      const direction = header.getAttribute('data-direction');
+      renderSchemaTable(modelId, attributes, column, direction);
+    });
+  });
+}
+
+/**
  * Display schema for all models
  * @param {Array} models - Array of model objects
  */
@@ -835,48 +948,7 @@ async function displaySchema(models) {
           <span class="text-sm font-normal text-gray-500">(${schema.attributes.length} attributes)</span>
         </h3>
         <div class="overflow-x-auto">
-          <table class="min-w-full text-xs">
-            <thead class="bg-gray-50">
-              <tr>
-                <th class="px-3 py-2 text-left font-semibold text-gray-700">ID</th>
-                <th class="px-3 py-2 text-left font-semibold text-gray-700">Category</th>
-                <th class="px-3 py-2 text-left font-semibold text-gray-700">Name</th>
-                <th class="px-3 py-2 text-left font-semibold text-gray-700">Data Type</th>
-                <th class="px-3 py-2 text-left font-semibold text-gray-700">Spec</th>
-              </tr>
-            </thead>
-            <tbody class="divide-y divide-gray-200">
-    `;
-
-    // Show first 50 attributes, then add a "show more" note
-    const displayCount = Math.min(50, schema.attributes.length);
-    
-    for (let j = 0; j < displayCount; j++) {
-      const attr = schema.attributes[j];
-      detailHtml += `
-        <tr class="hover:bg-gray-50">
-          <td class="px-3 py-2 font-mono text-gray-600">${attr.id || ''}</td>
-          <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
-          <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
-          <td class="px-3 py-2 text-gray-600">${attr.dataType || ''}</td>
-          <td class="px-3 py-2 text-gray-600">${attr.spec || ''}</td>
-        </tr>
-      `;
-    }
-
-    if (schema.attributes.length > 50) {
-      detailHtml += `
-        <tr>
-          <td colspan="5" class="px-3 py-2 text-center text-gray-500 italic">
-            ... and ${schema.attributes.length - 50} more attributes
-          </td>
-        </tr>
-      `;
-    }
-
-    detailHtml += `
-            </tbody>
-          </table>
+          <div id="schema-table-${model.modelId}"></div>
         </div>
       </div>
     `;
@@ -889,6 +961,16 @@ async function displaySchema(models) {
   const toggleBtn = document.getElementById('toggle-schema-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleSchemaDetail);
+  }
+
+  // Render initial tables (unsorted)
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const schema = schemaCache[model.modelId];
+    
+    if (schema && schema.attributes && schema.attributes.length > 0) {
+      renderSchemaTable(model.modelId, schema.attributes);
+    }
   }
 }
 
