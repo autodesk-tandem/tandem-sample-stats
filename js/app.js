@@ -11,6 +11,7 @@ import {
   getStreams,
   getLastSeenStreamValues
 } from './api.js';
+import { convertLongKeysToShortKeys } from './utils.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
@@ -530,8 +531,12 @@ async function displayStreams(streams, facilityURN) {
   // Fetch last seen values for all streams
   const streamKeys = streams.map(s => s['k']);
   console.log('Fetching last seen values for stream keys:', streamKeys);
-  const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
-  console.log('Last seen values received:', lastSeenValues);
+  const lastSeenValuesRaw = await getLastSeenStreamValues(facilityURN, streamKeys);
+  console.log('Last seen values received (with long keys):', lastSeenValuesRaw);
+  
+  // Convert long keys to short keys so we can match them with our stream objects
+  const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
+  console.log('Last seen values converted (with short keys):', lastSeenValues);
 
   // Build detailed view (initially hidden)
   let detailHtml = '<div id="streams-detail" class="hidden space-y-4">';
