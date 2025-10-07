@@ -6,6 +6,35 @@ const kElementIdSize = 20;
 const kElementFlagsSize = 4;
 
 /**
+ * Attribute type enum mapping from Tandem SDK
+ * Maps numeric type codes to human-readable names
+ */
+export const AttributeType = {
+  0: 'Unknown',
+  1: 'Boolean',
+  2: 'Integer',
+  3: 'Double',
+  4: 'Float',
+  10: 'BLOB',
+  11: 'DbKey',
+  20: 'String',
+  21: 'LocalizableString',
+  22: 'DateTime',
+  23: 'GeoLocation',
+  24: 'Position',
+  25: 'Url'
+};
+
+/**
+ * Get human-readable name for attribute data type
+ * @param {number} typeCode - Numeric type code
+ * @returns {string} Human-readable type name
+ */
+export function getDataTypeName(typeCode) {
+  return AttributeType[typeCode] || `Type ${typeCode}`;
+}
+
+/**
  * Make a base64 string web-safe
  * @param {string} str - Base64 string
  * @returns {string} Web-safe base64 string

@@ -14,7 +14,7 @@ import {
   getLevels,
   getRooms
 } from './api.js';
-import { convertLongKeysToShortKeys } from './utils.js';
+import { convertLongKeysToShortKeys, getDataTypeName } from './utils.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
@@ -844,12 +844,13 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
   
   for (let j = 0; j < displayCount; j++) {
     const attr = sortedAttributes[j];
+    const dataTypeName = getDataTypeName(attr.dataType);
     tableHtml += `
       <tr class="hover:bg-gray-50">
         <td class="px-3 py-2 font-mono text-gray-600">${attr.id || ''}</td>
         <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
         <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
-        <td class="px-3 py-2 text-gray-600">${attr.dataType || ''}</td>
+        <td class="px-3 py-2 text-gray-600">${dataTypeName}</td>
         <td class="px-3 py-2 text-gray-600">${attr.spec || ''}</td>
       </tr>
     `;
