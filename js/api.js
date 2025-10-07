@@ -133,3 +133,24 @@ export async function getModels(facilityURN) {
     return null;
   }
 }
+
+/**
+ * Get detailed information about a specific model
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<object>} Model details
+ */
+export async function getModelDetails(modelURN) {
+  try {
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model details: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching model details:', error);
+    return null;
+  }
+}

@@ -4,7 +4,8 @@ import {
   getFacilitiesForGroup, 
   getFacilitiesForUser, 
   getFacilityInfo,
-  getModels 
+  getModels,
+  getModelDetails
 } from './api.js';
 
 // DOM Elements
@@ -17,6 +18,7 @@ const welcomeMessage = document.getElementById('welcomeMessage');
 const dashboardContent = document.getElementById('dashboardContent');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
+const modelsList = document.getElementById('modelsList');
 
 // State
 let accounts = [];
@@ -231,6 +233,70 @@ async function loadFacility(facilityURN) {
 }
 
 /**
+ * Display models list
+ * @param {Array} models - Array of model objects
+ */
+async function displayModels(models) {
+  if (!models || models.length === 0) {
+    modelsList.innerHTML = '<p class="text-gray-500">No models found in this facility.</p>';
+    return;
+  }
+
+  let html = '<div class="space-y-4">';
+  
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const isDefaultModel = model.label === 'Default Model';
+    
+    html += `
+      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
+        <div class="flex items-start justify-between mb-3">
+          <div class="flex items-center space-x-3">
+            <div class="flex-shrink-0">
+              <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+                <span class="text-white font-semibold text-sm">${i + 1}</span>
+              </div>
+            </div>
+            <div>
+              <h3 class="text-lg font-semibold text-gray-900">${model.label || 'Untitled Model'}</h3>
+              ${isDefaultModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
+            </div>
+          </div>
+        </div>
+        
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <div>
+            <span class="font-medium text-gray-700">Model ID:</span>
+            <span class="text-gray-600 ml-2 font-mono text-xs break-all">${model.modelId}</span>
+          </div>
+          ${model.version ? `
+          <div>
+            <span class="font-medium text-gray-700">Version:</span>
+            <span class="text-gray-600 ml-2">${model.version}</span>
+          </div>
+          ` : ''}
+          ${model.createdAt ? `
+          <div>
+            <span class="font-medium text-gray-700">Created:</span>
+            <span class="text-gray-600 ml-2">${new Date(model.createdAt).toLocaleDateString()}</span>
+          </div>
+          ` : ''}
+          ${model.lastModified ? `
+          <div>
+            <span class="font-medium text-gray-700">Last Modified:</span>
+            <span class="text-gray-600 ml-2">${new Date(model.lastModified).toLocaleDateString()}</span>
+          </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }
+  
+  html += '</div>';
+  modelsList.innerHTML = html;
+}
+
+/**
  * Load and display facility statistics
  * @param {string} facilityURN - Facility URN
  */
@@ -238,6 +304,9 @@ async function loadStats(facilityURN) {
   try {
     // Get models
     const models = await getModels(facilityURN);
+    
+    // Display models
+    await displayModels(models);
     
     // Update stats
     document.getElementById('stat1').textContent = '-';
