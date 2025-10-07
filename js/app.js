@@ -662,32 +662,66 @@ async function displayLevels(levels) {
     </div>
   `;
 
-  // Build detailed view
-  let detailHtml = '<div id="levels-detail" class="hidden space-y-3">';
+  // Group levels by model
+  const levelsByModel = {};
+  levels.forEach(level => {
+    if (!levelsByModel[level.modelId]) {
+      levelsByModel[level.modelId] = {
+        modelName: level.modelName,
+        modelId: level.modelId,
+        levels: []
+      };
+    }
+    levelsByModel[level.modelId].levels.push(level);
+  });
+
+  // Build detailed view grouped by model
+  let detailHtml = '<div id="levels-detail" class="hidden space-y-4">';
   
-  for (let i = 0; i < levels.length; i++) {
-    const level = levels[i];
-    
-    // Format elevation if available
-    const elevationDisplay = level.elevation !== undefined && level.elevation !== null
-      ? `<div class="text-sm text-gray-700 mt-2"><span class="font-semibold">Elevation:</span> ${level.elevation.toFixed(2)} ft</div>`
-      : '';
+  let levelCounter = 0;
+  for (const modelId in levelsByModel) {
+    const modelGroup = levelsByModel[modelId];
     
     detailHtml += `
-      <div class="p-4 border border-gray-200 rounded-lg hover:border-tandem-blue transition bg-white">
-        <div class="flex items-start space-x-3">
-          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded flex items-center justify-center">
-            <span class="text-white font-semibold text-xs">${i + 1}</span>
-          </div>
-          <div class="flex-grow min-w-0">
-            <div class="font-semibold text-gray-900 text-base mb-1">${level.name}</div>
-            ${elevationDisplay}
-            <div class="text-xs text-gray-500 mt-2">${level.modelName}</div>
-            <div class="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-              <div class="text-xs text-gray-500 mb-1">Element Key:</div>
-              <div class="text-xs font-mono text-gray-700 break-all">${level.key}</div>
+      <div class="border border-gray-300 rounded-lg overflow-hidden">
+        <!-- Model Header -->
+        <div class="bg-gradient-to-r from-purple-50 to-purple-100 px-4 py-3 border-b border-gray-300">
+          <div class="font-semibold text-gray-900">${modelGroup.modelName}</div>
+          <div class="text-xs font-mono text-gray-600 mt-1">${modelGroup.modelId}</div>
+          <div class="text-xs text-gray-600 mt-1">${modelGroup.levels.length} level${modelGroup.levels.length !== 1 ? 's' : ''}</div>
+        </div>
+        
+        <!-- Levels in this model -->
+        <div class="divide-y divide-gray-200">
+    `;
+    
+    modelGroup.levels.forEach(level => {
+      levelCounter++;
+      
+      // Format elevation if available
+      const elevationDisplay = level.elevation !== undefined && level.elevation !== null
+        ? `<span class="text-sm text-gray-600 ml-3">• Elevation: ${level.elevation.toFixed(2)} ft</span>`
+        : '';
+      
+      detailHtml += `
+        <div class="p-3 hover:bg-gray-50 transition bg-white">
+          <div class="flex items-start space-x-3">
+            <div class="flex-shrink-0 w-7 h-7 bg-gradient-to-br from-purple-500 to-purple-600 rounded flex items-center justify-center">
+              <span class="text-white font-semibold text-xs">${levelCounter}</span>
+            </div>
+            <div class="flex-grow min-w-0">
+              <div class="flex items-baseline flex-wrap gap-2">
+                <span class="font-semibold text-gray-900">${level.name}</span>
+                <span class="text-xs font-mono text-gray-500">${level.key}</span>
+              </div>
+              ${elevationDisplay}
             </div>
           </div>
+        </div>
+      `;
+    });
+    
+    detailHtml += `
         </div>
       </div>
     `;
@@ -742,46 +776,77 @@ async function displayRooms(rooms) {
     </div>
   `;
 
-  // Build detailed view
-  let detailHtml = '<div id="rooms-detail" class="hidden space-y-3">';
+  // Group rooms by model
+  const roomsByModel = {};
+  rooms.forEach(room => {
+    if (!roomsByModel[room.modelId]) {
+      roomsByModel[room.modelId] = {
+        modelName: room.modelName,
+        modelId: room.modelId,
+        rooms: []
+      };
+    }
+    roomsByModel[room.modelId].rooms.push(room);
+  });
+
+  // Build detailed view grouped by model
+  let detailHtml = '<div id="rooms-detail" class="hidden space-y-4">';
   
-  for (let i = 0; i < rooms.length; i++) {
-    const room = rooms[i];
-    const isSpace = room.type === 'Space';
+  let roomCounter = 0;
+  for (const modelId in roomsByModel) {
+    const modelGroup = roomsByModel[modelId];
     
-    // Format additional properties if available
-    const numberDisplay = room.number 
-      ? `<div class="text-sm text-gray-700"><span class="font-semibold">Number:</span> ${room.number}</div>`
-      : '';
-    const areaDisplay = room.area !== undefined && room.area !== null
-      ? `<div class="text-sm text-gray-700"><span class="font-semibold">Area:</span> ${room.area.toFixed(2)} sq ft</div>`
-      : '';
-    const volumeDisplay = room.volume !== undefined && room.volume !== null
-      ? `<div class="text-sm text-gray-700"><span class="font-semibold">Volume:</span> ${room.volume.toFixed(2)} cu ft</div>`
-      : '';
-    
-    const propertiesHtml = (numberDisplay || areaDisplay || volumeDisplay)
-      ? `<div class="mt-2 space-y-1">${numberDisplay}${areaDisplay}${volumeDisplay}</div>`
-      : '';
+    // Count rooms vs spaces in this model
+    const modelRoomCount = modelGroup.rooms.filter(r => r.type === 'Room').length;
+    const modelSpaceCount = modelGroup.rooms.filter(r => r.type === 'Space').length;
     
     detailHtml += `
-      <div class="p-4 border border-gray-200 rounded-lg hover:border-tandem-blue transition bg-white">
-        <div class="flex items-start space-x-3">
-          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br ${isSpace ? 'from-orange-500 to-orange-600' : 'from-indigo-500 to-indigo-600'} rounded flex items-center justify-center">
-            <span class="text-white font-semibold text-xs">${i + 1}</span>
-          </div>
-          <div class="flex-grow min-w-0">
-            <div class="flex items-center gap-2 mb-1">
-              <span class="font-semibold text-gray-900 text-base">${room.name}</span>
-              <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'} rounded">${room.type}</span>
+      <div class="border border-gray-300 rounded-lg overflow-hidden">
+        <!-- Model Header -->
+        <div class="bg-gradient-to-r from-indigo-50 to-indigo-100 px-4 py-3 border-b border-gray-300">
+          <div class="font-semibold text-gray-900">${modelGroup.modelName}</div>
+          <div class="text-xs font-mono text-gray-600 mt-1">${modelGroup.modelId}</div>
+          <div class="text-xs text-gray-600 mt-1">${modelRoomCount} room${modelRoomCount !== 1 ? 's' : ''}, ${modelSpaceCount} space${modelSpaceCount !== 1 ? 's' : ''}</div>
+        </div>
+        
+        <!-- Rooms/Spaces in this model -->
+        <div class="divide-y divide-gray-200">
+    `;
+    
+    modelGroup.rooms.forEach(room => {
+      roomCounter++;
+      const isSpace = room.type === 'Space';
+      
+      // Format additional properties inline
+      const propsArray = [];
+      if (room.number) propsArray.push(`#${room.number}`);
+      if (room.area !== undefined && room.area !== null) propsArray.push(`${room.area.toFixed(2)} sq ft`);
+      if (room.volume !== undefined && room.volume !== null) propsArray.push(`${room.volume.toFixed(2)} cu ft`);
+      
+      const propsDisplay = propsArray.length > 0
+        ? `<span class="text-sm text-gray-600 ml-3">• ${propsArray.join(' • ')}</span>`
+        : '';
+      
+      detailHtml += `
+        <div class="p-3 hover:bg-gray-50 transition bg-white">
+          <div class="flex items-start space-x-3">
+            <div class="flex-shrink-0 w-7 h-7 bg-gradient-to-br ${isSpace ? 'from-orange-500 to-orange-600' : 'from-indigo-500 to-indigo-600'} rounded flex items-center justify-center">
+              <span class="text-white font-semibold text-xs">${roomCounter}</span>
             </div>
-            ${propertiesHtml}
-            <div class="text-xs text-gray-500 mt-2">${room.modelName}</div>
-            <div class="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
-              <div class="text-xs text-gray-500 mb-1">Element Key:</div>
-              <div class="text-xs font-mono text-gray-700 break-all">${room.key}</div>
+            <div class="flex-grow min-w-0">
+              <div class="flex items-baseline flex-wrap gap-2">
+                <span class="font-semibold text-gray-900">${room.name}</span>
+                <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'} rounded">${room.type}</span>
+                <span class="text-xs font-mono text-gray-500">${room.key}</span>
+              </div>
+              ${propsDisplay}
             </div>
           </div>
+        </div>
+      `;
+    });
+    
+    detailHtml += `
         </div>
       </div>
     `;
