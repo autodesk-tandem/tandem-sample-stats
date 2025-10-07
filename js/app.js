@@ -331,45 +331,10 @@ async function displayModels(models, facilityURN) {
     </div>
   `;
   
-  // Build summary view
+  // Build summary view (just shows it's collapsed, no detailed list)
   let summaryHtml = `
-    <div id="models-summary" class="space-y-2">
-  `;
-
-  // Add summary items for each model
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
-    const isDefault = isDefaultModel(facilityURN, model.modelId);
-    const isMainModel = model.main === true;
-    const isModelOn = model.on !== false;
-    
-    summaryHtml += `
-      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
-        <div class="flex items-center space-x-3 flex-grow">
-          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
-            <span class="text-white font-semibold text-xs">${i + 1}</span>
-          </div>
-          <div class="flex-grow min-w-0">
-            <div class="font-medium text-gray-900 truncate">${model.label || 'Untitled Model'}</div>
-            <div class="flex items-center gap-1.5 flex-wrap mt-1">
-              ${isDefault ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
-              ${isMainModel ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Main</span>' : ''}
-              ${isModelOn ? 
-                '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"><span class="mr-1">●</span>On</span>' : 
-                '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"><span class="mr-1">○</span>Off</span>'}
-            </div>
-          </div>
-          <div class="text-right flex-shrink-0">
-            <div class="text-lg font-bold text-tandem-blue" id="summary-element-count-${i}">
-              <span class="text-sm animate-pulse">...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-
-  summaryHtml += `
+    <div id="models-summary" class="text-center py-4 text-gray-500 text-sm">
+      Click to expand and view model details
     </div>
   `;
 
@@ -457,11 +422,6 @@ async function displayModels(models, facilityURN) {
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     const promise = getElementCount(model.modelId).then(count => {
-      // Update summary view
-      const summaryCountElement = document.getElementById(`summary-element-count-${i}`);
-      if (summaryCountElement) {
-        summaryCountElement.innerHTML = count.toLocaleString();
-      }
       // Update detail view
       const detailCountElement = document.getElementById(`detail-element-count-${i}`);
       if (detailCountElement) {
@@ -470,11 +430,6 @@ async function displayModels(models, facilityURN) {
       return count;
     }).catch(error => {
       console.error(`Error getting element count for ${model.label}:`, error);
-      // Update summary view
-      const summaryCountElement = document.getElementById(`summary-element-count-${i}`);
-      if (summaryCountElement) {
-        summaryCountElement.innerHTML = '-';
-      }
       // Update detail view
       const detailCountElement = document.getElementById(`detail-element-count-${i}`);
       if (detailCountElement) {
