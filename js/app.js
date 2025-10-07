@@ -264,6 +264,27 @@ async function loadFacility(facilityURN) {
 }
 
 /**
+ * Toggle models detail view
+ */
+function toggleModelsDetail() {
+  const detailSection = document.getElementById('models-detail');
+  const summarySection = document.getElementById('models-summary');
+  const toggleBtn = document.getElementById('toggle-models-btn');
+  
+  if (detailSection.classList.contains('hidden')) {
+    detailSection.classList.remove('hidden');
+    summarySection.classList.add('hidden');
+    toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>';
+    toggleBtn.title = 'Show less';
+  } else {
+    detailSection.classList.add('hidden');
+    summarySection.classList.remove('hidden');
+    toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+    toggleBtn.title = 'Show more';
+  }
+}
+
+/**
  * Display models list
  * @param {Array} models - Array of model objects
  * @param {string} facilityURN - Facility URN to determine default model
@@ -274,8 +295,69 @@ async function displayModels(models, facilityURN) {
     return;
   }
 
-  // Build initial HTML with loading state for element counts
-  let html = '<div class="space-y-4">';
+  // Build summary view
+  let summaryHtml = `
+    <div id="models-summary" class="space-y-4">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center space-x-2">
+          <div class="text-3xl font-bold text-tandem-blue">${models.length}</div>
+          <div class="text-sm text-gray-600">
+            <div>Model${models.length !== 1 ? 's' : ''}</div>
+            <div id="summary-total-elements" class="text-xs text-gray-500">Calculating...</div>
+          </div>
+        </div>
+        <button onclick="window.toggleModelsDetail()" 
+                id="toggle-models-btn"
+                class="p-2 hover:bg-gray-100 rounded-lg transition"
+                title="Show more">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+        </button>
+      </div>
+      <div class="space-y-2">
+  `;
+
+  // Add summary items for each model
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const isDefault = isDefaultModel(facilityURN, model.modelId);
+    const isMainModel = model.main === true;
+    const isModelOn = model.on !== false;
+    
+    summaryHtml += `
+      <div class="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition">
+        <div class="flex items-center space-x-3 flex-grow">
+          <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+            <span class="text-white font-semibold text-xs">${i + 1}</span>
+          </div>
+          <div class="flex-grow min-w-0">
+            <div class="font-medium text-gray-900 truncate">${model.label || 'Untitled Model'}</div>
+            <div class="flex items-center gap-1.5 flex-wrap mt-1">
+              ${isDefault ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
+              ${isMainModel ? '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Main</span>' : ''}
+              ${isModelOn ? 
+                '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"><span class="mr-1">●</span>On</span>' : 
+                '<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"><span class="mr-1">○</span>Off</span>'}
+            </div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="text-lg font-bold text-tandem-blue" id="summary-element-count-${i}">
+              <span class="text-sm animate-pulse">...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
+  summaryHtml += `
+      </div>
+    </div>
+  `;
+
+  // Build detailed view (initially hidden)
+  let detailHtml = '<div id="models-detail" class="hidden space-y-4">';
   
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
@@ -284,8 +366,8 @@ async function displayModels(models, facilityURN) {
     const isMainModel = model.main === true;
     const isModelOn = model.on !== false; // Default to true if not specified
     
-    html += `
-      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition" id="model-${i}">
+    detailHtml += `
+      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition" id="detail-model-${i}">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center space-x-3">
             <div class="flex-shrink-0">
@@ -307,7 +389,7 @@ async function displayModels(models, facilityURN) {
             </div>
           </div>
           <div class="text-right flex-shrink-0">
-            <div class="text-2xl font-bold text-tandem-blue" id="element-count-${i}">
+            <div class="text-2xl font-bold text-tandem-blue" id="detail-element-count-${i}">
               <span class="inline-block animate-pulse">...</span>
             </div>
             <div class="text-xs text-gray-500">Elements</div>
@@ -342,25 +424,55 @@ async function displayModels(models, facilityURN) {
     `;
   }
   
-  html += '</div>';
-  modelsList.innerHTML = html;
+  detailHtml += '</div>';
+  
+  // Combine summary and detail views
+  modelsList.innerHTML = summaryHtml + detailHtml;
+  
+  // Expose toggle function to window for onclick access
+  window.toggleModelsDetail = toggleModelsDetail;
 
   // Fetch element counts asynchronously for each model
+  const countPromises = [];
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    getElementCount(model.modelId).then(count => {
-      const countElement = document.getElementById(`element-count-${i}`);
-      if (countElement) {
-        countElement.innerHTML = count.toLocaleString();
+    const promise = getElementCount(model.modelId).then(count => {
+      // Update summary view
+      const summaryCountElement = document.getElementById(`summary-element-count-${i}`);
+      if (summaryCountElement) {
+        summaryCountElement.innerHTML = count.toLocaleString();
       }
+      // Update detail view
+      const detailCountElement = document.getElementById(`detail-element-count-${i}`);
+      if (detailCountElement) {
+        detailCountElement.innerHTML = count.toLocaleString();
+      }
+      return count;
     }).catch(error => {
       console.error(`Error getting element count for ${model.label}:`, error);
-      const countElement = document.getElementById(`element-count-${i}`);
-      if (countElement) {
-        countElement.innerHTML = '-';
+      // Update summary view
+      const summaryCountElement = document.getElementById(`summary-element-count-${i}`);
+      if (summaryCountElement) {
+        summaryCountElement.innerHTML = '-';
       }
+      // Update detail view
+      const detailCountElement = document.getElementById(`detail-element-count-${i}`);
+      if (detailCountElement) {
+        detailCountElement.innerHTML = '-';
+      }
+      return 0;
     });
+    countPromises.push(promise);
   }
+  
+  // Update total element count in summary
+  Promise.all(countPromises).then(counts => {
+    const total = counts.reduce((sum, count) => sum + count, 0);
+    const totalElement = document.getElementById('summary-total-elements');
+    if (totalElement) {
+      totalElement.textContent = `${total.toLocaleString()} elements`;
+    }
+  });
 }
 
 /**
