@@ -5,7 +5,8 @@ import {
   getFacilitiesForUser, 
   getFacilityInfo,
   getModels,
-  getModelDetails
+  getModelDetails,
+  getElementCount
 } from './api.js';
 
 // DOM Elements
@@ -242,14 +243,17 @@ async function displayModels(models) {
     return;
   }
 
+  // Build initial HTML with loading state for element counts
   let html = '<div class="space-y-4">';
   
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     const isDefaultModel = model.label === 'Default Model';
+    const isMainModel = model.main === true;
+    const isModelOn = model.on !== false; // Default to true if not specified
     
     html += `
-      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
+      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition" id="model-${i}">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center space-x-3">
             <div class="flex-shrink-0">
@@ -257,10 +261,24 @@ async function displayModels(models) {
                 <span class="text-white font-semibold text-sm">${i + 1}</span>
               </div>
             </div>
-            <div>
-              <h3 class="text-lg font-semibold text-gray-900">${model.label || 'Untitled Model'}</h3>
-              ${isDefaultModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
+            <div class="flex-grow">
+              <div class="flex items-center space-x-2 mb-1">
+                <h3 class="text-lg font-semibold text-gray-900">${model.label || 'Untitled Model'}</h3>
+              </div>
+              <div class="flex items-center gap-2 flex-wrap">
+                ${isDefaultModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
+                ${isMainModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Main</span>' : ''}
+                ${isModelOn ? 
+                  '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"><span class="mr-1">●</span>On</span>' : 
+                  '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"><span class="mr-1">○</span>Off</span>'}
+              </div>
             </div>
+          </div>
+          <div class="text-right flex-shrink-0">
+            <div class="text-2xl font-bold text-tandem-blue" id="element-count-${i}">
+              <span class="inline-block animate-pulse">...</span>
+            </div>
+            <div class="text-xs text-gray-500">Elements</div>
           </div>
         </div>
         
@@ -294,6 +312,23 @@ async function displayModels(models) {
   
   html += '</div>';
   modelsList.innerHTML = html;
+
+  // Fetch element counts asynchronously for each model
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    getElementCount(model.modelId).then(count => {
+      const countElement = document.getElementById(`element-count-${i}`);
+      if (countElement) {
+        countElement.innerHTML = count.toLocaleString();
+      }
+    }).catch(error => {
+      console.error(`Error getting element count for ${model.label}:`, error);
+      const countElement = document.getElementById(`element-count-${i}`);
+      if (countElement) {
+        countElement.innerHTML = '-';
+      }
+    });
+  }
 }
 
 /**
@@ -305,18 +340,37 @@ async function loadStats(facilityURN) {
     // Get models
     const models = await getModels(facilityURN);
     
-    // Display models
+    // Display models (this will load element counts asynchronously)
     await displayModels(models);
     
-    // Update stats
-    document.getElementById('stat1').textContent = '-';
+    // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';
-    document.getElementById('stat3').textContent = '-';
     
     // Update descriptions
     const statDescriptions = document.querySelectorAll('#dashboardContent .text-xs.text-gray-500');
-    if (statDescriptions[0]) statDescriptions[0].textContent = 'Coming soon';
     if (statDescriptions[1]) statDescriptions[1].textContent = `Model${models?.length !== 1 ? 's' : ''} in facility`;
+    
+    // Calculate total elements across all models
+    if (models && models.length > 0) {
+      // Show loading state
+      document.getElementById('stat1').innerHTML = '<span class="animate-pulse">...</span>';
+      if (statDescriptions[0]) statDescriptions[0].textContent = 'Calculating...';
+      
+      // Fetch all element counts
+      const countPromises = models.map(model => getElementCount(model.modelId));
+      const counts = await Promise.all(countPromises);
+      const totalElements = counts.reduce((sum, count) => sum + count, 0);
+      
+      // Update total elements stat
+      document.getElementById('stat1').textContent = totalElements.toLocaleString();
+      if (statDescriptions[0]) statDescriptions[0].textContent = 'Total elements across all models';
+    } else {
+      document.getElementById('stat1').textContent = '0';
+      if (statDescriptions[0]) statDescriptions[0].textContent = 'No models';
+    }
+    
+    // Placeholder for future stat
+    document.getElementById('stat3').textContent = '-';
     if (statDescriptions[2]) statDescriptions[2].textContent = 'Coming soon';
     
   } catch (error) {

@@ -154,3 +154,32 @@ export async function getModelDetails(modelURN) {
     return null;
   }
 }
+
+/**
+ * Get element count for a model
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<number>} Number of elements in the model
+ */
+export async function getElementCount(modelURN) {
+  try {
+    // Scan with minimal data to count elements
+    const payload = JSON.stringify({
+      families: ['n'], // Standard column family
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // First element is version info, rest are elements
+    return data ? data.length - 1 : 0;
+  } catch (error) {
+    console.error('Error fetching element count:', error);
+    return 0;
+  }
+}
