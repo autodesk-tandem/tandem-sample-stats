@@ -228,7 +228,7 @@ export async function getStreams(facilityURN) {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
     const payload = JSON.stringify({
-      families: ['n'], // Standard column family
+      families: ['n', 'z'], // Standard and DtProperties column families
       includeHistory: false
     });
     
@@ -253,5 +253,34 @@ export async function getStreams(facilityURN) {
   } catch (error) {
     console.error('Error fetching streams:', error);
     return [];
+  }
+}
+
+/**
+ * Get last seen values for streams
+ * @param {string} facilityURN - Facility URN
+ * @param {Array<string>} streamKeys - Array of stream keys
+ * @returns {Promise<Object>} Object with stream keys as keys and their last seen values
+ */
+export async function getLastSeenStreamValues(facilityURN, streamKeys) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    
+    const payload = JSON.stringify({
+      keys: streamKeys
+    });
+    
+    const requestPath = `${tandemBaseURL}/timeseries/models/${defaultModelURN}/streams`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch last seen stream values: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching last seen stream values:', error);
+    return {};
   }
 }

@@ -8,7 +8,8 @@ import {
   getModelDetails,
   getElementCount,
   getFacilityThumbnail,
-  getStreams
+  getStreams,
+  getLastSeenStreamValues
 } from './api.js';
 
 // DOM Elements
@@ -489,8 +490,9 @@ function toggleStreamsDetail() {
 /**
  * Display streams list
  * @param {Array} streams - Array of stream objects
+ * @param {string} facilityURN - Facility URN to fetch last seen values
  */
-async function displayStreams(streams) {
+async function displayStreams(streams, facilityURN) {
   if (!streams || streams.length === 0) {
     streamsList.innerHTML = '<p class="text-gray-500">No streams found in this facility.</p>';
     return;
@@ -525,7 +527,11 @@ async function displayStreams(streams) {
     </div>
   `;
 
-  // Build detailed view (initially hidden) - placeholder for now
+  // Fetch last seen values for all streams
+  const streamKeys = streams.map(s => s['k']);
+  const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+
+  // Build detailed view (initially hidden)
   let detailHtml = '<div id="streams-detail" class="hidden space-y-4">';
   
   for (let i = 0; i < streams.length; i++) {
@@ -537,6 +543,40 @@ async function displayStreams(streams) {
     
     // Classification: Use override "n:!v" if present, otherwise "n:v"
     const classification = stream['n:!v']?.[0] || stream['n:v']?.[0];
+    
+    // Internal ID: Find first property starting with "z:"
+    let internalId = null;
+    for (const key in stream) {
+      if (key.startsWith('z:')) {
+        internalId = key;
+        break;
+      }
+    }
+    
+    // Get last seen values for this stream
+    const streamValues = lastSeenValues[streamKey];
+    let valuesHtml = '';
+    
+    if (streamValues && Object.keys(streamValues).length > 0) {
+      valuesHtml = '<div class="mt-3 pt-3 border-t border-gray-200"><div class="text-xs font-semibold text-gray-700 mb-2">Last Seen Values:</div><div class="space-y-1">';
+      
+      for (const [propKey, propValues] of Object.entries(streamValues)) {
+        for (const [timestamp, value] of Object.entries(propValues)) {
+          const date = new Date(parseInt(timestamp));
+          valuesHtml += `
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-mono text-gray-600">${propKey}:</span>
+              <div class="text-right">
+                <span class="font-semibold text-gray-900">${value}</span>
+                <span class="text-gray-500 ml-2">${date.toLocaleString()}</span>
+              </div>
+            </div>
+          `;
+        }
+      }
+      
+      valuesHtml += '</div></div>';
+    }
     
     detailHtml += `
       <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
@@ -551,9 +591,11 @@ async function displayStreams(streams) {
                 ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-100 to-green-200 text-green-800 rounded">${classification}</span>` : ''}
               </div>
               <p class="text-xs text-gray-500 font-mono mt-1">Key: ${streamKey}</p>
+              ${internalId ? `<p class="text-xs text-gray-500 font-mono">Internal ID: ${internalId}</p>` : ''}
             </div>
           </div>
         </div>
+        ${valuesHtml}
       </div>
     `;
   }
@@ -584,7 +626,7 @@ async function loadStats(facilityURN) {
     
     // Get and display streams (only from default model)
     const streams = await getStreams(facilityURN);
-    await displayStreams(streams);
+    await displayStreams(streams, facilityURN);
     
     // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';
