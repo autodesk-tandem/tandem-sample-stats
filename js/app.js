@@ -7,7 +7,8 @@ import {
   getModels,
   getModelDetails,
   getElementCount,
-  getFacilityThumbnail
+  getFacilityThumbnail,
+  getStreams
 } from './api.js';
 
 // DOM Elements
@@ -21,6 +22,7 @@ const dashboardContent = document.getElementById('dashboardContent');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
 const modelsList = document.getElementById('modelsList');
+const streamsList = document.getElementById('streamsList');
 
 // State
 let accounts = [];
@@ -451,6 +453,116 @@ async function displayModels(models, facilityURN) {
 }
 
 /**
+ * Toggle streams detail view
+ */
+function toggleStreamsDetail() {
+  const detailSection = document.getElementById('streams-detail');
+  const summarySection = document.getElementById('streams-summary');
+  const toggleBtn = document.getElementById('toggle-streams-btn');
+  const iconDown = document.getElementById('toggle-streams-icon-down');
+  const iconUp = document.getElementById('toggle-streams-icon-up');
+  
+  console.log('Streams toggle clicked', {
+    detailHidden: detailSection?.classList.contains('hidden'),
+    summaryHidden: summarySection?.classList.contains('hidden')
+  });
+  
+  if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
+    if (detailSection.classList.contains('hidden')) {
+      // Show detail, hide summary
+      detailSection.classList.remove('hidden');
+      summarySection.classList.add('hidden');
+      iconDown.classList.add('hidden');
+      iconUp.classList.remove('hidden');
+      toggleBtn.title = 'Show less';
+    } else {
+      // Show summary, hide detail
+      detailSection.classList.add('hidden');
+      summarySection.classList.remove('hidden');
+      iconDown.classList.remove('hidden');
+      iconUp.classList.add('hidden');
+      toggleBtn.title = 'Show more';
+    }
+  }
+}
+
+/**
+ * Display streams list
+ * @param {Array} streams - Array of stream objects
+ */
+async function displayStreams(streams) {
+  if (!streams || streams.length === 0) {
+    streamsList.innerHTML = '<p class="text-gray-500">No streams found in this facility.</p>';
+    return;
+  }
+
+  // Build header with toggle button (always visible)
+  let headerHtml = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center space-x-2">
+        <div class="text-3xl font-bold text-tandem-blue">${streams.length}</div>
+        <div class="text-sm text-gray-600">
+          <div>Stream${streams.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <button id="toggle-streams-btn"
+              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              title="Show more">
+        <svg id="toggle-streams-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+        <svg id="toggle-streams-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  // Build summary view (just shows it's collapsed, no detailed list)
+  let summaryHtml = `
+    <div id="streams-summary" class="text-center py-4 text-gray-500 text-sm">
+      Click to expand and view stream details
+    </div>
+  `;
+
+  // Build detailed view (initially hidden) - placeholder for now
+  let detailHtml = '<div id="streams-detail" class="hidden space-y-4">';
+  
+  for (let i = 0; i < streams.length; i++) {
+    const stream = streams[i];
+    const streamName = stream['n:n']?.[0] || 'Unnamed Stream'; // Stream name
+    const streamKey = stream['k']; // Stream key
+    
+    detailHtml += `
+      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
+        <div class="flex items-center justify-between">
+          <div class="flex items-center space-x-3 flex-grow">
+            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+              <span class="text-white font-semibold text-sm">${i + 1}</span>
+            </div>
+            <div class="flex-grow">
+              <h3 class="text-lg font-semibold text-gray-900">${streamName}</h3>
+              <p class="text-xs text-gray-500 font-mono mt-1">Key: ${streamKey}</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  detailHtml += '</div>';
+  
+  // Combine header, summary and detail views
+  streamsList.innerHTML = headerHtml + summaryHtml + detailHtml;
+  
+  // Bind toggle button event listener
+  const toggleBtn = document.getElementById('toggle-streams-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleStreamsDetail);
+  }
+}
+
+/**
  * Load and display facility statistics
  * @param {string} facilityURN - Facility URN
  */
@@ -461,6 +573,10 @@ async function loadStats(facilityURN) {
     
     // Display models (this will load element counts asynchronously)
     await displayModels(models, facilityURN);
+    
+    // Get and display streams (only from default model)
+    const streams = await getStreams(facilityURN);
+    await displayStreams(streams);
     
     // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';

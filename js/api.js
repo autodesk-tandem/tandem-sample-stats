@@ -206,3 +206,52 @@ export async function getFacilityThumbnail(facilityURN) {
     return null;
   }
 }
+
+/**
+ * Get the default model URN from a facility URN
+ * The default model URN is derived by swapping the prefix
+ * @param {string} facilityURN - Facility URN (urn:adsk.dtt:...)
+ * @returns {string} Default model URN (urn:adsk.dtm:...)
+ */
+export function getDefaultModelURN(facilityURN) {
+  return facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+}
+
+/**
+ * Get streams from the default model
+ * Streams only exist in the default model
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<Array>} Array of stream objects
+ */
+export async function getStreams(facilityURN) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    
+    const payload = JSON.stringify({
+      families: ['n'], // Standard column family
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch streams: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Filter for elements that are streams (ElementFlags === 0x00000100 = 256)
+    // Stream flag value from dt-schema.js
+    const STREAM_FLAG = 256;
+    const streams = data.filter(row => {
+      const flags = row['n:xf']; // Element flags
+      return flags && flags[0] === STREAM_FLAG;
+    });
+    
+    return streams;
+  } catch (error) {
+    console.error('Error fetching streams:', error);
+    return [];
+  }
+}
