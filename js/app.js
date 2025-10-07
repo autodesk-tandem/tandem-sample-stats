@@ -248,7 +248,8 @@ async function displayModels(models) {
   
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const isDefaultModel = model.label === 'Default Model';
+    // Check if it's the default model - could be labeled "Default Model" or "Untitled Model"
+    const isDefaultModel = model.label === 'Default Model' || model.label === 'Untitled Model' || model.default === true;
     const isMainModel = model.main === true;
     const isModelOn = model.on !== false; // Default to true if not specified
     
@@ -345,16 +346,13 @@ async function loadStats(facilityURN) {
     
     // Update stats - models count
     document.getElementById('stat2').textContent = models ? models.length : '0';
-    
-    // Update descriptions
-    const statDescriptions = document.querySelectorAll('#dashboardContent .text-xs.text-gray-500');
-    if (statDescriptions[1]) statDescriptions[1].textContent = `Model${models?.length !== 1 ? 's' : ''} in facility`;
+    document.getElementById('stat2-desc').textContent = `Model${models?.length !== 1 ? 's' : ''} in facility`;
     
     // Calculate total elements across all models
     if (models && models.length > 0) {
       // Show loading state
       document.getElementById('stat1').innerHTML = '<span class="animate-pulse">...</span>';
-      if (statDescriptions[0]) statDescriptions[0].textContent = 'Calculating...';
+      document.getElementById('stat1-desc').textContent = 'Calculating...';
       
       // Fetch all element counts
       const countPromises = models.map(model => getElementCount(model.modelId));
@@ -363,15 +361,15 @@ async function loadStats(facilityURN) {
       
       // Update total elements stat
       document.getElementById('stat1').textContent = totalElements.toLocaleString();
-      if (statDescriptions[0]) statDescriptions[0].textContent = 'Total elements across all models';
+      document.getElementById('stat1-desc').textContent = 'Total elements across all models';
     } else {
       document.getElementById('stat1').textContent = '0';
-      if (statDescriptions[0]) statDescriptions[0].textContent = 'No models';
+      document.getElementById('stat1-desc').textContent = 'No models';
     }
     
     // Placeholder for future stat
     document.getElementById('stat3').textContent = '-';
-    if (statDescriptions[2]) statDescriptions[2].textContent = 'Coming soon';
+    document.getElementById('stat3-desc').textContent = 'Coming soon';
     
   } catch (error) {
     console.error('Error loading stats:', error);
