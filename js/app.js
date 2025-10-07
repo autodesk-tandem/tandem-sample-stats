@@ -994,6 +994,11 @@ async function displaySchema(models) {
     const schema = schemaCache[model.modelId];
     
     if (schema && schema.attributes && schema.attributes.length > 0) {
+      // Debug: log first attribute to see structure
+      if (i === 0) {
+        console.log('Sample attribute structure:', schema.attributes[0]);
+        console.log('Available properties:', Object.keys(schema.attributes[0]));
+      }
       renderSchemaTable(model.modelId, schema.attributes);
     }
   }
