@@ -775,8 +775,9 @@ async function displayRooms(rooms) {
  * @param {Array} attributes - Array of attribute objects
  * @param {string} sortColumn - Column to sort by
  * @param {string} sortDirection - 'asc' or 'desc'
+ * @param {boolean} showAll - Whether to show all attributes or just the first 20
  */
-function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection = 'asc') {
+function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection = 'asc', showAll = false) {
   const tableContainer = document.getElementById(`schema-table-${modelId}`);
   if (!tableContainer) return;
 
@@ -838,8 +839,8 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
       <tbody class="divide-y divide-gray-200">
   `;
 
-  // Show first 50 attributes
-  const displayCount = Math.min(50, sortedAttributes.length);
+  // Show first 20 attributes by default, or all if showAll is true
+  const displayCount = showAll ? sortedAttributes.length : Math.min(20, sortedAttributes.length);
   
   for (let j = 0; j < displayCount; j++) {
     const attr = sortedAttributes[j];
@@ -854,11 +855,25 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
     `;
   }
 
-  if (sortedAttributes.length > 50) {
+  if (sortedAttributes.length > 20 && !showAll) {
     tableHtml += `
       <tr>
-        <td colspan="5" class="px-3 py-2 text-center text-gray-500 italic">
-          ... and ${sortedAttributes.length - 50} more attributes
+        <td colspan="5" class="px-3 py-2 text-center">
+          <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
+                  data-model="${modelId}" data-show-all="true">
+            ... and ${sortedAttributes.length - 20} more attributes (click to show all)
+          </button>
+        </td>
+      </tr>
+    `;
+  } else if (showAll && sortedAttributes.length > 20) {
+    tableHtml += `
+      <tr>
+        <td colspan="5" class="px-3 py-2 text-center">
+          <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
+                  data-model="${modelId}" data-show-all="false">
+            Show less
+          </button>
         </td>
       </tr>
     `;
@@ -877,9 +892,18 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      renderSchemaTable(modelId, attributes, column, direction);
+      renderSchemaTable(modelId, attributes, column, direction, showAll);
     });
   });
+
+  // Add click handler to "show more/less" button
+  const showMoreBtn = tableContainer.querySelector('button[data-show-all]');
+  if (showMoreBtn) {
+    showMoreBtn.addEventListener('click', () => {
+      const shouldShowAll = showMoreBtn.getAttribute('data-show-all') === 'true';
+      renderSchemaTable(modelId, attributes, sortColumn, sortDirection, shouldShowAll);
+    });
+  }
 }
 
 /**
@@ -1242,3 +1266,4 @@ if (document.readyState === 'loading') {
 } else {
   initialize();
 }
+
