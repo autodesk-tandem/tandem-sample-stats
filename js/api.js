@@ -183,3 +183,26 @@ export async function getElementCount(modelURN) {
     return 0;
   }
 }
+
+/**
+ * Get facility thumbnail as a blob URL
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<string|null>} Blob URL for the thumbnail image, or null if not available
+ */
+export async function getFacilityThumbnail(facilityURN) {
+  try {
+    const requestPath = `${tandemBaseURL}/twins/${facilityURN}/thumbnail`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      return null; // No thumbnail available
+    }
+    
+    const blob = await response.blob();
+    // Convert blob to blob URL for display
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    console.error('Error fetching facility thumbnail:', error);
+    return null;
+  }
+}

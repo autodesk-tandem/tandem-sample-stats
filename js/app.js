@@ -6,7 +6,8 @@ import {
   getFacilityInfo,
   getModels,
   getModelDetails,
-  getElementCount
+  getElementCount,
+  getFacilityThumbnail
 } from './api.js';
 
 // DOM Elements
@@ -214,26 +215,38 @@ async function loadFacility(facilityURN) {
   try {
     toggleLoading(true);
     
-    // Get facility info
-    const info = await getFacilityInfo(facilityURN);
+    // Get facility info and thumbnail in parallel
+    const [info, thumbnailUrl] = await Promise.all([
+      getFacilityInfo(facilityURN),
+      getFacilityThumbnail(facilityURN)
+    ]);
     
     if (info) {
       const buildingName = info.props?.["Identity Data"]?.["Building Name"] || "Unknown";
       const location = info.props?.["Identity Data"]?.["Address"] || "No address available";
       
       facilityInfo.innerHTML = `
-        <div class="space-y-2">
-          <div>
-            <span class="font-medium text-gray-900">Building Name:</span>
-            <span class="text-gray-600 ml-2">${buildingName}</span>
+        <div class="flex flex-col md:flex-row gap-6">
+          ${thumbnailUrl ? `
+          <div class="flex-shrink-0">
+            <img src="${thumbnailUrl}" 
+                 alt="Facility Thumbnail" 
+                 class="w-full md:w-64 h-48 object-cover rounded-lg border border-gray-200 shadow-sm">
           </div>
-          <div>
-            <span class="font-medium text-gray-900">Location:</span>
-            <span class="text-gray-600 ml-2">${location}</span>
-          </div>
-          <div>
-            <span class="font-medium text-gray-900">Facility URN:</span>
-            <span class="text-gray-600 ml-2 text-xs font-mono">${facilityURN}</span>
+          ` : ''}
+          <div class="flex-grow space-y-2">
+            <div>
+              <span class="font-medium text-gray-900">Building Name:</span>
+              <span class="text-gray-600 ml-2">${buildingName}</span>
+            </div>
+            <div>
+              <span class="font-medium text-gray-900">Location:</span>
+              <span class="text-gray-600 ml-2">${location}</span>
+            </div>
+            <div>
+              <span class="font-medium text-gray-900">Facility URN:</span>
+              <span class="text-gray-600 ml-2 text-xs font-mono break-all">${facilityURN}</span>
+            </div>
           </div>
         </div>
       `;
