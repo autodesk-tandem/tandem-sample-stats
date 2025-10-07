@@ -271,16 +271,25 @@ function toggleModelsDetail() {
   const summarySection = document.getElementById('models-summary');
   const toggleBtn = document.getElementById('toggle-models-btn');
   
-  if (detailSection.classList.contains('hidden')) {
-    detailSection.classList.remove('hidden');
-    summarySection.classList.add('hidden');
-    toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>';
-    toggleBtn.title = 'Show less';
-  } else {
-    detailSection.classList.add('hidden');
-    summarySection.classList.remove('hidden');
-    toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
-    toggleBtn.title = 'Show more';
+  console.log('Toggle clicked', {
+    detailHidden: detailSection?.classList.contains('hidden'),
+    summaryHidden: summarySection?.classList.contains('hidden')
+  });
+  
+  if (detailSection && summarySection && toggleBtn) {
+    if (detailSection.classList.contains('hidden')) {
+      // Show detail, hide summary
+      detailSection.classList.remove('hidden');
+      summarySection.classList.add('hidden');
+      toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path></svg>';
+      toggleBtn.title = 'Show less';
+    } else {
+      // Show summary, hide detail
+      detailSection.classList.add('hidden');
+      summarySection.classList.remove('hidden');
+      toggleBtn.innerHTML = '<svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path></svg>';
+      toggleBtn.title = 'Show more';
+    }
   }
 }
 
@@ -306,8 +315,7 @@ async function displayModels(models, facilityURN) {
             <div id="summary-total-elements" class="text-xs text-gray-500">Calculating...</div>
           </div>
         </div>
-        <button onclick="window.toggleModelsDetail()" 
-                id="toggle-models-btn"
+        <button id="toggle-models-btn"
                 class="p-2 hover:bg-gray-100 rounded-lg transition"
                 title="Show more">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -429,8 +437,11 @@ async function displayModels(models, facilityURN) {
   // Combine summary and detail views
   modelsList.innerHTML = summaryHtml + detailHtml;
   
-  // Expose toggle function to window for onclick access
-  window.toggleModelsDetail = toggleModelsDetail;
+  // Bind toggle button event listener
+  const toggleBtn = document.getElementById('toggle-models-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleModelsDetail);
+  }
 
   // Fetch element counts asynchronously for each model
   const countPromises = [];
