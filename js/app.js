@@ -113,70 +113,73 @@ async function buildAccountsAndFacilities() {
 
 /**
  * Populate the accounts dropdown
- * @param {Array} accounts - List of accounts
+ * @param {Array} accountsList - List of accounts
  */
-function populateAccountsDropdown(accounts) {
-  accountSelect.innerHTML = '<option value="">Select Account...</option>';
+function populateAccountsDropdown(accountsList) {
+  accountSelect.innerHTML = '';
   
   const lastAccount = window.localStorage.getItem('tandem-stats-last-account');
-  let selectedAccount = accounts[0];
+  const safePreferredAccount = accountsList.find(a => a.name === lastAccount) || accountsList[0];
 
-  accounts.forEach((account, index) => {
+  // Add all account names to the dropdown
+  for (let i = 0; i < accountsList.length; i++) {
     const option = document.createElement('option');
-    option.value = index;
-    option.textContent = account.name;
-    
-    if (account.name === lastAccount) {
-      option.selected = true;
-      selectedAccount = account;
-    }
+    option.text = accountsList[i].name;
+    option.value = accountsList[i].name; // Use name as value
+    option.selected = accountsList[i].name === safePreferredAccount.name;
     
     accountSelect.appendChild(option);
-  });
+  }
 
   accountSelect.classList.remove('hidden');
   
-  // Populate facilities for the selected account
-  if (selectedAccount) {
-    populateFacilitiesDropdown(selectedAccount);
-  }
+  // Populate facilities for the initially selected account
+  populateFacilitiesDropdown(accountsList, safePreferredAccount.name);
 }
 
 /**
  * Populate the facilities dropdown
- * @param {object} account - Selected account
+ * @param {Array} accountsList - List of all accounts
+ * @param {string} accountName - Name of selected account
  */
-function populateFacilitiesDropdown(account) {
-  facilitySelect.innerHTML = '<option value="">Select Facility...</option>';
+function populateFacilitiesDropdown(accountsList, accountName) {
+  facilitySelect.innerHTML = ''; // Clear out any previous options
   
-  if (!account.facilities || account.facilities.size === 0) {
+  // Find the current account
+  const currentAccount = accountsList.find(obj => obj.name === accountName);
+  
+  if (!currentAccount || !currentAccount.facilities || currentAccount.facilities.size === 0) {
     facilitySelect.classList.add('hidden');
     return;
   }
 
-  const lastFacilityURN = window.localStorage.getItem('tandem-stats-last-facility');
-  let selectedFacilityURN = null;
-
-  for (const [urn, facility] of account.facilities.entries()) {
-    const option = document.createElement('option');
-    option.value = urn;
-    option.textContent = facility.props?.["Identity Data"]?.["Building Name"] || "Unknown Facility";
-    
-    if (urn === lastFacilityURN) {
-      option.selected = true;
-      selectedFacilityURN = urn;
+  // Load preferred facility URN
+  const preferredFacilityURN = window.localStorage.getItem('tandem-stats-last-facility');
+  
+  // See if we can find that one in our list of facilities
+  let safeFacilityURN = currentAccount.facilities.keys().next().value; // Safe default
+  for (const [key, value] of currentAccount.facilities.entries()) {
+    if (key === preferredFacilityURN) {
+      safeFacilityURN = key;
+      break; // Exit the loop once the key is found
     }
+  }
+
+  // Now build the dropdown list
+  for (const [key, value] of currentAccount.facilities.entries()) {
+    const option = document.createElement('option');
+    option.text = value.props?.["Identity Data"]?.["Building Name"] || "Unknown Facility";
+    option.value = key;
+    option.selected = key === safeFacilityURN;
     
     facilitySelect.appendChild(option);
   }
 
   facilitySelect.classList.remove('hidden');
 
-  // Load the selected facility
-  if (selectedFacilityURN || account.facilities.size > 0) {
-    const facilityToLoad = selectedFacilityURN || account.facilities.keys().next().value;
-    loadFacility(facilityToLoad);
-  }
+  // Store and load the selected facility immediately
+  window.localStorage.setItem('tandem-stats-last-facility', safeFacilityURN);
+  loadFacility(safeFacilityURN);
 }
 
 /**
@@ -187,7 +190,6 @@ async function loadFacility(facilityURN) {
   if (!facilityURN) return;
   
   currentFacilityURN = facilityURN;
-  window.localStorage.setItem('tandem-stats-last-facility', facilityURN);
   
   try {
     toggleLoading(true);
@@ -265,16 +267,15 @@ async function initialize() {
   });
 
   accountSelect.addEventListener('change', (e) => {
-    const accountIndex = parseInt(e.target.value);
-    if (!isNaN(accountIndex) && accounts[accountIndex]) {
-      window.localStorage.setItem('tandem-stats-last-account', accounts[accountIndex].name);
-      populateFacilitiesDropdown(accounts[accountIndex]);
-    }
+    const accountName = e.target.value;
+    window.localStorage.setItem('tandem-stats-last-account', accountName);
+    populateFacilitiesDropdown(accounts, accountName);
   });
 
   facilitySelect.addEventListener('change', (e) => {
     const facilityURN = e.target.value;
     if (facilityURN) {
+      window.localStorage.setItem('tandem-stats-last-facility', facilityURN);
       loadFacility(facilityURN);
     }
   });
