@@ -308,29 +308,32 @@ async function displayModels(models, facilityURN) {
     return;
   }
 
+  // Build header with toggle button (always visible)
+  let headerHtml = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center space-x-2">
+        <div class="text-3xl font-bold text-tandem-blue">${models.length}</div>
+        <div class="text-sm text-gray-600">
+          <div>Model${models.length !== 1 ? 's' : ''}</div>
+          <div id="summary-total-elements" class="text-xs text-gray-500">Calculating...</div>
+        </div>
+      </div>
+      <button id="toggle-models-btn"
+              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              title="Show more">
+        <svg id="toggle-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+        <svg id="toggle-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+  
   // Build summary view
   let summaryHtml = `
-    <div id="models-summary" class="space-y-4">
-      <div class="flex items-center justify-between mb-4">
-        <div class="flex items-center space-x-2">
-          <div class="text-3xl font-bold text-tandem-blue">${models.length}</div>
-          <div class="text-sm text-gray-600">
-            <div>Model${models.length !== 1 ? 's' : ''}</div>
-            <div id="summary-total-elements" class="text-xs text-gray-500">Calculating...</div>
-          </div>
-        </div>
-        <button id="toggle-models-btn"
-                class="p-2 hover:bg-gray-100 rounded-lg transition"
-                title="Show more">
-          <svg id="toggle-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-          </svg>
-          <svg id="toggle-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-          </svg>
-        </button>
-      </div>
-      <div class="space-y-2">
+    <div id="models-summary" class="space-y-2">
   `;
 
   // Add summary items for each model
@@ -367,7 +370,6 @@ async function displayModels(models, facilityURN) {
   }
 
   summaryHtml += `
-      </div>
     </div>
   `;
 
@@ -441,8 +443,8 @@ async function displayModels(models, facilityURN) {
   
   detailHtml += '</div>';
   
-  // Combine summary and detail views
-  modelsList.innerHTML = summaryHtml + detailHtml;
+  // Combine header, summary and detail views
+  modelsList.innerHTML = headerHtml + summaryHtml + detailHtml;
   
   // Bind toggle button event listener
   const toggleBtn = document.getElementById('toggle-models-btn');
