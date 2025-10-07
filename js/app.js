@@ -559,27 +559,31 @@ async function displayStreams(streams, facilityURN) {
     
     // Get last seen values for this stream
     const streamValues = lastSeenValues[streamKey];
+    console.log(`Stream ${i} - Last seen values:`, streamValues);
     let valuesHtml = '';
     
     if (streamValues && Object.keys(streamValues).length > 0) {
-      valuesHtml = '<div class="mt-3 pt-3 border-t border-gray-200"><div class="text-xs font-semibold text-gray-700 mb-2">Last Seen Values:</div><div class="space-y-1">';
+      valuesHtml = '<div class="mt-3 pt-3 border-t border-gray-200"><div class="text-xs font-semibold text-gray-700 mb-2">Last Seen Values:</div><div class="space-y-2">';
       
       for (const [propKey, propValues] of Object.entries(streamValues)) {
+        // propKey is like "z:wAc" which is the internal property ID
+        valuesHtml += `<div class="bg-gray-50 rounded p-2"><div class="font-mono text-xs font-semibold text-gray-700 mb-1">${propKey}</div>`;
+        
         for (const [timestamp, value] of Object.entries(propValues)) {
           const date = new Date(parseInt(timestamp));
           valuesHtml += `
-            <div class="flex justify-between items-center text-xs">
-              <span class="font-mono text-gray-600">${propKey}:</span>
-              <div class="text-right">
-                <span class="font-semibold text-gray-900">${value}</span>
-                <span class="text-gray-500 ml-2">${date.toLocaleString()}</span>
-              </div>
+            <div class="flex justify-between items-center text-xs pl-2">
+              <span class="text-gray-600">${date.toLocaleString()}</span>
+              <span class="font-semibold text-gray-900">${value}</span>
             </div>
           `;
         }
+        valuesHtml += '</div>';
       }
       
       valuesHtml += '</div></div>';
+    } else {
+      console.log(`Stream ${i} - No last seen values`);
     }
     
     detailHtml += `
