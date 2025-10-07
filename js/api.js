@@ -241,11 +241,11 @@ export async function getStreams(facilityURN) {
     
     const data = await response.json();
     
-    // Filter for elements that are streams (ElementFlags === 0x00000100 = 256)
-    // Stream flag value from dt-schema.js
-    const STREAM_FLAG = 256;
+    // Filter for elements that are streams (ElementFlags.Stream === 0x01000003 = 16777219)
+    // Stream flag value from dt-schema.js ElementFlags.Stream
+    const STREAM_FLAG = 0x01000003; // 16777219 in decimal
     const streams = data.filter(row => {
-      const flags = row['n:xf']; // Element flags
+      const flags = row['n:a']; // Element flags (n:a = Standard:ElementFlags)
       return flags && flags[0] === STREAM_FLAG;
     });
     
