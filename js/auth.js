@@ -44,6 +44,11 @@ async function doRedirection(clientId, scope) {
   const codeVerifier = generateRandomString(64);
   const challenge = await generateCodeChallenge(codeVerifier);
 
+  console.log('🔐 Initiating OAuth login...');
+  console.log('Client ID:', clientId);
+  console.log('Redirect URI:', redirect_uri);
+  console.log('Scope:', scope);
+
   window.localStorage.setItem('codeVerifier', codeVerifier);
   const url = new URL('https://developer.api.autodesk.com/authentication/v2/authorize');
     
@@ -54,6 +59,7 @@ async function doRedirection(clientId, scope) {
   url.searchParams.append('code_challenge', challenge);
   url.searchParams.append('code_challenge_method', 'S256');
 
+  console.log('OAuth URL:', url.toString());
   location.href = url.toString();
 }
 
@@ -145,11 +151,13 @@ export async function checkLogin() {
 
   // Handle OAuth callback
   if (url.searchParams.has('code')) {
+    console.log('✅ OAuth callback received');
     const code = url.searchParams.get('code');
     const codeVerifier = window.localStorage.getItem('codeVerifier');
 
     if (code && codeVerifier) {
       try {
+        console.log('🔄 Exchanging authorization code for token...');
         const payload = {
           'grant_type': 'authorization_code',
           'client_id': env.forgeKey,
@@ -168,16 +176,23 @@ export async function checkLogin() {
         
         if (resp.ok) {
           const token = await resp.json();
+          console.log('✅ Token received successfully');
           window.sessionStorage.token = token['access_token'];
           window.sessionStorage.refreshToken = token['refresh_token'];
 
           // Schedule token refresh
           const nextRefresh = token['expires_in'] - 60;
           refreshHandle = setTimeout(() => refreshToken(), nextRefresh * 1000);
+        } else {
+          const errorText = await resp.text();
+          console.error('❌ Token exchange failed:', resp.status, resp.statusText);
+          console.error('Error details:', errorText);
+          alert(`Authentication failed: ${resp.statusText}\n\nCheck console for details.`);
         }
       } catch (err) {
-        console.error('Authentication error:', err);
-        return false;
+        console.error('❌ Authentication error:', err);
+        alert(`Authentication error: ${err.message}\n\nCheck console for details.`);
+        return { loggedIn: false, profileImg: null };
       }
 
       // Remove code from URL
