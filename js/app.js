@@ -530,8 +530,13 @@ async function displayStreams(streams) {
   
   for (let i = 0; i < streams.length; i++) {
     const stream = streams[i];
-    const streamName = stream['n:n']?.[0] || 'Unnamed Stream'; // Stream name
+    
+    // Name: Use override "n:!n" if present, otherwise "n:n"
+    const streamName = stream['n:!n']?.[0] || stream['n:n']?.[0] || 'Unnamed Stream';
     const streamKey = stream['k']; // Stream key
+    
+    // Classification: Use override "n:!v" if present, otherwise "n:v"
+    const classification = stream['n:!v']?.[0] || stream['n:v']?.[0];
     
     detailHtml += `
       <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
@@ -541,7 +546,10 @@ async function displayStreams(streams) {
               <span class="text-white font-semibold text-sm">${i + 1}</span>
             </div>
             <div class="flex-grow">
-              <h3 class="text-lg font-semibold text-gray-900">${streamName}</h3>
+              <div class="flex items-center gap-2 mb-1">
+                <h3 class="text-lg font-semibold text-gray-900">${streamName}</h3>
+                ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-100 to-green-200 text-green-800 rounded">${classification}</span>` : ''}
+              </div>
               <p class="text-xs text-gray-500 font-mono mt-1">Key: ${streamKey}</p>
             </div>
           </div>
