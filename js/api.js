@@ -312,7 +312,7 @@ export async function getSchema(modelURN) {
  * Get levels from all models in a facility
  * Levels have CategoryId === 240
  * @param {string} facilityURN - Facility URN
- * @returns {Promise<Array>} Array of level objects with modelId, key, and name
+ * @returns {Promise<Array>} Array of level objects with modelId, key, name, and elevation
  */
 export async function getLevels(facilityURN) {
   try {
@@ -321,7 +321,7 @@ export async function getLevels(facilityURN) {
     
     for (const model of models) {
       const payload = JSON.stringify({
-        qualifiedColumns: ['n:c', 'n:n'], // CategoryId and Name
+        qualifiedColumns: ['n:c', 'n:n', 'n:e'], // CategoryId, Name, Elevation
         includeHistory: false
       });
       
@@ -344,7 +344,8 @@ export async function getLevels(facilityURN) {
           modelId: model.modelId,
           modelName: model.label,
           key: level.k,
-          name: level['n:n']?.[0] || 'Unnamed Level'
+          name: level['n:n']?.[0] || 'Unnamed Level',
+          elevation: level['n:e']?.[0] // Elevation value
         });
       });
     }
@@ -360,7 +361,7 @@ export async function getLevels(facilityURN) {
  * Get rooms from all models in a facility
  * Rooms have CategoryId === 160, Spaces have CategoryId === 3600
  * @param {string} facilityURN - Facility URN
- * @returns {Promise<Array>} Array of room objects with modelId, key, name, and type
+ * @returns {Promise<Array>} Array of room objects with modelId, key, name, type, number, area, and volume
  */
 export async function getRooms(facilityURN) {
   try {
@@ -369,7 +370,7 @@ export async function getRooms(facilityURN) {
     
     for (const model of models) {
       const payload = JSON.stringify({
-        qualifiedColumns: ['n:c', 'n:n'], // CategoryId and Name
+        qualifiedColumns: ['n:c', 'n:n', 'n:N', 'n:A', 'n:V'], // CategoryId, Name, Number, Area, Volume
         includeHistory: false
       });
       
@@ -391,6 +392,9 @@ export async function getRooms(facilityURN) {
           modelName: model.label,
           key: room.k,
           name: room['n:n']?.[0] || 'Unnamed Room',
+          number: room['n:N']?.[0],
+          area: room['n:A']?.[0],
+          volume: room['n:V']?.[0],
           type: 'Room'
         });
       });
@@ -403,6 +407,9 @@ export async function getRooms(facilityURN) {
           modelName: model.label,
           key: space.k,
           name: space['n:n']?.[0] || 'Unnamed Space',
+          number: space['n:N']?.[0],
+          area: space['n:A']?.[0],
+          volume: space['n:V']?.[0],
           type: 'Space'
         });
       });

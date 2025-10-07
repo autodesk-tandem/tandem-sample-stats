@@ -663,23 +663,32 @@ async function displayLevels(levels) {
   `;
 
   // Build detailed view
-  let detailHtml = '<div id="levels-detail" class="hidden space-y-2">';
+  let detailHtml = '<div id="levels-detail" class="hidden space-y-3">';
   
   for (let i = 0; i < levels.length; i++) {
     const level = levels[i];
     
+    // Format elevation if available
+    const elevationDisplay = level.elevation !== undefined && level.elevation !== null
+      ? `<div class="text-sm text-gray-700 mt-2"><span class="font-semibold">Elevation:</span> ${level.elevation.toFixed(2)} ft</div>`
+      : '';
+    
     detailHtml += `
-      <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-tandem-blue transition">
-        <div class="flex items-center space-x-3">
+      <div class="p-4 border border-gray-200 rounded-lg hover:border-tandem-blue transition bg-white">
+        <div class="flex items-start space-x-3">
           <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-purple-500 to-purple-600 rounded flex items-center justify-center">
             <span class="text-white font-semibold text-xs">${i + 1}</span>
           </div>
-          <div>
-            <div class="font-semibold text-gray-900">${level.name}</div>
-            <div class="text-xs text-gray-500">${level.modelName}</div>
+          <div class="flex-grow min-w-0">
+            <div class="font-semibold text-gray-900 text-base mb-1">${level.name}</div>
+            ${elevationDisplay}
+            <div class="text-xs text-gray-500 mt-2">${level.modelName}</div>
+            <div class="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+              <div class="text-xs text-gray-500 mb-1">Element Key:</div>
+              <div class="text-xs font-mono text-gray-700 break-all">${level.key}</div>
+            </div>
           </div>
         </div>
-        <div class="text-xs font-mono text-gray-400">${level.key.substring(0, 12)}...</div>
       </div>
     `;
   }
@@ -734,27 +743,46 @@ async function displayRooms(rooms) {
   `;
 
   // Build detailed view
-  let detailHtml = '<div id="rooms-detail" class="hidden space-y-2">';
+  let detailHtml = '<div id="rooms-detail" class="hidden space-y-3">';
   
   for (let i = 0; i < rooms.length; i++) {
     const room = rooms[i];
     const isSpace = room.type === 'Space';
     
+    // Format additional properties if available
+    const numberDisplay = room.number 
+      ? `<div class="text-sm text-gray-700"><span class="font-semibold">Number:</span> ${room.number}</div>`
+      : '';
+    const areaDisplay = room.area !== undefined && room.area !== null
+      ? `<div class="text-sm text-gray-700"><span class="font-semibold">Area:</span> ${room.area.toFixed(2)} sq ft</div>`
+      : '';
+    const volumeDisplay = room.volume !== undefined && room.volume !== null
+      ? `<div class="text-sm text-gray-700"><span class="font-semibold">Volume:</span> ${room.volume.toFixed(2)} cu ft</div>`
+      : '';
+    
+    const propertiesHtml = (numberDisplay || areaDisplay || volumeDisplay)
+      ? `<div class="mt-2 space-y-1">${numberDisplay}${areaDisplay}${volumeDisplay}</div>`
+      : '';
+    
     detailHtml += `
-      <div class="flex items-center justify-between p-3 border border-gray-200 rounded-lg hover:border-tandem-blue transition">
-        <div class="flex items-center space-x-3">
+      <div class="p-4 border border-gray-200 rounded-lg hover:border-tandem-blue transition bg-white">
+        <div class="flex items-start space-x-3">
           <div class="flex-shrink-0 w-8 h-8 bg-gradient-to-br ${isSpace ? 'from-orange-500 to-orange-600' : 'from-indigo-500 to-indigo-600'} rounded flex items-center justify-center">
             <span class="text-white font-semibold text-xs">${i + 1}</span>
           </div>
-          <div>
-            <div class="flex items-center gap-2">
-              <span class="font-semibold text-gray-900">${room.name}</span>
+          <div class="flex-grow min-w-0">
+            <div class="flex items-center gap-2 mb-1">
+              <span class="font-semibold text-gray-900 text-base">${room.name}</span>
               <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'} rounded">${room.type}</span>
             </div>
-            <div class="text-xs text-gray-500">${room.modelName}</div>
+            ${propertiesHtml}
+            <div class="text-xs text-gray-500 mt-2">${room.modelName}</div>
+            <div class="mt-2 p-2 bg-gray-50 rounded border border-gray-200">
+              <div class="text-xs text-gray-500 mb-1">Element Key:</div>
+              <div class="text-xs font-mono text-gray-700 break-all">${room.key}</div>
+            </div>
           </div>
         </div>
-        <div class="text-xs font-mono text-gray-400">${room.key.substring(0, 12)}...</div>
       </div>
     `;
   }
