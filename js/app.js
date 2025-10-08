@@ -292,21 +292,21 @@ async function loadFacility(facilityURN) {
           <div class="flex-shrink-0">
             <img src="${thumbnailUrl}" 
                  alt="Facility Thumbnail" 
-                 class="w-full md:w-64 h-48 object-cover rounded-lg border border-gray-200 shadow-sm">
+                 class="w-full md:w-64 h-48 object-cover rounded border border-dark-border">
           </div>
           ` : ''}
           <div class="flex-grow space-y-2">
             <div>
-              <span class="font-medium text-gray-900">Building Name:</span>
-              <span class="text-gray-600 ml-2">${buildingName}</span>
+              <span class="font-medium text-dark-text text-xs">Building Name:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${buildingName}</span>
             </div>
             <div>
-              <span class="font-medium text-gray-900">Location:</span>
-              <span class="text-gray-600 ml-2">${location}</span>
+              <span class="font-medium text-dark-text text-xs">Location:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${location}</span>
             </div>
             <div>
-              <span class="font-medium text-gray-900">Facility URN:</span>
-              <span class="text-gray-600 ml-2 text-xs font-mono break-all">${facilityURN}</span>
+              <span class="font-medium text-dark-text text-xs">Facility URN:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs font-mono break-all">${facilityURN}</span>
             </div>
           </div>
         </div>
@@ -365,22 +365,22 @@ function toggleModelsDetail() {
  */
 async function displayModels(models, facilityURN) {
   if (!models || models.length === 0) {
-    modelsList.innerHTML = '<p class="text-gray-500">No models found in this facility.</p>';
+    modelsList.innerHTML = '<p class="text-dark-text-secondary">No models found in this facility.</p>';
     return;
   }
 
   // Build header with toggle button (always visible)
   let headerHtml = `
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-3xl font-bold text-tandem-blue">${models.length}</div>
-        <div class="text-sm text-gray-600">
+        <div class="text-xl font-bold text-tandem-blue">${models.length}</div>
+        <div class="text-sm text-dark-text-secondary">
           <div>Model${models.length !== 1 ? 's' : ''}</div>
-          <div id="summary-total-elements" class="text-xs text-gray-500">Calculating...</div>
+          <div id="summary-total-elements" class="text-xs text-dark-text-secondary">Calculating...</div>
         </div>
       </div>
       <button id="toggle-models-btn"
-              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              class="p-2 hover:bg-dark-bg/50 rounded transition"
               title="Show more">
         <svg id="toggle-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -398,7 +398,7 @@ async function displayModels(models, facilityURN) {
   `;
 
   // Build detailed view (initially hidden)
-  let detailHtml = '<div id="models-detail" class="hidden space-y-4">';
+  let detailHtml = '<div id="models-detail" class="hidden space-y-2">';
   
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
@@ -408,56 +408,56 @@ async function displayModels(models, facilityURN) {
     const isModelOn = model.on !== false; // Default to true if not specified
     
     detailHtml += `
-      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition" id="detail-model-${i}">
+      <div class="border border-dark-border rounded p-4 hover:border-tandem-blue transition" id="detail-model-${i}">
         <div class="flex items-start justify-between mb-3">
           <div class="flex items-center space-x-3">
             <div class="flex-shrink-0">
-              <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center">
+              <div class="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded flex items-center justify-center">
                 <span class="text-white font-semibold text-sm">${i + 1}</span>
               </div>
             </div>
             <div class="flex-grow">
               <div class="flex items-center space-x-2 mb-1">
-                <h3 class="text-lg font-semibold text-gray-900">${model.label || 'Untitled Model'}</h3>
+                <h3 class="text-lg font-semibold text-dark-text">${model.label || 'Untitled Model'}</h3>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
-                ${isDefault ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-100 text-purple-800">Default</span>' : ''}
-                ${isMainModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Main</span>' : ''}
+                ${isDefault ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300">Default</span>' : ''}
+                ${isMainModel ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300">Main</span>' : ''}
                 ${isModelOn ? 
-                  '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-100 text-green-800"><span class="mr-1">●</span>On</span>' : 
-                  '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800"><span class="mr-1">○</span>Off</span>'}
+                  '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-300"><span class="mr-1">●</span>On</span>' : 
+                  '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-300"><span class="mr-1">○</span>Off</span>'}
               </div>
             </div>
           </div>
           <div class="text-right flex-shrink-0">
-            <div class="text-2xl font-bold text-tandem-blue" id="detail-element-count-${i}">
+            <div class="text-lg font-bold text-tandem-blue" id="detail-element-count-${i}">
               <span class="inline-block animate-pulse">...</span>
             </div>
-            <div class="text-xs text-gray-500">Elements</div>
+            <div class="text-xs text-dark-text-secondary">Elements</div>
           </div>
         </div>
         
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <div>
-            <span class="font-medium text-gray-700">Model ID:</span>
-            <span class="text-gray-600 ml-2 font-mono text-xs break-all">${model.modelId}</span>
+            <span class="font-medium text-dark-text">Model ID:</span>
+            <span class="text-dark-text-secondary ml-2 font-mono text-xs break-all">${model.modelId}</span>
           </div>
           ${model.version ? `
           <div>
-            <span class="font-medium text-gray-700">Version:</span>
-            <span class="text-gray-600 ml-2">${model.version}</span>
+            <span class="font-medium text-dark-text">Version:</span>
+            <span class="text-dark-text-secondary ml-2">${model.version}</span>
           </div>
           ` : ''}
           ${model.createdAt ? `
           <div>
-            <span class="font-medium text-gray-700">Created:</span>
-            <span class="text-gray-600 ml-2">${new Date(model.createdAt).toLocaleDateString()}</span>
+            <span class="font-medium text-dark-text">Created:</span>
+            <span class="text-dark-text-secondary ml-2">${new Date(model.createdAt).toLocaleDateString()}</span>
           </div>
           ` : ''}
           ${model.lastModified ? `
           <div>
-            <span class="font-medium text-gray-700">Last Modified:</span>
-            <span class="text-gray-600 ml-2">${new Date(model.lastModified).toLocaleDateString()}</span>
+            <span class="font-medium text-dark-text">Last Modified:</span>
+            <span class="text-dark-text-secondary ml-2">${new Date(model.lastModified).toLocaleDateString()}</span>
           </div>
           ` : ''}
         </div>
@@ -652,21 +652,21 @@ function toggleSchemaDetail() {
  */
 async function displayLevels(levels) {
   if (!levels || levels.length === 0) {
-    levelsList.innerHTML = '<p class="text-gray-500">No levels found in this facility.</p>';
+    levelsList.innerHTML = '<p class="text-dark-text-secondary">No levels found in this facility.</p>';
     return;
   }
 
   // Build header with toggle button
   let headerHtml = `
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-3xl font-bold text-tandem-blue">${levels.length}</div>
-        <div class="text-sm text-gray-600">
+        <div class="text-xl font-bold text-tandem-blue">${levels.length}</div>
+        <div class="text-sm text-dark-text-secondary">
           <div>Level${levels.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
       <button id="toggle-levels-btn"
-              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              class="p-2 hover:bg-dark-bg/50 rounded transition"
               title="Show more">
         <svg id="toggle-levels-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -697,23 +697,23 @@ async function displayLevels(levels) {
   });
 
   // Build detailed view grouped by model
-  let detailHtml = '<div id="levels-detail" class="hidden space-y-4">';
+  let detailHtml = '<div id="levels-detail" class="hidden space-y-2">';
   
   let levelCounter = 0;
   for (const modelId in levelsByModel) {
     const modelGroup = levelsByModel[modelId];
     
     detailHtml += `
-      <div class="border border-gray-300 rounded-lg overflow-hidden">
+      <div class="border border-dark-border rounded overflow-hidden">
         <!-- Model Header -->
-        <div class="bg-gradient-to-r from-purple-50 to-purple-100 px-4 py-3 border-b border-gray-300">
-          <div class="font-semibold text-gray-900">${modelGroup.modelName}</div>
-          <div class="text-xs font-mono text-gray-600 mt-1">${modelGroup.modelId}</div>
-          <div class="text-xs text-gray-600 mt-1">${modelGroup.levels.length} level${modelGroup.levels.length !== 1 ? 's' : ''}</div>
+        <div class="bg-gradient-to-r from-purple-900/30 to-purple-800/30 px-4 py-3 border-b border-dark-border">
+          <div class="font-semibold text-dark-text">${modelGroup.modelName}</div>
+          <div class="text-xs font-mono text-dark-text-secondary mt-1">${modelGroup.modelId}</div>
+          <div class="text-xs text-dark-text-secondary mt-1">${modelGroup.levels.length} level${modelGroup.levels.length !== 1 ? 's' : ''}</div>
         </div>
         
         <!-- Levels in this model -->
-        <div class="divide-y divide-gray-200">
+        <div class="divide-y divide-dark-border">
     `;
     
     modelGroup.levels.forEach(level => {
@@ -721,19 +721,19 @@ async function displayLevels(levels) {
       
       // Format elevation if available
       const elevationDisplay = level.elevation !== undefined && level.elevation !== null
-        ? `<span class="text-sm text-gray-600 ml-3">• Elevation: ${level.elevation.toFixed(2)} ft</span>`
+        ? `<span class="text-sm text-dark-text-secondary ml-3">• Elevation: ${level.elevation.toFixed(2)} ft</span>`
         : '';
       
       detailHtml += `
-        <div class="p-3 hover:bg-gray-50 transition bg-white">
+        <div class="p-3 hover:bg-dark-bg/30 transition bg-dark-card">
           <div class="flex items-start space-x-3">
             <div class="flex-shrink-0 w-7 h-7 bg-gradient-to-br from-purple-500 to-purple-600 rounded flex items-center justify-center">
               <span class="text-white font-semibold text-xs">${levelCounter}</span>
             </div>
             <div class="flex-grow min-w-0">
               <div class="flex items-baseline flex-wrap gap-2">
-                <span class="font-semibold text-gray-900">${level.name}</span>
-                <span class="text-xs font-mono text-gray-500">${level.key}</span>
+                <span class="font-semibold text-dark-text">${level.name}</span>
+                <span class="text-xs font-mono text-dark-text-secondary">${level.key}</span>
               </div>
               ${elevationDisplay}
             </div>
@@ -766,7 +766,7 @@ async function displayLevels(levels) {
  */
 async function displayRooms(rooms, sortBy = null, sortDirection = 'asc') {
   if (!rooms || rooms.length === 0) {
-    roomsList.innerHTML = '<p class="text-gray-500">No rooms or spaces found in this facility.</p>';
+    roomsList.innerHTML = '<p class="text-dark-text-secondary">No rooms or spaces found in this facility.</p>';
     return;
   }
 
@@ -776,30 +776,30 @@ async function displayRooms(rooms, sortBy = null, sortDirection = 'asc') {
 
   // Build header with toggle button and sort controls
   let headerHtml = `
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-3xl font-bold text-tandem-blue">${rooms.length}</div>
-        <div class="text-sm text-gray-600">
+        <div class="text-xl font-bold text-tandem-blue">${rooms.length}</div>
+        <div class="text-sm text-dark-text-secondary">
           <div>Room${rooms.length !== 1 ? 's' : ''} & Space${rooms.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
       <div class="flex items-center space-x-3">
-        <div class="flex items-center space-x-2 text-sm border-r border-gray-300 pr-3">
-          <span class="text-gray-600">Sort:</span>
-          <select id="rooms-sort-select" class="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-tandem-blue bg-white">
+        <div class="flex items-center space-x-2 text-sm border-r border-dark-border pr-3">
+          <span class="text-dark-text-secondary">Sort:</span>
+          <select id="rooms-sort-select" class="px-3 py-1.5 border border-dark-border rounded text-sm focus:outline-none focus:ring-2 focus:ring-tandem-blue bg-dark-card">
             <option value="">None</option>
             <option value="name" ${sortBy === 'name' ? 'selected' : ''}>Name ${sortBy === 'name' ? (sortDirection === 'asc' ? '(A→Z)' : '(Z→A)') : ''}</option>
             <option value="area" ${sortBy === 'area' ? 'selected' : ''}>Area ${sortBy === 'area' ? (sortDirection === 'asc' ? '(↑)' : '(↓)') : ''}</option>
           </select>
           <button id="rooms-sort-direction" 
-                  class="px-2 py-1 text-xs font-medium rounded transition ${!sortBy ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-tandem-blue text-white hover:bg-blue-700'}"
+                  class="px-2 py-1 text-xs font-medium rounded transition ${!sortBy ? 'bg-gray-500/20 text-gray-300-secondary cursor-not-allowed' : 'bg-tandem-blue text-white hover:bg-blue-700'}"
                   title="${sortDirection === 'asc' ? 'Switch to Descending' : 'Switch to Ascending'}"
                   ${!sortBy ? 'disabled' : ''}>
             ${sortDirection === 'asc' ? 'A→Z / ↑' : 'Z→A / ↓'}
           </button>
         </div>
         <button id="toggle-rooms-btn"
-                class="p-2 hover:bg-gray-100 rounded-lg transition"
+                class="p-2 hover:bg-dark-bg/50 rounded transition"
                 title="${isDetailVisible ? 'Show less' : 'Show more'}">
           <svg id="toggle-rooms-icon-down" class="w-5 h-5 ${isDetailVisible ? 'hidden' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -854,7 +854,7 @@ async function displayRooms(rooms, sortBy = null, sortDirection = 'asc') {
   }
 
   // Build detailed view grouped by model (show if it was visible before)
-  let detailHtml = `<div id="rooms-detail" class="${isDetailVisible ? '' : 'hidden'} space-y-4">`;
+  let detailHtml = `<div id="rooms-detail" class="${isDetailVisible ? '' : 'hidden'} space-y-2">`;
   
   let roomCounter = 0;
   for (const modelId in roomsByModel) {
@@ -865,16 +865,16 @@ async function displayRooms(rooms, sortBy = null, sortDirection = 'asc') {
     const modelSpaceCount = modelGroup.rooms.filter(r => r.type === 'Space').length;
     
     detailHtml += `
-      <div class="border border-gray-300 rounded-lg overflow-hidden">
+      <div class="border border-dark-border rounded overflow-hidden">
         <!-- Model Header -->
-        <div class="bg-gradient-to-r from-indigo-50 to-indigo-100 px-4 py-3 border-b border-gray-300">
-          <div class="font-semibold text-gray-900">${modelGroup.modelName}</div>
-          <div class="text-xs font-mono text-gray-600 mt-1">${modelGroup.modelId}</div>
-          <div class="text-xs text-gray-600 mt-1">${modelRoomCount} room${modelRoomCount !== 1 ? 's' : ''}, ${modelSpaceCount} space${modelSpaceCount !== 1 ? 's' : ''}</div>
+        <div class="bg-gradient-to-r from-indigo-900/30 to-indigo-800/30 px-4 py-3 border-b border-dark-border">
+          <div class="font-semibold text-dark-text">${modelGroup.modelName}</div>
+          <div class="text-xs font-mono text-dark-text-secondary mt-1">${modelGroup.modelId}</div>
+          <div class="text-xs text-dark-text-secondary mt-1">${modelRoomCount} room${modelRoomCount !== 1 ? 's' : ''}, ${modelSpaceCount} space${modelSpaceCount !== 1 ? 's' : ''}</div>
         </div>
         
         <!-- Rooms/Spaces in this model -->
-        <div class="divide-y divide-gray-200">
+        <div class="divide-y divide-dark-border">
     `;
     
     modelGroup.rooms.forEach(room => {
@@ -893,20 +893,20 @@ async function displayRooms(rooms, sortBy = null, sortDirection = 'asc') {
       }
       
       const propsDisplay = propsArray.length > 0
-        ? `<span class="text-sm text-gray-600 ml-3">• ${propsArray.join(' • ')}</span>`
+        ? `<span class="text-sm text-dark-text-secondary ml-3">• ${propsArray.join(' • ')}</span>`
         : '';
       
       detailHtml += `
-        <div class="p-3 hover:bg-gray-50 transition bg-white">
+        <div class="p-3 hover:bg-dark-bg/30 transition bg-dark-card">
           <div class="flex items-start space-x-3">
             <div class="flex-shrink-0 w-7 h-7 bg-gradient-to-br ${isSpace ? 'from-orange-500 to-orange-600' : 'from-indigo-500 to-indigo-600'} rounded flex items-center justify-center">
               <span class="text-white font-semibold text-xs">${roomCounter}</span>
             </div>
             <div class="flex-grow min-w-0">
               <div class="flex items-baseline flex-wrap gap-2">
-                <span class="font-semibold text-gray-900">${room.name}</span>
-                <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-100 text-orange-800' : 'bg-indigo-100 text-indigo-800'} rounded">${room.type}</span>
-                <span class="text-xs font-mono text-gray-500">${room.key}</span>
+                <span class="font-semibold text-dark-text">${room.name}</span>
+                <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-500/20 text-orange-300' : 'bg-indigo-500/20 text-indigo-300'} rounded">${room.type}</span>
+                <span class="text-xs font-mono text-dark-text-secondary">${room.key}</span>
               </div>
               ${propsDisplay}
             </div>
@@ -990,21 +990,21 @@ async function openDocument(documentUrl, contentType) {
  */
 async function displayDocuments(documents) {
   if (!documents || documents.length === 0) {
-    documentsList.innerHTML = '<p class="text-gray-500">No documents found in this facility.</p>';
+    documentsList.innerHTML = '<p class="text-dark-text-secondary">No documents found in this facility.</p>';
     return;
   }
 
   // Build header with toggle button
   let headerHtml = `
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-3xl font-bold text-tandem-blue">${documents.length}</div>
-        <div class="text-sm text-gray-600">
+        <div class="text-xl font-bold text-tandem-blue">${documents.length}</div>
+        <div class="text-sm text-dark-text-secondary">
           <div>Document${documents.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
       <button id="toggle-documents-btn"
-              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              class="p-2 hover:bg-dark-bg/50 rounded transition"
               title="Show more">
         <svg id="toggle-documents-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1022,13 +1022,13 @@ async function displayDocuments(documents) {
   `;
 
   // Build detailed view (initially hidden)
-  let detailHtml = '<div id="documents-detail" class="hidden space-y-4">';
+  let detailHtml = '<div id="documents-detail" class="hidden space-y-2">';
   
   for (let i = 0; i < documents.length; i++) {
     const doc = documents[i];
     
     // Format file size if available
-    const fileSizeDisplay = doc.size ? `<span class="text-sm text-gray-600">Size: ${(doc.size / 1024 / 1024).toFixed(2)} MB</span>` : '';
+    const fileSizeDisplay = doc.size ? `<span class="text-sm text-dark-text-secondary">Size: ${(doc.size / 1024 / 1024).toFixed(2)} MB</span>` : '';
     
     // Format last updated date
     const lastUpdated = doc.lastUpdated ? new Date(doc.lastUpdated).toLocaleString() : 'Unknown';
@@ -1043,9 +1043,9 @@ async function displayDocuments(documents) {
     }
     
     detailHtml += `
-      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
+      <div class="border border-dark-border rounded p-4 hover:border-tandem-blue transition">
         <div class="flex items-start space-x-3">
-          <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br ${iconColor} rounded-lg flex items-center justify-center">
+          <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br ${iconColor} rounded flex items-center justify-center">
             <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
             </svg>
@@ -1053,13 +1053,13 @@ async function displayDocuments(documents) {
           <div class="flex-grow min-w-0">
             <div class="flex items-center justify-between mb-2">
               <div class="flex-grow min-w-0">
-                <h3 class="text-lg font-semibold text-gray-900 truncate">${doc.name || 'Untitled Document'}</h3>
-                ${doc.label ? `<p class="text-sm text-gray-600">${doc.label}</p>` : ''}
+                <h3 class="text-sm font-semibold text-dark-text truncate">${doc.name || 'Untitled Document'}</h3>
+                ${doc.label ? `<p class="text-sm text-dark-text-secondary">${doc.label}</p>` : ''}
               </div>
               ${doc.signedLink ? `
               <button data-doc-url="${doc.signedLink}" 
                       data-doc-type="${doc.contentType || ''}"
-                      class="doc-open-btn ml-3 flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-tandem-blue text-tandem-blue rounded-lg hover:bg-tandem-blue hover:text-white transition text-sm font-medium cursor-pointer">
+                      class="doc-open-btn ml-3 flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-tandem-blue text-tandem-blue rounded hover:bg-tandem-blue hover:text-white transition text-sm font-medium cursor-pointer">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                 </svg>
@@ -1070,23 +1070,23 @@ async function displayDocuments(documents) {
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
               ${doc.contentType ? `
               <div>
-                <span class="font-medium text-gray-700">Type:</span>
-                <span class="text-gray-600 ml-2">${doc.contentType}</span>
+                <span class="font-medium text-dark-text">Type:</span>
+                <span class="text-dark-text-secondary ml-2">${doc.contentType}</span>
               </div>
               ` : ''}
               <div>
-                <span class="font-medium text-gray-700">Last Updated:</span>
-                <span class="text-gray-600 ml-2">${lastUpdated}</span>
+                <span class="font-medium text-dark-text">Last Updated:</span>
+                <span class="text-dark-text-secondary ml-2">${lastUpdated}</span>
               </div>
               ${fileSizeDisplay ? `<div>${fileSizeDisplay}</div>` : ''}
               ${doc.accProjectId ? `
               <div>
-                <span class="font-medium text-gray-700">ACC Project:</span>
-                <span class="text-gray-600 ml-2 font-mono text-xs">${doc.accProjectId}</span>
+                <span class="font-medium text-dark-text">ACC Project:</span>
+                <span class="text-dark-text-secondary ml-2 font-mono text-xs">${doc.accProjectId}</span>
               </div>
               ` : ''}
             </div>
-            ${doc.id ? `<div class="mt-2 text-xs text-gray-500 font-mono">${doc.id}</div>` : ''}
+            ${doc.id ? `<div class="mt-2 text-xs text-dark-text-secondary font-mono">${doc.id}</div>` : ''}
           </div>
         </div>
       </div>
@@ -1141,30 +1141,30 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
   // Build table HTML
   let tableHtml = `
     <table class="min-w-full text-xs">
-      <thead class="bg-gray-50">
+      <thead class="bg-dark-bg/50">
         <tr>
-          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
               data-model="${modelId}" data-column="id" data-direction="${sortColumn === 'id' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
             <div class="flex items-center gap-1">
               <span>ID</span>
               ${sortColumn === 'id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
             </div>
           </th>
-          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
               data-model="${modelId}" data-column="category" data-direction="${sortColumn === 'category' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
             <div class="flex items-center gap-1">
               <span>Category</span>
               ${sortColumn === 'category' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
             </div>
           </th>
-          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
               data-model="${modelId}" data-column="name" data-direction="${sortColumn === 'name' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
             <div class="flex items-center gap-1">
               <span>Name</span>
               ${sortColumn === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
             </div>
           </th>
-          <th class="px-3 py-2 text-left font-semibold text-gray-700 cursor-pointer hover:bg-gray-100 select-none" 
+          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
               data-model="${modelId}" data-column="dataType" data-direction="${sortColumn === 'dataType' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
             <div class="flex items-center gap-1">
               <span>Data Type</span>
@@ -1173,7 +1173,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
           </th>
         </tr>
       </thead>
-      <tbody class="divide-y divide-gray-200">
+      <tbody class="divide-y divide-dark-border">
   `;
 
   // Show first 20 attributes by default, or all if showAll is true
@@ -1183,11 +1183,11 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
     const attr = sortedAttributes[j];
     const dataTypeName = getDataTypeName(attr.dataType);
     tableHtml += `
-      <tr class="hover:bg-gray-50">
-        <td class="px-3 py-2 font-mono text-gray-600">${attr.id || ''}</td>
-        <td class="px-3 py-2 text-gray-900">${attr.category || ''}</td>
-        <td class="px-3 py-2 text-gray-900">${attr.name || ''}</td>
-        <td class="px-3 py-2 text-gray-600">${dataTypeName}</td>
+      <tr class="hover:bg-dark-bg/30">
+        <td class="px-3 py-2 font-mono text-dark-text-secondary">${attr.id || ''}</td>
+        <td class="px-3 py-2 text-dark-text">${attr.category || ''}</td>
+        <td class="px-3 py-2 text-dark-text">${attr.name || ''}</td>
+        <td class="px-3 py-2 text-dark-text-secondary">${dataTypeName}</td>
       </tr>
     `;
   }
@@ -1249,7 +1249,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
  */
 async function displaySchema(models) {
   if (!models || models.length === 0) {
-    schemaList.innerHTML = '<p class="text-gray-500">No models found.</p>';
+    schemaList.innerHTML = '<p class="text-dark-text-secondary">No models found.</p>';
     return;
   }
 
@@ -1261,15 +1261,15 @@ async function displaySchema(models) {
 
   // Build header with toggle button
   let headerHtml = `
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-3xl font-bold text-tandem-blue">${totalAttributes}</div>
-        <div class="text-sm text-gray-600">
+        <div class="text-xl font-bold text-tandem-blue">${totalAttributes}</div>
+        <div class="text-sm text-dark-text-secondary">
           <div>Attribute${totalAttributes !== 1 ? 's' : ''} across ${models.length} model${models.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
       <button id="toggle-schema-btn"
-              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              class="p-2 hover:bg-dark-bg/50 rounded transition"
               title="Show more">
         <svg id="toggle-schema-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1298,13 +1298,13 @@ async function displaySchema(models) {
     }
 
     detailHtml += `
-      <div class="border border-gray-200 rounded-lg p-4">
-        <h3 class="font-semibold text-gray-900 mb-3 flex items-center gap-2">
+      <div class="border border-dark-border rounded p-4">
+        <h3 class="font-semibold text-dark-text mb-3 flex items-center gap-2">
           <span class="flex-shrink-0 w-6 h-6 bg-gradient-to-br from-teal-500 to-teal-600 rounded flex items-center justify-center">
             <span class="text-white font-semibold text-xs">${i + 1}</span>
           </span>
           ${model.label}
-          <span class="text-sm font-normal text-gray-500">(${schema.attributes.length} attributes)</span>
+          <span class="text-sm font-normal text-dark-text-secondary">(${schema.attributes.length} attributes)</span>
         </h3>
         <div class="overflow-x-auto">
           <div id="schema-table-${model.modelId}"></div>
@@ -1340,21 +1340,21 @@ async function displaySchema(models) {
  */
 async function displayStreams(streams, facilityURN) {
   if (!streams || streams.length === 0) {
-    streamsList.innerHTML = '<p class="text-gray-500">No streams found in this facility.</p>';
+    streamsList.innerHTML = '<p class="text-dark-text-secondary">No streams found in this facility.</p>';
     return;
   }
 
   // Build header with toggle button (always visible)
   let headerHtml = `
-    <div class="flex items-center justify-between mb-4">
+    <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-3xl font-bold text-tandem-blue">${streams.length}</div>
-        <div class="text-sm text-gray-600">
+        <div class="text-xl font-bold text-tandem-blue">${streams.length}</div>
+        <div class="text-sm text-dark-text-secondary">
           <div>Stream${streams.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
       <button id="toggle-streams-btn"
-              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              class="p-2 hover:bg-dark-bg/50 rounded transition"
               title="Show more">
         <svg id="toggle-streams-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
@@ -1385,7 +1385,7 @@ async function displayStreams(streams, facilityURN) {
   const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
 
   // Build detailed view (initially hidden)
-  let detailHtml = '<div id="streams-detail" class="hidden space-y-4">';
+  let detailHtml = '<div id="streams-detail" class="hidden space-y-2">';
   
   for (let i = 0; i < streams.length; i++) {
     const stream = streams[i];
@@ -1411,25 +1411,25 @@ async function displayStreams(streams, facilityURN) {
     let valuesHtml = '';
     
     if (streamValues && Object.keys(streamValues).length > 0) {
-      valuesHtml = '<div class="mt-3 pt-3 border-t border-gray-200"><div class="text-xs font-semibold text-gray-700 mb-2">Last Seen Values:</div><div class="space-y-2">';
+      valuesHtml = '<div class="mt-3 pt-3 border-t border-dark-border"><div class="text-xs font-semibold text-dark-text mb-2">Last Seen Values:</div><div class="space-y-2">';
       
       for (const [propKey, propValues] of Object.entries(streamValues)) {
         // propKey is like "z:LQ" which is the internal property ID
         // Get human-readable display name
         const displayName = await getPropertyDisplayName(defaultModelURN, propKey);
         
-        valuesHtml += `<div class="bg-gray-50 rounded p-2">`;
+        valuesHtml += `<div class="bg-dark-bg/50 rounded p-2">`;
         valuesHtml += `<div class="text-xs mb-1">`;
-        valuesHtml += `<div class="font-semibold text-gray-900">${displayName}</div>`;
-        valuesHtml += `<div class="font-mono text-gray-500 text-xs">${propKey}</div>`;
+        valuesHtml += `<div class="font-semibold text-dark-text">${displayName}</div>`;
+        valuesHtml += `<div class="font-mono text-dark-text-secondary text-xs">${propKey}</div>`;
         valuesHtml += `</div>`;
         
         for (const [timestamp, value] of Object.entries(propValues)) {
           const date = new Date(parseInt(timestamp));
           valuesHtml += `
             <div class="flex justify-between items-center text-xs pl-2 mt-1">
-              <span class="text-gray-600">${date.toLocaleString()}</span>
-              <span class="font-semibold text-gray-900">${value}</span>
+              <span class="text-dark-text-secondary">${date.toLocaleString()}</span>
+              <span class="font-semibold text-dark-text">${value}</span>
             </div>
           `;
         }
@@ -1440,19 +1440,19 @@ async function displayStreams(streams, facilityURN) {
     }
     
     detailHtml += `
-      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
+      <div class="border border-dark-border rounded p-4 hover:border-tandem-blue transition">
         <div class="flex items-center justify-between">
           <div class="flex items-center space-x-3 flex-grow">
-            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded-lg flex items-center justify-center">
+            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded flex items-center justify-center">
               <span class="text-white font-semibold text-sm">${i + 1}</span>
             </div>
             <div class="flex-grow">
               <div class="flex items-center gap-2 mb-1">
-                <h3 class="text-lg font-semibold text-gray-900">${streamName}</h3>
-                ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-100 to-green-200 text-green-800 rounded">${classification}</span>` : ''}
+                <h3 class="text-lg font-semibold text-dark-text">${streamName}</h3>
+                ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-500/30 to-green-600/30 text-green-300 rounded">${classification}</span>` : ''}
               </div>
-              <p class="text-xs text-gray-500 font-mono mt-1">Key: ${streamKey}</p>
-              ${internalId ? `<p class="text-xs text-gray-500 font-mono">Internal ID: ${internalId}</p>` : ''}
+              <p class="text-xs text-dark-text-secondary font-mono mt-1">Key: ${streamKey}</p>
+              ${internalId ? `<p class="text-xs text-dark-text-secondary font-mono">Internal ID: ${internalId}</p>` : ''}
             </div>
           </div>
         </div>
