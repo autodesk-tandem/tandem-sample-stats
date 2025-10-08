@@ -9,8 +9,7 @@ import {
   getStreams,
   getLevels,
   getRooms,
-  getDocuments,
-  getTaggedAssetsCount
+  getDocuments
 } from './api.js';
 import { loadSchemaForModel, getSchemaCache } from './state/schemaCache.js';
 import { displayModels } from './features/models.js';
@@ -19,10 +18,12 @@ import { displayRooms } from './features/rooms.js';
 import { displayDocuments } from './features/documents.js';
 import { displayStreams } from './features/streams.js';
 import { displaySchema } from './features/schema.js';
+import { displayTaggedAssets } from './features/taggedAssets.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
 const logoutBtn = document.getElementById('logoutBtn');
+const userProfileLink = document.getElementById('userProfileLink');
 const userProfileImg = document.getElementById('userProfileImg');
 const accountSelect = document.getElementById('accountSelect');
 const facilitySelect = document.getElementById('facilitySelect');
@@ -36,6 +37,7 @@ const levelsList = document.getElementById('levelsList');
 const roomsList = document.getElementById('roomsList');
 const documentsList = document.getElementById('documentsList');
 const schemaList = document.getElementById('schemaList');
+const taggedAssetsList = document.getElementById('taggedAssetsList');
 
 // State
 let accounts = [];
@@ -67,7 +69,7 @@ function updateUIForLoginState(loggedIn, profileImg) {
     
     if (profileImg) {
       userProfileImg.src = profileImg;
-      userProfileImg.classList.remove('hidden');
+      userProfileLink.classList.remove('hidden');
     }
     
     accountSelect.classList.remove('hidden');
@@ -75,7 +77,7 @@ function updateUIForLoginState(loggedIn, profileImg) {
   } else {
     loginBtn.classList.remove('hidden');
     logoutBtn.classList.add('hidden');
-    userProfileImg.classList.add('hidden');
+    userProfileLink.classList.add('hidden');
     welcomeMessage.classList.remove('hidden');
     dashboardContent.classList.add('hidden');
     accountSelect.classList.add('hidden');
@@ -123,7 +125,7 @@ async function buildAccountsAndFacilities() {
       if (userFacilities.length > 0) {
         accounts.push({
           id: 'user',
-          name: 'My Facilities',
+          name: '** SHARED DIRECTLY **',
           facilities: userFacilities.map(f => ({
             urn: f.urn,
             name: f.settings?.props?.["Identity Data"]?.["Building Name"] || 'Unnamed Facility'
@@ -149,7 +151,7 @@ function populateAccountsDropdown(accounts) {
   accounts.forEach(account => {
     const option = document.createElement('option');
     option.value = account.name;
-    option.textContent = `${account.name} (${account.facilities.length} facilit${account.facilities.length !== 1 ? 'ies' : 'y'})`;
+    option.textContent = account.name;
     accountSelect.appendChild(option);
   });
 
@@ -208,7 +210,11 @@ async function loadFacility(facilityURN) {
     
     if (info) {
       const buildingName = info.props?.["Identity Data"]?.["Building Name"] || "Unknown";
-      const location = info.props?.["Identity Data"]?.["Address"] || "No address available";
+      const location = info.props?.["Identity Data"]?.["Address"] || null;
+      const owner = info.props?.["Identity Data"]?.["Owner"] || null;
+      const projectName = info.props?.["Identity Data"]?.["Project Name"] || null;
+      const timeZone = info.props?.["Identity Data"]?.["timeZone"] || null;
+      const templateName = info.template?.name || null;
       
       facilityInfo.innerHTML = `
         <div class="flex flex-col md:flex-row gap-6">
@@ -224,10 +230,36 @@ async function loadFacility(facilityURN) {
               <span class="font-medium text-dark-text text-xs">Building Name:</span>
               <span class="text-dark-text-secondary ml-2 text-xs">${buildingName}</span>
             </div>
+            ${location ? `
             <div>
               <span class="font-medium text-dark-text text-xs">Location:</span>
               <span class="text-dark-text-secondary ml-2 text-xs">${location}</span>
             </div>
+            ` : ''}
+            ${owner ? `
+            <div>
+              <span class="font-medium text-dark-text text-xs">Owner:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${owner}</span>
+            </div>
+            ` : ''}
+            ${projectName ? `
+            <div>
+              <span class="font-medium text-dark-text text-xs">Project Name:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${projectName}</span>
+            </div>
+            ` : ''}
+            ${timeZone ? `
+            <div>
+              <span class="font-medium text-dark-text text-xs">Time Zone:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${timeZone}</span>
+            </div>
+            ` : ''}
+            ${templateName ? `
+            <div>
+              <span class="font-medium text-dark-text text-xs">Facility Template:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${templateName}</span>
+            </div>
+            ` : ''}
             <div>
               <span class="font-medium text-dark-text text-xs">Facility URN:</span>
               <span class="text-dark-text-secondary ml-2 text-xs font-mono break-all">${facilityURN}</span>
@@ -247,6 +279,7 @@ async function loadFacility(facilityURN) {
     toggleLoading(false);
   }
 }
+
 
 /**
  * Load and display facility statistics
@@ -269,8 +302,16 @@ async function loadStats(facilityURN) {
     // Display all sections using feature modules
     await displayModels(modelsList, models, facilityURN);
     
-    const streams = await getStreams(facilityURN);
+    // Check if default model exists before fetching streams
+    // Streams only exist in the default model
+    const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+    const hasDefaultModel = models.some(m => m.modelId === defaultModelURN);
+    
+    const streams = hasDefaultModel ? await getStreams(facilityURN) : [];
     await displayStreams(streamsList, streams, facilityURN);
+    
+    // Display tagged assets
+    await displayTaggedAssets(taggedAssetsList, facilityURN, models);
     
     const levels = await getLevels(facilityURN);
     await displayLevels(levelsList, levels);
@@ -282,31 +323,6 @@ async function loadStats(facilityURN) {
     await displayDocuments(documentsList, documents);
     
     await displaySchema(schemaList, models);
-    
-    // Update stats - models count
-    document.getElementById('stat2').textContent = models ? models.length : '0';
-    document.getElementById('stat2-desc').textContent = `Model${models?.length !== 1 ? 's' : ''} in facility`;
-    
-    // Calculate tagged assets (elements with user-defined properties)
-    if (models && models.length > 0) {
-      // Show loading state
-      document.getElementById('stat1').innerHTML = '<span class="animate-pulse">...</span>';
-      document.getElementById('stat1-desc').textContent = 'Calculating...';
-      
-      // Fetch tagged assets count
-      const taggedAssetsCount = await getTaggedAssetsCount(facilityURN);
-      
-      // Update tagged assets stat
-      document.getElementById('stat1').textContent = taggedAssetsCount.toLocaleString();
-      document.getElementById('stat1-desc').textContent = 'Elements with user-defined properties';
-    } else {
-      document.getElementById('stat1').textContent = '0';
-      document.getElementById('stat1-desc').textContent = 'No models';
-    }
-    
-    // Placeholder for future stat
-    document.getElementById('stat3').textContent = '-';
-    document.getElementById('stat3-desc').textContent = 'Coming soon';
     
   } catch (error) {
     console.error('Error loading stats:', error);
@@ -320,9 +336,6 @@ async function initialize() {
   // Set up event listeners
   loginBtn.addEventListener('click', login);
   logoutBtn.addEventListener('click', logout);
-  userProfileImg.addEventListener('click', () => {
-    window.open('https://accounts.autodesk.com/users/@me/view', '_blank');
-  });
 
   accountSelect.addEventListener('change', (e) => {
     const accountName = e.target.value;

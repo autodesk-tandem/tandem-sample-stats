@@ -77,6 +77,7 @@ export async function login() {
 export function logout() {
   delete window.sessionStorage.token;
   delete window.sessionStorage.refreshToken;
+  delete window.sessionStorage.tokenExpiry;
   
   if (refreshHandle) {
     clearTimeout(refreshHandle);
@@ -132,6 +133,10 @@ async function refreshToken() {
     const newToken = await resp.json();
     window.sessionStorage.token = newToken['access_token'];
     window.sessionStorage.refreshToken = newToken['refresh_token'];
+    
+    // Store token expiry time for future reference
+    const expiryTime = Date.now() + (newToken['expires_in'] * 1000);
+    window.sessionStorage.tokenExpiry = expiryTime;
 
     // Schedule next token refresh
     const nextRefresh = newToken['expires_in'] - 60;
@@ -179,6 +184,10 @@ export async function checkLogin() {
           console.log('✅ Token received successfully');
           window.sessionStorage.token = token['access_token'];
           window.sessionStorage.refreshToken = token['refresh_token'];
+          
+          // Store token expiry time for future reference
+          const expiryTime = Date.now() + (token['expires_in'] * 1000);
+          window.sessionStorage.tokenExpiry = expiryTime;
 
           // Schedule token refresh
           const nextRefresh = token['expires_in'] - 60;
@@ -205,6 +214,22 @@ export async function checkLogin() {
   if (window.sessionStorage.token) {
     try {
       const profileImg = await loadUserProfile();
+      
+      // Schedule token refresh if not already scheduled
+      // This handles cases where the page was refreshed or reopened
+      if (!refreshHandle && window.sessionStorage.refreshToken) {
+        const tokenExpiry = parseInt(window.sessionStorage.tokenExpiry || '0');
+        const now = Date.now();
+        const timeUntilExpiry = tokenExpiry - now;
+        
+        // If token expires in more than 1 minute, schedule refresh 1 minute before expiry
+        // Otherwise, refresh immediately
+        const refreshDelay = timeUntilExpiry > 60000 ? timeUntilExpiry - 60000 : 0;
+        
+        console.log(`⏰ Scheduling token refresh in ${Math.round(refreshDelay / 1000)}s (restored session)`);
+        refreshHandle = setTimeout(() => refreshToken(), refreshDelay);
+      }
+      
       return { loggedIn: true, profileImg };
     } catch (err) {
       console.error('Error loading user profile:', err);

@@ -97,11 +97,17 @@
                             class="hidden inline-flex items-center px-3 py-1.5 border border-dark-border text-xs font-medium rounded text-dark-text bg-dark-card hover:bg-dark-bg focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-tandem-blue transition">
                         Sign Out
                     </button>
-                    <img id="userProfileImg" 
-                         class="hidden h-8 w-8 rounded-full cursor-pointer ring-2 ring-dark-border shadow-sm" 
-                         src="" 
-                         alt="User profile"
-                         title="View profile">
+                    <a id="userProfileLink" 
+                       class="hidden" 
+                       href="https://accounts.autodesk.com/users/@me/view" 
+                       target="_blank" 
+                       rel="noopener noreferrer"
+                       title="View profile">
+                        <img id="userProfileImg" 
+                             class="h-8 w-8 rounded-full ring-2 ring-dark-border shadow-sm" 
+                             src="" 
+                             alt="User profile">
+                    </a>
                 </div>
             </div>
         </div>
@@ -153,6 +159,14 @@
                 </div>
             </div>
 
+            <!-- Tagged Assets List -->
+            <div class="bg-dark-card rounded border border-dark-border p-4 mb-4">
+                <h2 class="text-sm font-semibold text-dark-text mb-3">Tagged Assets</h2>
+                <div id="taggedAssetsList" class="text-dark-text-secondary text-sm">
+                    <p>Loading tagged assets...</p>
+                </div>
+            </div>
+
             <!-- Levels List -->
             <div class="bg-dark-card rounded border border-dark-border p-4 mb-4">
                 <h2 class="text-sm font-semibold text-dark-text mb-3">Levels</h2>
@@ -182,51 +196,6 @@
                 <h2 class="text-sm font-semibold text-dark-text mb-3">Schema</h2>
                 <div id="schemaList" class="text-dark-text-secondary text-sm">
                     <p>Loading schema...</p>
-                </div>
-            </div>
-
-            <!-- Stats Grid -->
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
-                <!-- Stat Card 1 -->
-                <div class="bg-dark-card rounded border border-dark-border p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-xs font-medium text-dark-text-secondary">Tagged Assets</h3>
-                        <div class="p-1.5 bg-blue-500/20 rounded">
-                            <svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                            </svg>
-                        </div>
-                    </div>
-                    <p class="text-xl font-bold text-dark-text" id="stat1">-</p>
-                    <p class="text-xs text-dark-text-secondary mt-1" id="stat1-desc">Loading...</p>
-                </div>
-
-                <!-- Stat Card 2 -->
-                <div class="bg-dark-card rounded border border-dark-border p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-xs font-medium text-dark-text-secondary">Models</h3>
-                        <div class="p-1.5 bg-green-500/20 rounded">
-                            <svg class="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 7v10c0 2.21 3.582 4 8 4s8-1.79 8-4V7M4 7c0 2.21 3.582 4 8 4s8-1.79 8-4M4 7c0-2.21 3.582-4 8-4s8 1.79 8 4"></path>
-                            </svg>
-                        </div>
-                    </div>
-                    <p class="text-xl font-bold text-dark-text" id="stat2">-</p>
-                    <p class="text-xs text-dark-text-secondary mt-1" id="stat2-desc">Loading...</p>
-                </div>
-
-                <!-- Stat Card 3 -->
-                <div class="bg-dark-card rounded border border-dark-border p-4">
-                    <div class="flex items-center justify-between mb-2">
-                        <h3 class="text-xs font-medium text-dark-text-secondary">User Properties</h3>
-                        <div class="p-1.5 bg-purple-500/20 rounded">
-                            <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"></path>
-                            </svg>
-                        </div>
-                    </div>
-                    <p class="text-xl font-bold text-dark-text" id="stat3">-</p>
-                    <p class="text-xs text-dark-text-secondary mt-1" id="stat3-desc">Loading...</p>
                 </div>
             </div>
         </div>
