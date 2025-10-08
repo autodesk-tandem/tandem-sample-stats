@@ -75,3 +75,52 @@ export function convertLongKeysToShortKeys(lastSeenValues) {
   
   return result;
 }
+
+/**
+ * Format unit name for display
+ * Converts Forge unit names to user-friendly abbreviated forms with superscripts
+ * @param {string} forgeUnit - Forge unit name (e.g., "squareFeet", "squareMeters")
+ * @returns {string} Abbreviated unit name (e.g., "ft²", "m²") with HTML superscripts
+ */
+export function formatUnitName(forgeUnit) {
+  if (!forgeUnit) return '';
+  
+  const unitMap = {
+    // CamelCase format (as returned from schema)
+    'squarefeet': 'ft<sup>2</sup>',
+    'squaremeters': 'm<sup>2</sup>',
+    'squaremillimeters': 'mm<sup>2</sup>',
+    'squarecentimeters': 'cm<sup>2</sup>',
+    'squareinches': 'in<sup>2</sup>',
+    'squareyards': 'yd<sup>2</sup>',
+    'cubicfeet': 'ft<sup>3</sup>',
+    'cubicmeters': 'm<sup>3</sup>',
+    'cubicmillimeters': 'mm<sup>3</sup>',
+    'cubiccentimeters': 'cm<sup>3</sup>',
+    'cubicinches': 'in<sup>3</sup>',
+    'cubicyards': 'yd<sup>3</sup>',
+    // Space-separated format (for compatibility)
+    'square feet': 'ft<sup>2</sup>',
+    'square meters': 'm<sup>2</sup>',
+    'square millimeters': 'mm<sup>2</sup>',
+    'square centimeters': 'cm<sup>2</sup>',
+    'square inches': 'in<sup>2</sup>',
+    'square yards': 'yd<sup>2</sup>',
+    'cubic feet': 'ft<sup>3</sup>',
+    'cubic meters': 'm<sup>3</sup>',
+    'cubic millimeters': 'mm<sup>3</sup>',
+    'cubic centimeters': 'cm<sup>3</sup>',
+    'cubic inches': 'in<sup>3</sup>',
+    'cubic yards': 'yd<sup>3</sup>',
+    // Linear units
+    'feet': 'ft',
+    'meters': 'm',
+    'millimeters': 'mm',
+    'centimeters': 'cm',
+    'inches': 'in',
+    'yards': 'yd'
+  };
+  
+  const lowerUnit = forgeUnit.toLowerCase();
+  return unitMap[lowerUnit] || forgeUnit;
+}

@@ -135,6 +135,22 @@ export async function getModels(facilityURN) {
 }
 
 /**
+ * Get documents for a facility
+ * Documents are included in the facility info response
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<Array>} List of documents
+ */
+export async function getDocuments(facilityURN) {
+  try {
+    const facilityInfo = await getFacilityInfo(facilityURN);
+    return facilityInfo ? facilityInfo.docs || [] : [];
+  } catch (error) {
+    console.error('Error fetching documents:', error);
+    return [];
+  }
+}
+
+/**
  * Get detailed information about a specific model
  * @param {string} modelURN - Model URN
  * @returns {Promise<object>} Model details
@@ -361,16 +377,46 @@ export async function getLevels(facilityURN) {
  * Get rooms from all models in a facility
  * Rooms have CategoryId === 160, Spaces have CategoryId === 3600
  * @param {string} facilityURN - Facility URN
+ * @param {Object} schemaCache - Optional pre-loaded schema cache to avoid duplicate API calls
  * @returns {Promise<Array>} Array of room objects with modelId, key, name, type, number, area, and volume
  */
-export async function getRooms(facilityURN) {
+export async function getRooms(facilityURN, schemaCache = null) {
   try {
     const models = await getModels(facilityURN);
     const allRooms = [];
     
     for (const model of models) {
+      // Get schema from cache if available, otherwise fetch it
+      const schema = schemaCache && schemaCache[model.modelId] 
+        ? schemaCache[model.modelId] 
+        : await getSchema(model.modelId);
+      
+      // Find the Area property (Category="Dimensions", Name="Area")
+      const areaAttr = schema.attributes?.find(attr => 
+        attr.category === 'Dimensions' && attr.name === 'Area'
+      );
+      
+      // Find the Volume property (Category="Dimensions", Name="Volume")
+      const volumeAttr = schema.attributes?.find(attr => 
+        attr.category === 'Dimensions' && attr.name === 'Volume'
+      );
+      
+      const areaQualifiedProp = areaAttr?.id;
+      const areaUnit = areaAttr?.forgeUnit || 'square feet'; // Default to square feet if not specified
+      const volumeQualifiedProp = volumeAttr?.id;
+      const volumeUnit = volumeAttr?.forgeUnit || 'cubic feet'; // Default to cubic feet if not specified
+      
+      // Build the list of qualified columns to fetch
+      const qualifiedColumns = ['n:c', 'n:n']; // CategoryId, Name
+      if (areaQualifiedProp) {
+        qualifiedColumns.push(areaQualifiedProp); // Add the Area qualified property
+      }
+      if (volumeQualifiedProp) {
+        qualifiedColumns.push(volumeQualifiedProp); // Add the Volume qualified property
+      }
+      
       const payload = JSON.stringify({
-        qualifiedColumns: ['n:c', 'n:n', 'n:N', 'n:A', 'n:V'], // CategoryId, Name, Number, Area, Volume
+        qualifiedColumns: qualifiedColumns,
         includeHistory: false
       });
       
@@ -392,9 +438,10 @@ export async function getRooms(facilityURN) {
           modelName: model.label,
           key: room.k,
           name: room['n:n']?.[0] || 'Unnamed Room',
-          number: room['n:N']?.[0],
-          area: room['n:A']?.[0],
-          volume: room['n:V']?.[0],
+          area: areaQualifiedProp ? room[areaQualifiedProp]?.[0] : null,
+          areaUnit: areaUnit,
+          volume: volumeQualifiedProp ? room[volumeQualifiedProp]?.[0] : null,
+          volumeUnit: volumeUnit,
           type: 'Room'
         });
       });
@@ -407,9 +454,10 @@ export async function getRooms(facilityURN) {
           modelName: model.label,
           key: space.k,
           name: space['n:n']?.[0] || 'Unnamed Space',
-          number: space['n:N']?.[0],
-          area: space['n:A']?.[0],
-          volume: space['n:V']?.[0],
+          area: areaQualifiedProp ? space[areaQualifiedProp]?.[0] : null,
+          areaUnit: areaUnit,
+          volume: volumeQualifiedProp ? space[volumeQualifiedProp]?.[0] : null,
+          volumeUnit: volumeUnit,
           type: 'Space'
         });
       });
