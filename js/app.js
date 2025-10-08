@@ -13,9 +13,10 @@ import {
   getSchema,
   getLevels,
   getRooms,
+  getDocuments,
   getTaggedAssetsCount
 } from './api.js';
-import { convertLongKeysToShortKeys, getDataTypeName } from './utils.js';
+import { convertLongKeysToShortKeys, getDataTypeName, formatUnitName } from './utils.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
@@ -31,6 +32,7 @@ const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
 const levelsList = document.getElementById('levelsList');
 const roomsList = document.getElementById('roomsList');
+const documentsList = document.getElementById('documentsList');
 const schemaList = document.getElementById('schemaList');
 
 // State
@@ -390,11 +392,9 @@ async function displayModels(models, facilityURN) {
     </div>
   `;
   
-  // Build summary view (just shows it's collapsed, no detailed list)
+  // Build summary view (collapsed state)
   let summaryHtml = `
-    <div id="models-summary" class="text-center py-4 text-gray-500 text-sm">
-      Click to expand and view model details
-    </div>
+    <div id="models-summary"></div>
   `;
 
   // Build detailed view (initially hidden)
@@ -519,11 +519,6 @@ function toggleStreamsDetail() {
   const iconDown = document.getElementById('toggle-streams-icon-down');
   const iconUp = document.getElementById('toggle-streams-icon-up');
   
-  console.log('Streams toggle clicked', {
-    detailHidden: detailSection?.classList.contains('hidden'),
-    summaryHidden: summarySection?.classList.contains('hidden')
-  });
-  
   if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
     if (detailSection.classList.contains('hidden')) {
       // Show detail, hide summary
@@ -579,6 +574,33 @@ function toggleRoomsDetail() {
   const toggleBtn = document.getElementById('toggle-rooms-btn');
   const iconDown = document.getElementById('toggle-rooms-icon-down');
   const iconUp = document.getElementById('toggle-rooms-icon-up');
+  
+  if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
+    if (detailSection.classList.contains('hidden')) {
+      detailSection.classList.remove('hidden');
+      summarySection.classList.add('hidden');
+      iconDown.classList.add('hidden');
+      iconUp.classList.remove('hidden');
+      toggleBtn.title = 'Show less';
+    } else {
+      detailSection.classList.add('hidden');
+      summarySection.classList.remove('hidden');
+      iconDown.classList.remove('hidden');
+      iconUp.classList.add('hidden');
+      toggleBtn.title = 'Show more';
+    }
+  }
+}
+
+/**
+ * Toggle documents detail view
+ */
+function toggleDocumentsDetail() {
+  const detailSection = document.getElementById('documents-detail');
+  const summarySection = document.getElementById('documents-summary');
+  const toggleBtn = document.getElementById('toggle-documents-btn');
+  const iconDown = document.getElementById('toggle-documents-icon-down');
+  const iconUp = document.getElementById('toggle-documents-icon-up');
   
   if (detailSection && summarySection && toggleBtn && iconDown && iconUp) {
     if (detailSection.classList.contains('hidden')) {
@@ -656,11 +678,9 @@ async function displayLevels(levels) {
     </div>
   `;
   
-  // Build summary view
+  // Build summary view (collapsed state)
   let summaryHtml = `
-    <div id="levels-summary" class="text-center py-4 text-gray-500 text-sm">
-      Click to expand and view level details
-    </div>
+    <div id="levels-summary"></div>
   `;
 
   // Group levels by model
@@ -741,14 +761,20 @@ async function displayLevels(levels) {
 /**
  * Display rooms list
  * @param {Array} rooms - Array of room objects
+ * @param {string} sortBy - Sort by 'name' or 'area' (default: null for no sorting)
+ * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
  */
-async function displayRooms(rooms) {
+async function displayRooms(rooms, sortBy = null, sortDirection = 'asc') {
   if (!rooms || rooms.length === 0) {
     roomsList.innerHTML = '<p class="text-gray-500">No rooms or spaces found in this facility.</p>';
     return;
   }
 
-  // Build header with toggle button
+  // Check if detail section is currently visible (to preserve state after re-render)
+  const detailSection = document.getElementById('rooms-detail');
+  const isDetailVisible = detailSection && !detailSection.classList.contains('hidden');
+
+  // Build header with toggle button and sort controls
   let headerHtml = `
     <div class="flex items-center justify-between mb-4">
       <div class="flex items-center space-x-2">
@@ -757,24 +783,38 @@ async function displayRooms(rooms) {
           <div>Room${rooms.length !== 1 ? 's' : ''} & Space${rooms.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
-      <button id="toggle-rooms-btn"
-              class="p-2 hover:bg-gray-100 rounded-lg transition"
-              title="Show more">
-        <svg id="toggle-rooms-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-        </svg>
-        <svg id="toggle-rooms-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-        </svg>
-      </button>
+      <div class="flex items-center space-x-3">
+        <div class="flex items-center space-x-2 text-sm border-r border-gray-300 pr-3">
+          <span class="text-gray-600">Sort:</span>
+          <select id="rooms-sort-select" class="px-3 py-1.5 border border-gray-300 rounded text-sm focus:outline-none focus:ring-2 focus:ring-tandem-blue bg-white">
+            <option value="">None</option>
+            <option value="name" ${sortBy === 'name' ? 'selected' : ''}>Name ${sortBy === 'name' ? (sortDirection === 'asc' ? '(A→Z)' : '(Z→A)') : ''}</option>
+            <option value="area" ${sortBy === 'area' ? 'selected' : ''}>Area ${sortBy === 'area' ? (sortDirection === 'asc' ? '(↑)' : '(↓)') : ''}</option>
+          </select>
+          <button id="rooms-sort-direction" 
+                  class="px-2 py-1 text-xs font-medium rounded transition ${!sortBy ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-tandem-blue text-white hover:bg-blue-700'}"
+                  title="${sortDirection === 'asc' ? 'Switch to Descending' : 'Switch to Ascending'}"
+                  ${!sortBy ? 'disabled' : ''}>
+            ${sortDirection === 'asc' ? 'A→Z / ↑' : 'Z→A / ↓'}
+          </button>
+        </div>
+        <button id="toggle-rooms-btn"
+                class="p-2 hover:bg-gray-100 rounded-lg transition"
+                title="${isDetailVisible ? 'Show less' : 'Show more'}">
+          <svg id="toggle-rooms-icon-down" class="w-5 h-5 ${isDetailVisible ? 'hidden' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+          <svg id="toggle-rooms-icon-up" class="w-5 h-5 ${isDetailVisible ? '' : 'hidden'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   `;
   
-  // Build summary view
+  // Build summary view (collapsed state, hide if detail is visible)
   let summaryHtml = `
-    <div id="rooms-summary" class="text-center py-4 text-gray-500 text-sm">
-      Click to expand and view room details
-    </div>
+    <div id="rooms-summary" class="${isDetailVisible ? 'hidden' : ''}"></div>
   `;
 
   // Group rooms by model
@@ -790,8 +830,31 @@ async function displayRooms(rooms) {
     roomsByModel[room.modelId].rooms.push(room);
   });
 
-  // Build detailed view grouped by model
-  let detailHtml = '<div id="rooms-detail" class="hidden space-y-4">';
+  // Sort rooms within each model group if sortBy is specified
+  if (sortBy) {
+    for (const modelId in roomsByModel) {
+      const modelGroup = roomsByModel[modelId];
+      modelGroup.rooms.sort((a, b) => {
+        let aVal, bVal;
+        
+        if (sortBy === 'name') {
+          aVal = (a.name || '').toLowerCase();
+          bVal = (b.name || '').toLowerCase();
+        } else if (sortBy === 'area') {
+          // Treat null/undefined as 0 for sorting
+          aVal = a.area !== null && a.area !== undefined ? a.area : 0;
+          bVal = b.area !== null && b.area !== undefined ? b.area : 0;
+        }
+        
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      });
+    }
+  }
+
+  // Build detailed view grouped by model (show if it was visible before)
+  let detailHtml = `<div id="rooms-detail" class="${isDetailVisible ? '' : 'hidden'} space-y-4">`;
   
   let roomCounter = 0;
   for (const modelId in roomsByModel) {
@@ -820,9 +883,14 @@ async function displayRooms(rooms) {
       
       // Format additional properties inline
       const propsArray = [];
-      if (room.number) propsArray.push(`#${room.number}`);
-      if (room.area !== undefined && room.area !== null) propsArray.push(`${room.area.toFixed(2)} sq ft`);
-      if (room.volume !== undefined && room.volume !== null) propsArray.push(`${room.volume.toFixed(2)} cu ft`);
+      if (room.area !== undefined && room.area !== null) {
+        const areaUnitFormatted = formatUnitName(room.areaUnit);
+        propsArray.push(`${room.area.toFixed(2)} ${areaUnitFormatted}`);
+      }
+      if (room.volume !== undefined && room.volume !== null) {
+        const volumeUnitFormatted = formatUnitName(room.volumeUnit);
+        propsArray.push(`${room.volume.toFixed(2)} ${volumeUnitFormatted}`);
+      }
       
       const propsDisplay = propsArray.length > 0
         ? `<span class="text-sm text-gray-600 ml-3">• ${propsArray.join(' • ')}</span>`
@@ -857,10 +925,192 @@ async function displayRooms(rooms) {
   
   roomsList.innerHTML = headerHtml + summaryHtml + detailHtml;
   
+  // Store rooms data for re-sorting
+  roomsList.dataset.roomsData = JSON.stringify(rooms);
+  
   const toggleBtn = document.getElementById('toggle-rooms-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleRoomsDetail);
   }
+  
+  // Add sort controls event listeners
+  const sortSelect = document.getElementById('rooms-sort-select');
+  const sortDirectionBtn = document.getElementById('rooms-sort-direction');
+  
+  if (sortSelect) {
+    sortSelect.addEventListener('change', (e) => {
+      const newSortBy = e.target.value || null;
+      displayRooms(rooms, newSortBy, sortDirection);
+    });
+  }
+  
+  if (sortDirectionBtn) {
+    sortDirectionBtn.addEventListener('click', () => {
+      if (sortBy) {
+        const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+        displayRooms(rooms, sortBy, newDirection);
+      }
+    });
+  }
+}
+
+/**
+ * Open a document in a new tab with authentication
+ * @param {string} documentUrl - Document URL
+ * @param {string} contentType - Document content type
+ */
+async function openDocument(documentUrl, contentType) {
+  try {
+    const response = await fetch(documentUrl, {
+      method: 'GET',
+      headers: {
+        'Authorization': 'Bearer ' + window.sessionStorage.token
+      }
+    });
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch document: ${response.statusText}`);
+    }
+    
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(blob);
+    window.open(blobUrl, '_blank');
+    
+    // Clean up the blob URL after a delay
+    setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+  } catch (error) {
+    console.error('Error opening document:', error);
+    alert('Failed to open document. Please try again.');
+  }
+}
+
+/**
+ * Display documents list
+ * @param {Array} documents - Array of document objects
+ */
+async function displayDocuments(documents) {
+  if (!documents || documents.length === 0) {
+    documentsList.innerHTML = '<p class="text-gray-500">No documents found in this facility.</p>';
+    return;
+  }
+
+  // Build header with toggle button
+  let headerHtml = `
+    <div class="flex items-center justify-between mb-4">
+      <div class="flex items-center space-x-2">
+        <div class="text-3xl font-bold text-tandem-blue">${documents.length}</div>
+        <div class="text-sm text-gray-600">
+          <div>Document${documents.length !== 1 ? 's' : ''}</div>
+        </div>
+      </div>
+      <button id="toggle-documents-btn"
+              class="p-2 hover:bg-gray-100 rounded-lg transition"
+              title="Show more">
+        <svg id="toggle-documents-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+        </svg>
+        <svg id="toggle-documents-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+        </svg>
+      </button>
+    </div>
+  `;
+  
+  // Build summary view (collapsed state)
+  let summaryHtml = `
+    <div id="documents-summary"></div>
+  `;
+
+  // Build detailed view (initially hidden)
+  let detailHtml = '<div id="documents-detail" class="hidden space-y-4">';
+  
+  for (let i = 0; i < documents.length; i++) {
+    const doc = documents[i];
+    
+    // Format file size if available
+    const fileSizeDisplay = doc.size ? `<span class="text-sm text-gray-600">Size: ${(doc.size / 1024 / 1024).toFixed(2)} MB</span>` : '';
+    
+    // Format last updated date
+    const lastUpdated = doc.lastUpdated ? new Date(doc.lastUpdated).toLocaleString() : 'Unknown';
+    
+    // Determine file type icon color based on content type
+    let iconColor = 'from-gray-500 to-gray-600';
+    if (doc.contentType) {
+      if (doc.contentType.includes('pdf')) iconColor = 'from-red-500 to-red-600';
+      else if (doc.contentType.includes('image')) iconColor = 'from-green-500 to-green-600';
+      else if (doc.contentType.includes('word') || doc.contentType.includes('document')) iconColor = 'from-blue-500 to-blue-600';
+      else if (doc.contentType.includes('excel') || doc.contentType.includes('spreadsheet')) iconColor = 'from-green-600 to-green-700';
+    }
+    
+    detailHtml += `
+      <div class="border border-gray-200 rounded-lg p-4 hover:border-tandem-blue transition">
+        <div class="flex items-start space-x-3">
+          <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br ${iconColor} rounded-lg flex items-center justify-center">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
+            </svg>
+          </div>
+          <div class="flex-grow min-w-0">
+            <div class="flex items-center justify-between mb-2">
+              <div class="flex-grow min-w-0">
+                <h3 class="text-lg font-semibold text-gray-900 truncate">${doc.name || 'Untitled Document'}</h3>
+                ${doc.label ? `<p class="text-sm text-gray-600">${doc.label}</p>` : ''}
+              </div>
+              ${doc.signedLink ? `
+              <button data-doc-url="${doc.signedLink}" 
+                      data-doc-type="${doc.contentType || ''}"
+                      class="doc-open-btn ml-3 flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-tandem-blue text-tandem-blue rounded-lg hover:bg-tandem-blue hover:text-white transition text-sm font-medium cursor-pointer">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
+                </svg>
+                Open
+              </button>
+              ` : ''}
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+              ${doc.contentType ? `
+              <div>
+                <span class="font-medium text-gray-700">Type:</span>
+                <span class="text-gray-600 ml-2">${doc.contentType}</span>
+              </div>
+              ` : ''}
+              <div>
+                <span class="font-medium text-gray-700">Last Updated:</span>
+                <span class="text-gray-600 ml-2">${lastUpdated}</span>
+              </div>
+              ${fileSizeDisplay ? `<div>${fileSizeDisplay}</div>` : ''}
+              ${doc.accProjectId ? `
+              <div>
+                <span class="font-medium text-gray-700">ACC Project:</span>
+                <span class="text-gray-600 ml-2 font-mono text-xs">${doc.accProjectId}</span>
+              </div>
+              ` : ''}
+            </div>
+            ${doc.id ? `<div class="mt-2 text-xs text-gray-500 font-mono">${doc.id}</div>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  
+  detailHtml += '</div>';
+  
+  documentsList.innerHTML = headerHtml + summaryHtml + detailHtml;
+  
+  const toggleBtn = document.getElementById('toggle-documents-btn');
+  if (toggleBtn) {
+    toggleBtn.addEventListener('click', toggleDocumentsDetail);
+  }
+  
+  // Add event listeners for document open buttons
+  const openButtons = documentsList.querySelectorAll('.doc-open-btn');
+  openButtons.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const url = btn.getAttribute('data-doc-url');
+      const contentType = btn.getAttribute('data-doc-type');
+      openDocument(url, contentType);
+    });
+  });
 }
 
 /**
@@ -1031,11 +1281,9 @@ async function displaySchema(models) {
     </div>
   `;
   
-  // Build summary view
+  // Build summary view (collapsed state)
   let summaryHtml = `
-    <div id="schema-summary" class="text-center py-4 text-gray-500 text-sm">
-      Click to expand and view schema details
-    </div>
+    <div id="schema-summary"></div>
   `;
 
   // Build detailed view
@@ -1118,11 +1366,9 @@ async function displayStreams(streams, facilityURN) {
     </div>
   `;
   
-  // Build summary view (just shows it's collapsed, no detailed list)
+  // Build summary view (collapsed state)
   let summaryHtml = `
-    <div id="streams-summary" class="text-center py-4 text-gray-500 text-sm">
-      Click to expand and view stream details
-    </div>
+    <div id="streams-summary"></div>
   `;
 
   // Get the default model URN (streams only exist in the default model)
@@ -1133,20 +1379,16 @@ async function displayStreams(streams, facilityURN) {
   
   // Fetch last seen values for all streams
   const streamKeys = streams.map(s => s['k']);
-  console.log('Fetching last seen values for stream keys:', streamKeys);
   const lastSeenValuesRaw = await getLastSeenStreamValues(facilityURN, streamKeys);
-  console.log('Last seen values received (with long keys):', lastSeenValuesRaw);
   
   // Convert long keys to short keys so we can match them with our stream objects
   const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
-  console.log('Last seen values converted (with short keys):', lastSeenValues);
 
   // Build detailed view (initially hidden)
   let detailHtml = '<div id="streams-detail" class="hidden space-y-4">';
   
   for (let i = 0; i < streams.length; i++) {
     const stream = streams[i];
-    console.log(`Stream ${i} data:`, stream);
     
     // Name: Use override "n:!n" if present, otherwise "n:n"
     const streamName = stream['n:!n']?.[0] || stream['n:n']?.[0] || 'Unnamed Stream';
@@ -1163,11 +1405,9 @@ async function displayStreams(streams, facilityURN) {
         break;
       }
     }
-    console.log(`Stream ${i} - Internal ID:`, internalId);
     
     // Get last seen values for this stream
     const streamValues = lastSeenValues[streamKey];
-    console.log(`Stream ${i} - Last seen values:`, streamValues);
     let valuesHtml = '';
     
     if (streamValues && Object.keys(streamValues).length > 0) {
@@ -1197,8 +1437,6 @@ async function displayStreams(streams, facilityURN) {
       }
       
       valuesHtml += '</div></div>';
-    } else {
-      console.log(`Stream ${i} - No last seen values`);
     }
     
     detailHtml += `
@@ -1244,6 +1482,12 @@ async function loadStats(facilityURN) {
     // Get models
     const models = await getModels(facilityURN);
     
+    // Pre-load and cache schemas for all models FIRST
+    // This ensures we only call /schema once per model
+    for (const model of models) {
+      await loadSchemaForModel(model.modelId);
+    }
+    
     // Display models (this will load element counts asynchronously)
     await displayModels(models, facilityURN);
     
@@ -1255,15 +1499,13 @@ async function loadStats(facilityURN) {
     const levels = await getLevels(facilityURN);
     await displayLevels(levels);
     
-    // Get and display rooms
-    const rooms = await getRooms(facilityURN);
+    // Get and display rooms (pass schema cache to avoid duplicate calls)
+    const rooms = await getRooms(facilityURN, schemaCache);
     await displayRooms(rooms);
     
-    // Load schemas for all models (they're already being cached from streams display)
-    // but make sure all are loaded
-    for (const model of models) {
-      await loadSchemaForModel(model.modelId);
-    }
+    // Get and display documents
+    const documents = await getDocuments(facilityURN);
+    await displayDocuments(documents);
     
     // Display schema information
     await displaySchema(models);
