@@ -252,6 +252,11 @@ export async function getStreams(facilityURN) {
     const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
     
     if (!response.ok) {
+      // 403 Forbidden typically means no default model exists yet
+      if (response.status === 403) {
+        console.log('No default model found - streams not available');
+        return [];
+      }
       throw new Error(`Failed to fetch streams: ${response.statusText}`);
     }
     
@@ -478,8 +483,24 @@ export async function getRooms(facilityURN, schemaCache = null) {
  */
 export async function getTaggedAssetsCount(facilityURN) {
   try {
+    const details = await getTaggedAssetsDetails(facilityURN);
+    return details.totalCount;
+  } catch (error) {
+    console.error('Error fetching tagged assets count:', error);
+    return 0;
+  }
+}
+
+/**
+ * Get detailed information about tagged assets and their user-defined properties
+ * @param {string} facilityURN - Facility URN
+ * @returns {Promise<Object>} Object with totalCount and properties map
+ */
+export async function getTaggedAssetsDetails(facilityURN) {
+  try {
     const models = await getModels(facilityURN);
     let totalTaggedAssets = 0;
+    const propertyUsage = {}; // Map of qualifiedProp -> count
     
     for (const model of models) {
       // Scan for elements with user-defined properties (z family = DtProperties)
@@ -499,19 +520,34 @@ export async function getTaggedAssetsCount(facilityURN) {
       
       const elements = await response.json();
       
-      // Filter for elements that have at least one z: property (user-defined property)
-      const taggedElements = elements.filter(element => {
+      // Process each element
+      elements.forEach(element => {
         const keys = Object.keys(element);
-        // Check if any key starts with 'z:' (excluding the 'k' key which is the element key)
-        return keys.some(key => key.startsWith('z:'));
+        const zProperties = keys.filter(key => key.startsWith('z:'));
+        
+        if (zProperties.length > 0) {
+          totalTaggedAssets++;
+          
+          // Count usage of each z: property
+          zProperties.forEach(prop => {
+            if (!propertyUsage[prop]) {
+              propertyUsage[prop] = 0;
+            }
+            propertyUsage[prop]++;
+          });
+        }
       });
-      
-      totalTaggedAssets += taggedElements.length;
     }
     
-    return totalTaggedAssets;
+    return {
+      totalCount: totalTaggedAssets,
+      propertyUsage: propertyUsage
+    };
   } catch (error) {
-    console.error('Error fetching tagged assets:', error);
-    return 0;
+    console.error('Error fetching tagged assets details:', error);
+    return {
+      totalCount: 0,
+      propertyUsage: {}
+    };
   }
 }

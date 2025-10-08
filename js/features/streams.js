@@ -102,14 +102,13 @@ export async function displayStreams(container, streams, facilityURN) {
         
         valuesHtml += `<div class="bg-dark-bg/50 rounded p-2">`;
         valuesHtml += `<div class="text-xs mb-1">`;
-        valuesHtml += `<div class="font-semibold text-dark-text">${displayName}</div>`;
-        valuesHtml += `<div class="font-mono text-dark-text-secondary text-xs">${propKey}</div>`;
+        valuesHtml += `<div class="font-semibold text-dark-text">${displayName} <span class="font-mono text-dark-text-secondary font-normal">(${propKey})</span></div>`;
         valuesHtml += `</div>`;
         
         for (const [timestamp, value] of Object.entries(propValues)) {
           const date = new Date(parseInt(timestamp));
           valuesHtml += `
-            <div class="flex justify-between items-center text-xs pl-2 mt-1">
+            <div class="flex items-center gap-3 text-xs pl-2 mt-1">
               <span class="text-dark-text-secondary">${date.toLocaleString()}</span>
               <span class="font-semibold text-dark-text">${value}</span>
             </div>
