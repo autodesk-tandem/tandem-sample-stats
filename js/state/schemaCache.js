@@ -57,6 +57,16 @@ export function getSchemaCache() {
 }
 
 /**
+ * Clear the schema cache
+ * Should be called when switching facilities to prevent data from accumulating
+ */
+export function clearSchemaCache() {
+  for (const key in schemaCache) {
+    delete schemaCache[key];
+  }
+}
+
+/**
  * Check if a model is the default model for a facility
  * The default model URN is derived from the facility URN by swapping the prefix
  * @param {string} facilityURN - Facility URN (urn:adsk.dtt:...)
