@@ -11,7 +11,7 @@ import {
   getRooms,
   getDocuments
 } from './api.js';
-import { loadSchemaForModel, getSchemaCache } from './state/schemaCache.js';
+import { loadSchemaForModel, getSchemaCache, clearSchemaCache } from './state/schemaCache.js';
 import { displayModels } from './features/models.js';
 import { displayLevels } from './features/levels.js';
 import { displayRooms } from './features/rooms.js';
@@ -19,6 +19,7 @@ import { displayDocuments } from './features/documents.js';
 import { displayStreams } from './features/streams.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
+import { displayDiagnostics } from './features/diagnostics.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
@@ -38,6 +39,7 @@ const roomsList = document.getElementById('roomsList');
 const documentsList = document.getElementById('documentsList');
 const schemaList = document.getElementById('schemaList');
 const taggedAssetsList = document.getElementById('taggedAssetsList');
+const diagnosticsList = document.getElementById('diagnosticsList');
 
 // State
 let accounts = [];
@@ -287,6 +289,9 @@ async function loadFacility(facilityURN) {
  */
 async function loadStats(facilityURN) {
   try {
+    // Clear schema cache from previous facility
+    clearSchemaCache();
+    
     // Get models
     const models = await getModels(facilityURN);
     
@@ -323,6 +328,9 @@ async function loadStats(facilityURN) {
     await displayDocuments(documentsList, documents);
     
     await displaySchema(schemaList, models);
+    
+    // Display diagnostics (must be after schema is loaded)
+    await displayDiagnostics(diagnosticsList, facilityURN, models);
     
   } catch (error) {
     console.error('Error loading stats:', error);

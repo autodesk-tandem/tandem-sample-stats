@@ -74,7 +74,7 @@ export async function displayModels(container, models, facilityURN) {
             </div>
             <div class="flex-grow">
               <div class="flex items-center space-x-2 mb-1">
-                <h3 class="text-lg font-semibold text-dark-text">${model.label || 'Untitled Model'}</h3>
+                <h3 class="text-lg font-semibold text-dark-text">${model.label || (isDefault ? '** Default Model **' : 'Untitled Model')}</h3>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
                 ${isDefault ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300">Default</span>' : ''}
