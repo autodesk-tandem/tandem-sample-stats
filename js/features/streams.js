@@ -1,7 +1,108 @@
-import { getLastSeenStreamValues } from '../api.js';
+import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../api.js';
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+
+/**
+ * Category ID to type name mapping
+ */
+const CATEGORY_NAMES = {
+  160: 'Room',
+  3600: 'Space',
+  240: 'Level',
+  // Add more as needed
+};
+
+/**
+ * Convert URL-safe base64 to standard base64 and add padding
+ * @param {string} urlSafeB64 - URL-safe base64 string
+ * @returns {string} Standard base64 string
+ */
+function makeWebsafe(str) {
+  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
+}
+
+/**
+ * Convert long key (with flags) to short key (without flags)
+ * Long key is 24 bytes (4 bytes flags + 20 bytes element ID)
+ * Short key is 20 bytes (just the element ID)
+ * @param {string} fullKey - Full element key with flags
+ * @returns {string} Short element key without flags
+ */
+function toShortKey(fullKey) {
+  const kElementFlagsSize = 4;
+  const kElementIdSize = 20;
+  
+  // Convert from URL-safe base64 to standard base64
+  const tmp = fullKey.replace(/-/g, '+').replace(/_/g, '/');
+  // Add padding if needed
+  let standardB64 = tmp;
+  while (standardB64.length % 4) {
+    standardB64 += '=';
+  }
+  
+  const binData = new Uint8Array(atob(standardB64).split('').map(c => c.charCodeAt(0)));
+  const shortKey = new Uint8Array(kElementIdSize);
+  
+  // Skip first 4 bytes (flags) and copy the remaining 20 bytes (element ID)
+  shortKey.set(binData.subarray(kElementFlagsSize));
+  return makeWebsafe(btoa(String.fromCharCode.apply(null, shortKey)));
+}
+
+/**
+ * Decode xref to extract model URN and element key
+ * Xref format: base64 encoded binary [16 bytes modelId + 24 bytes elementKey with flags]
+ * @param {string} xref - Base64 encoded xref (URL-safe format)
+ * @param {string} facilityURN - Facility URN to construct full model URN
+ * @returns {Object|null} Object with modelURN and elementKey, or null if invalid
+ */
+function decodeXref(xref, facilityURN) {
+  try {
+    const kModelIdSize = 16;
+    const kElementIdWithFlagsSize = 24; // 20 bytes element ID + 4 bytes flags
+    
+    // Convert URL-safe base64 to standard base64
+    let standardB64 = xref.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    while (standardB64.length % 4) {
+      standardB64 += '=';
+    }
+    
+    // Decode base64 to binary
+    const decoded = atob(standardB64);
+    const bytes = new Uint8Array(decoded.length);
+    for (let i = 0; i < decoded.length; i++) {
+      bytes[i] = decoded.charCodeAt(i);
+    }
+    
+    // Xref should be 16 bytes (model) + 24 bytes (element with flags) = 40 bytes
+    if (bytes.length < kModelIdSize + kElementIdWithFlagsSize) {
+      console.error('Xref too short after decoding:', bytes.length, 'expected', kModelIdSize + kElementIdWithFlagsSize);
+      return null;
+    }
+    
+    // Extract model ID (first 16 bytes)
+    const modelIdBytes = bytes.slice(0, kModelIdSize);
+    const modelIdStr = String.fromCharCode.apply(null, Array.from(modelIdBytes));
+    const modelIdB64 = makeWebsafe(btoa(modelIdStr));
+    
+    // Extract element key with flags (next 24 bytes)
+    const elementKeyBytes = bytes.slice(kModelIdSize, kModelIdSize + kElementIdWithFlagsSize);
+    const elementKeyStr = String.fromCharCode.apply(null, Array.from(elementKeyBytes));
+    const elementKeyB64 = makeWebsafe(btoa(elementKeyStr));
+    
+    // Construct full model URN
+    const modelURN = `urn:adsk.dtm:${modelIdB64}`;
+    
+    return {
+      modelURN: modelURN,
+      elementKey: elementKeyB64  // This is the long key (24 bytes with flags)
+    };
+  } catch (error) {
+    console.error('Error decoding xref:', error, xref);
+    return null;
+  }
+}
 
 /**
  * Toggle streams detail view
@@ -13,6 +114,382 @@ const toggleStreamsDetail = createToggleFunction({
   iconDownId: 'toggle-streams-icon-down',
   iconUpId: 'toggle-streams-icon-up'
 });
+
+/**
+ * Generate chart HTML page for stream data
+ * @param {string} streamName - Name of the stream
+ * @param {string} streamKey - Stream key
+ * @param {Object} streamData - Stream data with timestamps and values
+ * @param {Object} defaultModelURN - Default model URN
+ * @param {Object} propertyDisplayNames - Map of property keys to display names
+ * @returns {string} HTML page content
+ */
+function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, propertyDisplayNames) {
+  // Process the data to extract chart data - one chart per property
+  const propertyCharts = [];
+  const allTimestamps = new Set();
+  
+  // Tandem blue color
+  const tandemBlue = '#0696D7';
+  
+  // Stream data format: { "propertyKey": { "timestamp": value, ... }, ... }
+  for (const [propKey, propData] of Object.entries(streamData)) {
+    if (propKey === 'k') continue; // Skip the key field
+    
+    const data = [];
+    const timestamps = Object.keys(propData).map(Number).sort((a, b) => a - b);
+    
+    timestamps.forEach(ts => {
+      allTimestamps.add(ts);
+      data.push({
+        x: new Date(ts),
+        y: propData[ts]
+      });
+    });
+    
+    // Store last seen value (last timestamp)
+    let lastSeenValue = null;
+    let lastSeenTimestamp = null;
+    if (timestamps.length > 0) {
+      const lastTimestamp = timestamps[timestamps.length - 1];
+      lastSeenValue = propData[lastTimestamp];
+      lastSeenTimestamp = lastTimestamp;
+    }
+    
+    // Get display name
+    const displayName = propertyDisplayNames[propKey] || propKey;
+    
+    propertyCharts.push({
+      propKey: propKey,
+      displayName: displayName,
+      data: data,
+      lastSeenValue: lastSeenValue,
+      lastSeenTimestamp: lastSeenTimestamp,
+      dataPointCount: data.length
+    });
+  }
+
+  // Build HTML for each property chart
+  let chartsHtml = '';
+  propertyCharts.forEach((chart, index) => {
+    const date = new Date(chart.lastSeenTimestamp);
+    const timeStr = date.toLocaleString('en-US', { 
+      month: 'short', 
+      day: 'numeric', 
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true
+    });
+    
+    chartsHtml += `
+    <div class="chart-section">
+      <div class="chart-header">
+        <div class="chart-title">${chart.displayName} <span class="prop-key">(${chart.propKey})</span></div>
+        <div class="chart-stats">
+          <div class="last-seen-value">${chart.lastSeenValue}</div>
+          <div class="last-seen-time">Last seen: ${timeStr}</div>
+          <div class="data-points">${chart.dataPointCount} data points</div>
+        </div>
+      </div>
+      <div class="chart-container">
+        <canvas id="chart${index}"></canvas>
+      </div>
+    </div>
+    `;
+  });
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Stream Chart: ${streamName}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background-color: #1a1a1a;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 20px;
+    }
+    .container {
+      max-width: 1600px;
+      margin: 0 auto;
+    }
+    .main-header {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #404040;
+    }
+    h1 {
+      margin: 0 0 10px 0;
+      color: #0696D7;
+      font-size: 24px;
+      font-weight: 600;
+    }
+    .info {
+      font-size: 12px;
+      color: #a0a0a0;
+      font-family: monospace;
+      margin-bottom: 5px;
+    }
+    .chart-section {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid #404040;
+      margin-bottom: 20px;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 15px;
+      border-bottom: 1px solid #404040;
+    }
+    .chart-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #e0e0e0;
+    }
+    .prop-key {
+      font-size: 14px;
+      font-weight: 400;
+      color: #808080;
+      font-family: monospace;
+    }
+    .chart-stats {
+      text-align: right;
+    }
+    .last-seen-value {
+      font-size: 32px;
+      font-weight: 600;
+      color: #0696D7;
+      line-height: 1;
+      margin-bottom: 4px;
+    }
+    .last-seen-time {
+      font-size: 11px;
+      color: #808080;
+      margin-bottom: 2px;
+    }
+    .data-points {
+      font-size: 10px;
+      color: #606060;
+    }
+    .chart-container {
+      position: relative;
+      height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="main-header">
+      <h1>${streamName}</h1>
+      <div class="info">Stream Key: ${streamKey}</div>
+      <div class="info">Model: ${defaultModelURN}</div>
+      <div class="info">Time Range: Last 30 days</div>
+    </div>
+    ${chartsHtml}
+  </div>
+  
+  <script>
+    const tandemBlue = '#0696D7';
+    const chartData = ${JSON.stringify(propertyCharts)};
+    
+    // Create a chart for each property
+    chartData.forEach((chartInfo, index) => {
+      const ctx = document.getElementById('chart' + index).getContext('2d');
+      
+      const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+          datasets: [{
+            data: chartInfo.data,
+            borderColor: tandemBlue,
+            backgroundColor: 'transparent',
+            borderWidth: 2,
+            pointRadius: 0,
+            pointHoverRadius: 4,
+            pointHoverBackgroundColor: tandemBlue,
+            tension: 0.1
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: {
+              display: false
+            },
+            title: {
+              display: false
+            },
+            tooltip: {
+              mode: 'index',
+              intersect: false,
+              backgroundColor: 'rgba(42, 42, 42, 0.95)',
+              titleColor: '#e0e0e0',
+              bodyColor: '#a0a0a0',
+              borderColor: '#404040',
+              borderWidth: 1,
+              padding: 12,
+              displayColors: false,
+              callbacks: {
+                title: function(context) {
+                  // Show date
+                  return new Date(context[0].parsed.x).toLocaleString('en-US', {
+                    month: 'short',
+                    day: 'numeric',
+                    year: 'numeric',
+                    hour: 'numeric',
+                    minute: '2-digit',
+                    hour12: true
+                  });
+                },
+                label: function(context) {
+                  // Show only the value
+                  return context.parsed.y.toFixed(2);
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'day',
+                displayFormats: {
+                  day: 'MMM d',
+                  hour: 'MMM d ha'
+                }
+              },
+              ticks: {
+                color: '#808080',
+                font: {
+                  size: 11
+                },
+                maxRotation: 0,
+                autoSkip: true,
+                maxTicksLimit: 12
+              },
+              grid: {
+                color: '#353535',
+                drawBorder: false
+              },
+              border: {
+                display: false
+              }
+            },
+            y: {
+              ticks: {
+                color: '#808080',
+                font: {
+                  size: 11
+                },
+                padding: 10
+              },
+              grid: {
+                color: '#353535',
+                drawBorder: false
+              },
+              border: {
+                display: false
+              }
+            }
+          },
+          interaction: {
+            mode: 'index',
+            axis: 'x',
+            intersect: false
+          },
+          elements: {
+            line: {
+              borderWidth: 2
+            },
+            point: {
+              radius: 0,
+              hitRadius: 8,
+              hoverRadius: 4
+            }
+          }
+        }
+      });
+    });
+  </script>
+</body>
+</html>`;
+}
+
+/**
+ * View stream chart in a new tab
+ * @param {string} facilityURN - Facility URN
+ * @param {string} streamKey - Stream key
+ * @param {string} streamName - Stream name
+ * @param {HTMLElement} button - Button element that triggered the action
+ */
+async function viewStreamChart(facilityURN, streamKey, streamName, button = null) {
+  try {
+    // Show loading state on button if provided
+    let originalText = null;
+    if (button) {
+      originalText = button.innerHTML;
+      button.disabled = true;
+      button.innerHTML = `
+        <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      `;
+    }
+    
+    // Fetch stream data
+    const streamData = await getStreamValues(facilityURN, streamKey, 30);
+    
+    // Reset button if provided
+    if (button && originalText) {
+      button.disabled = false;
+      button.innerHTML = originalText;
+    }
+    
+    if (!streamData || Object.keys(streamData).length === 0) {
+      alert('No data available for this stream in the last 30 days.');
+      return;
+    }
+    
+    // Get default model URN
+    const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+    
+    // Load schema to get display names
+    await loadSchemaForModel(defaultModelURN);
+    
+    // Get display names for all properties
+    const propertyDisplayNames = {};
+    for (const propKey of Object.keys(streamData)) {
+      if (propKey !== 'k') {
+        propertyDisplayNames[propKey] = await getPropertyDisplayName(defaultModelURN, propKey);
+      }
+    }
+    
+    // Generate HTML
+    const htmlContent = generateChartHTML(streamName, streamKey, streamData, defaultModelURN, propertyDisplayNames);
+    
+    // Open in new tab
+    const newWindow = window.open('', '_blank');
+    newWindow.document.write(htmlContent);
+    newWindow.document.close();
+  } catch (error) {
+    console.error('Error viewing stream chart:', error);
+    alert('Failed to load stream chart. See console for details.');
+  }
+}
 
 /**
  * Display streams list with details
@@ -66,6 +543,58 @@ export async function displayStreams(container, streams, facilityURN) {
   // Convert long keys to short keys so we can match them with our stream objects
   const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
 
+  // Decode xrefs and fetch host information
+  const hostInfoMap = new Map(); // Map xref -> {name, type}
+  const xrefsByModel = new Map(); // Map modelURN -> array of {xref, shortKey}
+  
+  // Decode all xrefs and group by model
+  for (const stream of streams) {
+    // Host reference priority: x:p (parent) > x:!r (room override) > x:r (room)
+    // Tandem UI uses x:p as the primary host reference
+    const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
+    if (hostRef) {
+      const decoded = decodeXref(hostRef, facilityURN);
+      if (decoded) {
+        // Convert long key (from xref) to short key (for querying)
+        const shortKey = toShortKey(decoded.elementKey);
+        
+        if (!xrefsByModel.has(decoded.modelURN)) {
+          xrefsByModel.set(decoded.modelURN, []);
+        }
+        xrefsByModel.get(decoded.modelURN).push({
+          xref: hostRef,
+          shortKey: shortKey
+        });
+      }
+    }
+  }
+  
+  // Fetch host elements using short keys from source models
+  for (const [modelURN, items] of xrefsByModel.entries()) {
+    const shortKeys = items.map(item => item.shortKey);
+    
+    try {
+      const elements = await getElementsByKeys(modelURN, shortKeys);
+      
+      // Map elements back to xrefs using short key matching
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i];
+        const element = elements.find(e => e.k === item.shortKey);
+        
+        if (element) {
+          // Name: Use override "n:!n" if present, otherwise "n:n"
+          const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
+          const categoryId = element['n:c']?.[0];
+          const type = CATEGORY_NAMES[categoryId] || `Category ${categoryId}`;
+          
+          hostInfoMap.set(item.xref, { name, type });
+        }
+      }
+    } catch (error) {
+      console.error(`Error fetching host elements from model ${modelURN}:`, error);
+    }
+  }
+
   // Build detailed view (initially hidden)
   let detailHtml = '<div id="streams-detail" class="hidden space-y-2">';
   
@@ -79,14 +608,9 @@ export async function displayStreams(container, streams, facilityURN) {
     // Classification: Use override "n:!v" if present, otherwise "n:v"
     const classification = stream['n:!v']?.[0] || stream['n:v']?.[0];
     
-    // Internal ID: Find first property starting with "z:"
-    let internalId = null;
-    for (const key in stream) {
-      if (key.startsWith('z:')) {
-        internalId = key;
-        break;
-      }
-    }
+    // Host information: Priority x:p (parent) > x:!r (room override) > x:r (room)
+    const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
+    const hostInfo = hostRef ? hostInfoMap.get(hostRef) : null;
     
     // Get last seen values for this stream
     const streamValues = lastSeenValues[streamKey];
@@ -132,10 +656,20 @@ export async function displayStreams(container, streams, facilityURN) {
                 <h3 class="text-lg font-semibold text-dark-text">${streamName}</h3>
                 ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-500/30 to-green-600/30 text-green-300 rounded">${classification}</span>` : ''}
               </div>
-              <p class="text-xs text-dark-text-secondary font-mono mt-1">Key: ${streamKey}</p>
-              ${internalId ? `<p class="text-xs text-dark-text-secondary font-mono">Internal ID: ${internalId}</p>` : ''}
+              ${hostInfo ? `<p class="text-xs text-dark-text-secondary mt-1">Host: ${hostInfo.name} (${hostInfo.type})</p>` : ''}
+              <p class="text-xs text-dark-text-secondary mt-1">Key: <span class="font-mono">${streamKey}</span></p>
             </div>
           </div>
+          <button 
+            class="view-stream-chart-btn flex-shrink-0 inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+            data-stream-key="${streamKey}"
+            data-stream-name="${streamName}"
+            title="View 30-day chart">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
+            View Chart
+          </button>
         </div>
         ${valuesHtml}
       </div>
@@ -152,5 +686,15 @@ export async function displayStreams(container, streams, facilityURN) {
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleStreamsDetail);
   }
+  
+  // Bind view chart button event listeners
+  const chartButtons = container.querySelectorAll('.view-stream-chart-btn');
+  chartButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const streamKey = button.dataset.streamKey;
+      const streamName = button.dataset.streamName;
+      viewStreamChart(facilityURN, streamKey, streamName, button);
+    });
+  });
 }
 

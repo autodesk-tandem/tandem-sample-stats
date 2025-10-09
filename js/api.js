@@ -244,7 +244,7 @@ export async function getStreams(facilityURN) {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
     const payload = JSON.stringify({
-      families: ['n', 'z'], // Standard and DtProperties column families
+      families: ['n', 'z', 'x'], // Standard, DtProperties, and Xrefs column families
       includeHistory: false
     });
     
@@ -278,6 +278,39 @@ export async function getStreams(facilityURN) {
 }
 
 /**
+ * Get element details by keys
+ * @param {string} modelURN - Model URN
+ * @param {Array<string>} keys - Array of element keys
+ * @returns {Promise<Array>} Array of element objects
+ */
+export async function getElementsByKeys(modelURN, keys) {
+  try {
+    const payload = JSON.stringify({
+      keys: keys,
+      families: ['n'], // Standard column family for name
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Filter out version string (first element) and only return objects with a 'k' property
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item.k);
+    
+    return elements;
+  } catch (error) {
+    console.error('Error fetching elements by keys:', error);
+    return [];
+  }
+}
+
+/**
  * Get last seen values for streams
  * @param {string} facilityURN - Facility URN
  * @param {Array<string>} streamKeys - Array of stream keys
@@ -303,6 +336,38 @@ export async function getLastSeenStreamValues(facilityURN, streamKeys) {
   } catch (error) {
     console.error('Error fetching last seen stream values:', error);
     return {};
+  }
+}
+
+/**
+ * Get stream values for a given time range
+ * @param {string} facilityURN - Facility URN
+ * @param {string} streamKey - Stream key
+ * @param {number} daysBack - Number of days back to fetch (default 30)
+ * @returns {Promise<Object>} Object with stream values
+ */
+export async function getStreamValues(facilityURN, streamKey, daysBack = 30) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    
+    const dateNow = new Date();
+    const timestampEnd = dateNow.getTime();
+    
+    const dateMinus = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000);
+    const timestampStart = dateMinus.getTime();
+    
+    const requestPath = `${tandemBaseURL}/timeseries/models/${defaultModelURN}/streams/${streamKey}?start=${timestampStart}&end=${timestampEnd}`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch stream values: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    return data;
+  } catch (error) {
+    console.error('Error fetching stream values:', error);
+    return null;
   }
 }
 
