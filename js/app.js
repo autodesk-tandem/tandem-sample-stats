@@ -150,7 +150,20 @@ async function buildAccountsAndFacilities() {
 function populateAccountsDropdown(accounts) {
   accountSelect.innerHTML = '<option value="">Select Account...</option>';
   
-  accounts.forEach(account => {
+  // Sort accounts alphabetically by name, but put "** SHARED DIRECTLY **" at the end
+  const sortedAccounts = [...accounts].sort((a, b) => {
+    const sharedDirectlyName = '** SHARED DIRECTLY **';
+    
+    // If 'a' is the shared account, it should come after 'b'
+    if (a.name === sharedDirectlyName) return 1;
+    // If 'b' is the shared account, it should come after 'a'
+    if (b.name === sharedDirectlyName) return -1;
+    
+    // Otherwise, sort alphabetically
+    return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+  });
+  
+  sortedAccounts.forEach(account => {
     const option = document.createElement('option');
     option.value = account.name;
     option.textContent = account.name;
@@ -162,6 +175,12 @@ function populateAccountsDropdown(accounts) {
   if (lastAccount) {
     accountSelect.value = lastAccount;
     populateFacilitiesDropdown(accounts, lastAccount);
+  }
+  
+  // Remove placeholder if we have accounts and a selection was made
+  if (accounts.length > 0 && accountSelect.value !== '') {
+    const placeholder = accountSelect.querySelector('option[value=""]');
+    if (placeholder) placeholder.remove();
   }
 }
 
@@ -176,18 +195,37 @@ function populateFacilitiesDropdown(accounts, accountName) {
   const account = accounts.find(a => a.name === accountName);
   if (!account) return;
   
-  account.facilities.forEach(facility => {
+  // Sort facilities alphabetically by name
+  const sortedFacilities = [...account.facilities].sort((a, b) => 
+    a.name.localeCompare(b.name, undefined, { sensitivity: 'base' })
+  );
+  
+  sortedFacilities.forEach(facility => {
     const option = document.createElement('option');
     option.value = facility.urn;
     option.textContent = facility.name;
     facilitySelect.appendChild(option);
   });
 
-  // Try to restore last selected facility
+  // Try to restore last selected facility, or select the first one
   const lastFacility = window.localStorage.getItem('tandem-stats-last-facility');
+  let selectedFacilityURN = null;
+  
   if (lastFacility && account.facilities.some(f => f.urn === lastFacility)) {
-    facilitySelect.value = lastFacility;
-    loadFacility(lastFacility);
+    // Restore previously selected facility if it exists in this account
+    selectedFacilityURN = lastFacility;
+  } else if (sortedFacilities.length > 0) {
+    // Otherwise, select the first facility in the list
+    selectedFacilityURN = sortedFacilities[0].urn;
+  }
+  
+  if (selectedFacilityURN) {
+    facilitySelect.value = selectedFacilityURN;
+    loadFacility(selectedFacilityURN);
+    
+    // Remove placeholder after selection
+    const placeholder = facilitySelect.querySelector('option[value=""]');
+    if (placeholder) placeholder.remove();
   }
 }
 
@@ -217,6 +255,7 @@ async function loadFacility(facilityURN) {
       const projectName = info.props?.["Identity Data"]?.["Project Name"] || null;
       const timeZone = info.props?.["Identity Data"]?.["timeZone"] || null;
       const templateName = info.template?.name || null;
+      const schemaVersion = info.schemaVersion;
       
       facilityInfo.innerHTML = `
         <div class="flex flex-col md:flex-row gap-6">
@@ -263,15 +302,55 @@ async function loadFacility(facilityURN) {
             </div>
             ` : ''}
             <div>
+              <span class="font-medium text-dark-text text-xs">Schema Version:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${schemaVersion !== undefined ? schemaVersion : 'Unknown'}</span>
+            </div>
+            <div>
               <span class="font-medium text-dark-text text-xs">Facility URN:</span>
               <span class="text-dark-text-secondary ml-2 text-xs font-mono break-all">${facilityURN}</span>
             </div>
           </div>
         </div>
       `;
+      
+      // Check schema version - API only supports version 2
+      if (schemaVersion !== 2) {
+        // Clear all data sections
+        modelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        streamsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        taggedAssetsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        levelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        roomsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        documentsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        schemaList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        diagnosticsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        
+        // Show prominent error message
+        facilityInfo.innerHTML += `
+          <div class="mt-4 p-4 bg-yellow-900/30 border border-yellow-700 rounded">
+            <div class="flex items-start space-x-3">
+              <svg class="w-6 h-6 text-yellow-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+              </svg>
+              <div>
+                <h3 class="text-sm font-semibold text-yellow-500 mb-1">Incompatible Schema Version</h3>
+                <p class="text-xs text-yellow-200 mb-2">
+                  This facility is using schema version <strong>${schemaVersion !== undefined ? schemaVersion : 'Unknown'}</strong>. 
+                  The API currently only supports <strong>schema version 2</strong>.
+                </p>
+                <p class="text-xs text-yellow-200">
+                  To view detailed statistics for this facility, please upgrade it by opening it in Autodesk Tandem first.
+                </p>
+              </div>
+            </div>
+          </div>
+        `;
+        
+        return; // Skip loading stats
+      }
     }
 
-    // Load stats
+    // Load stats (only if schema version is 2)
     await loadStats(facilityURN);
     
   } catch (error) {
@@ -347,8 +426,13 @@ async function initialize() {
 
   accountSelect.addEventListener('change', (e) => {
     const accountName = e.target.value;
-    window.localStorage.setItem('tandem-stats-last-account', accountName);
-    populateFacilitiesDropdown(accounts, accountName);
+    if (accountName) {
+      window.localStorage.setItem('tandem-stats-last-account', accountName);
+      populateFacilitiesDropdown(accounts, accountName);
+      // Remove placeholder after selection
+      const placeholder = accountSelect.querySelector('option[value=""]');
+      if (placeholder) placeholder.remove();
+    }
   });
 
   facilitySelect.addEventListener('change', (e) => {
@@ -356,6 +440,9 @@ async function initialize() {
     if (facilityURN) {
       window.localStorage.setItem('tandem-stats-last-facility', facilityURN);
       loadFacility(facilityURN);
+      // Remove placeholder after selection
+      const placeholder = facilitySelect.querySelector('option[value=""]');
+      if (placeholder) placeholder.remove();
     }
   });
 
