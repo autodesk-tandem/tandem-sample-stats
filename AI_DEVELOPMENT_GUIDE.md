@@ -23,11 +23,14 @@ This guide provides essential context about the Autodesk Tandem REST API, common
 ### What is Tandem?
 
 Autodesk Tandem is a digital twin platform for facility management. It stores:
-- **Facilities** (`urn:adsk.dtt:...`) - Top-level containers (buildings/campuses)
+- **Groups** - User accounts/teams (the UI calls these "Accounts")
+- **Facilities/Twins** (`urn:adsk.dtt:...`) - Buildings/campuses within a group
 - **Models** (`urn:adsk.dtm:...`) - 3D models within facilities
 - **Elements** - Individual building components (walls, doors, equipment, etc.)
 - **Streams** - IoT sensor data tied to elements
 - **Properties** - Metadata and attributes on elements
+
+**Terminology Note:** The API uses "groups" and "twins", but the Tandem UI calls them "accounts" and "facilities". This guide uses both terms interchangeably.
 
 ### API Architecture
 
@@ -35,12 +38,12 @@ Autodesk Tandem is a digital twin platform for facility management. It stores:
 Base URL: https://developer.api.autodesk.com/tandem/v1
 
 Key Endpoints:
-├── /accounts                  # List user's accounts/teams
-├── /groups                    # List facilities (twins)
-├── /twins/{urn}               # Facility information
-├── /modeldata/{urn}/scan      # Query elements in a model
-├── /modeldata/{urn}/schema    # Get property schema for a model
-└── /timeseries/...            # Stream data
+├── /groups                       # List user's groups (accounts/teams)
+├── /groups/{groupURN}/twins      # List facilities (twins) in a group
+├── /twins/{urn}                  # Facility information
+├── /modeldata/{urn}/scan         # Query elements in a model
+├── /modeldata/{urn}/schema       # Get property schema for a model
+└── /timeseries/...               # Stream data
 ```
 
 ### Authentication
@@ -293,15 +296,15 @@ This is the **gateway to all Tandem data**. Without it, your app can only work w
 **The Logic (Reusable):**
 
 ```javascript
-// Step 1: Fetch user's accounts
-const accounts = await getAccounts();
+// Step 1: Fetch user's groups (called "accounts" or "teams" in the UI)
+const groups = await getGroups();
 
-// Step 2: Group facilities by account
-const accountsWithFacilities = await Promise.all(
-  accounts.map(async (account) => {
-    const facilities = await getFacilities(account.accountId);
+// Step 2: Fetch facilities (twins) for each group
+const groupsWithFacilities = await Promise.all(
+  groups.map(async (group) => {
+    const facilities = await getFacilitiesForGroup(group.urn);
     return {
-      ...account,
+      ...group,
       facilities: facilities
     };
   })
@@ -696,8 +699,8 @@ console.log(`Flags: 0x${flags.toString(16).padStart(8, '0')}`);
 | Task | Solution | File |
 |------|----------|------|
 | **Account/Facility switching** ⭐ | See Pattern 1 in Reusable Patterns | `js/app.js` |
-| Get user's accounts | `getAccounts()` | `js/api.js` |
-| Get account's facilities | `getFacilities(accountId)` | `js/api.js` |
+| Get user's groups (accounts) | `getGroups()` | `js/api.js` |
+| Get group's facilities | `getFacilitiesForGroup(groupURN)` | `js/api.js` |
 | Get facility info | `getFacilityInfo(facilityURN)` | `js/api.js` |
 | OAuth login | `login()` | `js/auth.js` |
 | Get access token | `getAccessToken()` | `js/auth.js` |
