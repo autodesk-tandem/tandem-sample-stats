@@ -1,17 +1,17 @@
 # Quick Start Guide
 
-## Step 1: Configure Your Forge Client ID
+## Step 1: Configure Your APS Client ID
 
 1. Open `js/config.js`
-2. Replace the empty string with your Forge Client ID:
+2. Replace the empty string with your APS Client ID:
 
 ```javascript
-forgeKey: "YOUR_CLIENT_ID_HERE",
+apsKey: "YOUR_CLIENT_ID_HERE",
 ```
 
 ## Step 2: Configure OAuth Redirect
 
-Make sure your Forge application has this redirect URI configured:
+Make sure your APS application has this redirect URI configured:
 - `http://localhost:8000`
 
 ## Step 3: Start Local Server
@@ -58,8 +58,8 @@ Navigate to: `http://localhost:8000`
 - Check that your user account has the appropriate permissions
 
 ### Authentication fails
-- Verify your Forge Client ID is correct
-- Ensure the redirect URI is properly configured in your Forge app
+- Verify your APS Client ID is correct
+- Ensure the redirect URI is properly configured in your APS app
 - Check browser console for error messages
 
 ### CORS errors

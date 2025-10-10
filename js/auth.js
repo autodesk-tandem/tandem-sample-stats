@@ -68,7 +68,7 @@ async function doRedirection(clientId, scope) {
  */
 export async function login() {
   const scope = 'data:read data:write user-profile:read';
-  await doRedirection(env.forgeKey, scope);
+  await doRedirection(env.apsKey, scope);
 }
 
 /**
@@ -114,7 +114,7 @@ async function refreshToken() {
     const token = window.sessionStorage.refreshToken;
     const payload = {
       'grant_type': 'refresh_token',
-      'client_id': env.forgeKey,
+      'client_id': env.apsKey,
       'refresh_token': token,
     };
 
@@ -165,7 +165,7 @@ export async function checkLogin() {
         console.log('🔄 Exchanging authorization code for token...');
         const payload = {
           'grant_type': 'authorization_code',
-          'client_id': env.forgeKey,
+          'client_id': env.apsKey,
           'code_verifier': codeVerifier,
           'code': code,
           'redirect_uri': env.loginRedirect

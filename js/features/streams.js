@@ -2,6 +2,8 @@ import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { ColumnFamilies, ColumnNames } from '../../sdk/dt-schema.js';
+import { decodeXref, toShortKey } from '../../sdk/keys.js';
 
 /**
  * Category ID to type name mapping
@@ -12,97 +14,6 @@ const CATEGORY_NAMES = {
   240: 'Level',
   // Add more as needed
 };
-
-/**
- * Convert URL-safe base64 to standard base64 and add padding
- * @param {string} urlSafeB64 - URL-safe base64 string
- * @returns {string} Standard base64 string
- */
-function makeWebsafe(str) {
-  return str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
-}
-
-/**
- * Convert long key (with flags) to short key (without flags)
- * Long key is 24 bytes (4 bytes flags + 20 bytes element ID)
- * Short key is 20 bytes (just the element ID)
- * @param {string} fullKey - Full element key with flags
- * @returns {string} Short element key without flags
- */
-function toShortKey(fullKey) {
-  const kElementFlagsSize = 4;
-  const kElementIdSize = 20;
-  
-  // Convert from URL-safe base64 to standard base64
-  const tmp = fullKey.replace(/-/g, '+').replace(/_/g, '/');
-  // Add padding if needed
-  let standardB64 = tmp;
-  while (standardB64.length % 4) {
-    standardB64 += '=';
-  }
-  
-  const binData = new Uint8Array(atob(standardB64).split('').map(c => c.charCodeAt(0)));
-  const shortKey = new Uint8Array(kElementIdSize);
-  
-  // Skip first 4 bytes (flags) and copy the remaining 20 bytes (element ID)
-  shortKey.set(binData.subarray(kElementFlagsSize));
-  return makeWebsafe(btoa(String.fromCharCode.apply(null, shortKey)));
-}
-
-/**
- * Decode xref to extract model URN and element key
- * Xref format: base64 encoded binary [16 bytes modelId + 24 bytes elementKey with flags]
- * @param {string} xref - Base64 encoded xref (URL-safe format)
- * @param {string} facilityURN - Facility URN to construct full model URN
- * @returns {Object|null} Object with modelURN and elementKey, or null if invalid
- */
-function decodeXref(xref, facilityURN) {
-  try {
-    const kModelIdSize = 16;
-    const kElementIdWithFlagsSize = 24; // 20 bytes element ID + 4 bytes flags
-    
-    // Convert URL-safe base64 to standard base64
-    let standardB64 = xref.replace(/-/g, '+').replace(/_/g, '/');
-    // Add padding if needed
-    while (standardB64.length % 4) {
-      standardB64 += '=';
-    }
-    
-    // Decode base64 to binary
-    const decoded = atob(standardB64);
-    const bytes = new Uint8Array(decoded.length);
-    for (let i = 0; i < decoded.length; i++) {
-      bytes[i] = decoded.charCodeAt(i);
-    }
-    
-    // Xref should be 16 bytes (model) + 24 bytes (element with flags) = 40 bytes
-    if (bytes.length < kModelIdSize + kElementIdWithFlagsSize) {
-      console.error('Xref too short after decoding:', bytes.length, 'expected', kModelIdSize + kElementIdWithFlagsSize);
-      return null;
-    }
-    
-    // Extract model ID (first 16 bytes)
-    const modelIdBytes = bytes.slice(0, kModelIdSize);
-    const modelIdStr = String.fromCharCode.apply(null, Array.from(modelIdBytes));
-    const modelIdB64 = makeWebsafe(btoa(modelIdStr));
-    
-    // Extract element key with flags (next 24 bytes)
-    const elementKeyBytes = bytes.slice(kModelIdSize, kModelIdSize + kElementIdWithFlagsSize);
-    const elementKeyStr = String.fromCharCode.apply(null, Array.from(elementKeyBytes));
-    const elementKeyB64 = makeWebsafe(btoa(elementKeyStr));
-    
-    // Construct full model URN
-    const modelURN = `urn:adsk.dtm:${modelIdB64}`;
-    
-    return {
-      modelURN: modelURN,
-      elementKey: elementKeyB64  // This is the long key (24 bytes with flags)
-    };
-  } catch (error) {
-    console.error('Error decoding xref:', error, xref);
-    return null;
-  }
-}
 
 /**
  * Toggle streams detail view
@@ -547,13 +458,23 @@ export async function displayStreams(container, streams, facilityURN) {
   const hostInfoMap = new Map(); // Map xref -> {name, type}
   const xrefsByModel = new Map(); // Map modelURN -> array of {xref, shortKey}
   
+  // Build qualified column names using SDK constants
+  const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
+  const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
+  const categoryCol = `${ColumnFamilies.Standard}:${ColumnNames.CategoryId}`;
+  const classificationCol = `${ColumnFamilies.Standard}:${ColumnNames.Classification}`;
+  const oClassificationCol = `${ColumnFamilies.Standard}:${ColumnNames.OClassification}`;
+  const xParentCol = `${ColumnFamilies.Xrefs}:${ColumnNames.Parent}`;
+  const xRoomsCol = `${ColumnFamilies.Xrefs}:${ColumnNames.Rooms}`;
+  
   // Decode all xrefs and group by model
+  
   for (const stream of streams) {
-    // Host reference priority: x:p (parent) > x:!r (room override) > x:r (room)
+    // Host reference priority: x:p (parent) > x:r (room)
     // Tandem UI uses x:p as the primary host reference
-    const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
+    const hostRef = stream[xParentCol]?.[0] || stream[xRoomsCol]?.[0];
     if (hostRef) {
-      const decoded = decodeXref(hostRef, facilityURN);
+      const decoded = decodeXref(hostRef);
       if (decoded) {
         // Convert long key (from xref) to short key (for querying)
         const shortKey = toShortKey(decoded.elementKey);
@@ -582,9 +503,9 @@ export async function displayStreams(container, streams, facilityURN) {
         const element = elements.find(e => e.k === item.shortKey);
         
         if (element) {
-          // Name: Use override "n:!n" if present, otherwise "n:n"
-          const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
-          const categoryId = element['n:c']?.[0];
+          // Name: Use override if present, otherwise standard
+          const name = element[oNameCol]?.[0] || element[nameCol]?.[0] || 'Unnamed';
+          const categoryId = element[categoryCol]?.[0];
           const type = CATEGORY_NAMES[categoryId] || `Category ${categoryId}`;
           
           hostInfoMap.set(item.xref, { name, type });
@@ -601,15 +522,15 @@ export async function displayStreams(container, streams, facilityURN) {
   for (let i = 0; i < streams.length; i++) {
     const stream = streams[i];
     
-    // Name: Use override "n:!n" if present, otherwise "n:n"
-    const streamName = stream['n:!n']?.[0] || stream['n:n']?.[0] || 'Unnamed Stream';
+    // Name: Use override if present, otherwise standard
+    const streamName = stream[oNameCol]?.[0] || stream[nameCol]?.[0] || 'Unnamed Stream';
     const streamKey = stream['k']; // Stream key
     
-    // Classification: Use override "n:!v" if present, otherwise "n:v"
-    const classification = stream['n:!v']?.[0] || stream['n:v']?.[0];
+    // Classification: Use override if present, otherwise standard
+    const classification = stream[oClassificationCol]?.[0] || stream[classificationCol]?.[0];
     
-    // Host information: Priority x:p (parent) > x:!r (room override) > x:r (room)
-    const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
+    // Host information: Priority x:p (parent) > x:r (room)
+    const hostRef = stream[xParentCol]?.[0] || stream[xRoomsCol]?.[0];
     const hostInfo = hostRef ? hostInfoMap.get(hostRef) : null;
     
     // Get last seen values for this stream

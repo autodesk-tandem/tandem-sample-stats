@@ -66,20 +66,3 @@ export function clearSchemaCache() {
   }
 }
 
-/**
- * Check if a model is the default model for a facility
- * The default model URN is derived from the facility URN by swapping the prefix
- * @param {string} facilityURN - Facility URN (urn:adsk.dtt:...)
- * @param {string} modelURN - Model URN (urn:adsk.dtm:...)
- * @returns {boolean} True if this is the default model
- */
-export function isDefaultModel(facilityURN, modelURN) {
-  if (!facilityURN || !modelURN) return false;
-  
-  // Strip prefixes and compare
-  const facilityId = facilityURN.replace('urn:adsk.dtt:', '');
-  const modelId = modelURN.replace('urn:adsk.dtm:', '');
-  
-  return facilityId === modelId;
-}
-
