@@ -1,5 +1,5 @@
 import { getElementCount } from '../api.js';
-import { isDefaultModel } from '../state/schemaCache.js';
+import { isDefaultModel } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 
 /**

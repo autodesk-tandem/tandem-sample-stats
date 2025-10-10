@@ -1,6 +1,6 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { getSchemaCache, isDefaultModel } from '../state/schemaCache.js';
-import { getDataTypeName } from '../utils.js';
+import { getSchemaCache } from '../state/schemaCache.js';
+import { getDataTypeName, isDefaultModel } from '../utils.js';
 
 /**
  * Toggle diagnostics detail view
