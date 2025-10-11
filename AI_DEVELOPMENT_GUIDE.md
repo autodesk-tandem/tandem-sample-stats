@@ -87,7 +87,7 @@ const elements = await getElementsByKeys(modelURN, [shortKey]);
 **When to convert:**
 - ✅ Convert short → long when matching stream data (i.e. returned by `POST timeseries/models/{urn}/streams`)
 - ✅ Convert long → xref when creating cross-model references
-- ❌ Don't convert xrefs to short keys until you extract the element key portion
+- ❌ Don't convert xrefs to short keys directly. Extract model + element key first, then element key → short
 
 ### 2. Xrefs (Cross-References)
 
@@ -236,10 +236,10 @@ const decoded = atob(standardB64);
 
 **Solution:** Use SDK constants from `sdk/dt-schema.js`:
 ```javascript
-import { ColumnFamilies, ColumnNames } from '../sdk/dt-schema.js';
+import { QC } from '../sdk/dt-schema.js';
 
-const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
-const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
+const nameCol = QC.Name;
+const oNameCol = QC.OName;
 ```
 
 ### Pitfall 4: Not Prioritizing Overrides
@@ -248,8 +248,8 @@ const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
 
 **Solution:** Always check override columns first:
 ```javascript
-const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
-//                 ↑ override first    ↑ standard second
+const name = element[QC.OName] || element[QC.Name] || 'Unnamed';
+//                      ↑ override first     ↑ standard second
 ```
 
 ### Pitfall 5: Wrong Host Reference Priority
@@ -258,8 +258,8 @@ const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
 
 **Solution:** Check in this order:
 ```javascript
-const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
-//              ↑ Parent first      ↑ Override second   ↑ Legacy last
+const hostRef = stream[QC.XParent] || stream[QC.OXRooms] || stream[QC.XRooms];
+//                        ↑ Parent first        ↑ Override second     ↑ Legacy last
 ```
 
 ### Pitfall 6: Fetching Schema Repeatedly
