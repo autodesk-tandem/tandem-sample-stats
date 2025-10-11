@@ -85,13 +85,14 @@ const elements = await getElementsByKeys(modelURN, [shortKey]);
 ```
 
 **When to convert:**
-- ✅ Convert long → short when querying elements
-- ✅ Convert long → short when matching stream data
+- ✅ Convert short → long when matching stream data (i.e. returned by `POST timeseries/models/{urn}/streams`)
+- ✅ Convert long → xref when creating cross-model references
 - ❌ Don't convert xrefs to short keys until you extract the element key portion
 
 ### 2. Xrefs (Cross-References)
 
 **Xrefs** link elements across models. Format: `[16 bytes modelId][24 bytes elementKey]` (40 bytes total)
+- Example: `mV4WfNj2TGK5posd80KtjQAAAAAFTj9PwGNI1aKw8A9xKDWoABmOdA`
 
 **Use Cases:**
 - Linking streams to their host rooms/spaces
@@ -111,9 +112,8 @@ const hostXref = stream['x:p']?.[0];  // Get parent xref
 const decoded = decodeXref(hostXref);
 // Returns: { modelURN: "urn:adsk.dtm:...", elementKey: "..." }
 
-// Convert long key to short key for querying
-const shortKey = toShortKey(decoded.elementKey);
-const elements = await getElementsByKeys(decoded.modelURN, [shortKey]);
+// Query element for details
+const elements = await getElementsByKeys(decoded.modelURN, [decoded.elementKey]);
 ```
 
 **Priority Order:** When looking for a stream's host, check in this order:
@@ -130,6 +130,7 @@ Tandem uses a **column-family database** structure. Properties are namespaced wi
 - `z:` - DtProperties (user-defined custom properties)
 - `x:` - Xrefs (cross-model references)
 - `l:` - Refs (same-model references)
+- `m:` - Systems
 - `s:` - Status
 - `t:` - Tags
 
@@ -145,16 +146,14 @@ Tandem uses a **column-family database** structure. Properties are namespaced wi
 
 **ALWAYS use SDK constants instead of hardcoding strings:**
 ```javascript
-import { ColumnFamilies, ColumnNames } from '../sdk/dt-schema.js';
+import { QC } from '../sdk/dt-schema.js';
 
 // ❌ BAD - hardcoded strings
 const name = element['n:n'];
 const override = element['n:!n'];
 
 // ✅ GOOD - use SDK constants
-const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
-const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
-const name = element[oNameCol] || element[nameCol];
+const name = element[QC.OName] ?? element[QC.Name];
 ```
 
 ### 4. Element Flags
@@ -199,6 +198,7 @@ if (isDefaultModel(facilityURN, modelURN)) {
   // This is the main facility model
 }
 ```
+**Note** Always check if facility has default model. It is created by Tandem UI when needed i.e. when stream is created.
 
 ---
 
