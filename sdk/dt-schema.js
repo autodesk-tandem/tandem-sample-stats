@@ -49,6 +49,7 @@ const ColumnNames = {
 	Version:    "v", //family: Status. Schema version used for this Digital Twin,
 
 	ElementFlags:       "a", //family: Standard
+	Elevation:          "el", //family: Standard
 	UniformatClass:     "u", //family Standard, data table
 	OUniformatClass:    "!u", //family Standard, data table, override
 	Classification:     "v", //family Standard, data table (value) + family Status, meta table (scheme)
@@ -136,6 +137,7 @@ const KeyFlags = {
 
 const QC = {
 	Parent:             ColumnFamilies.Refs    + ":" + ColumnNames.Parent,
+	XParent:            ColumnFamilies.Xrefs   + ":" + ColumnNames.Parent,
 	SubFamily:          ColumnFamilies.Refs    + ":" + ColumnNames.SubFamily,
 	FamilyType:         ColumnFamilies.Refs    + ":" + ColumnNames.FamilyType,
 	Level:              ColumnFamilies.Refs    + ":" + ColumnNames.Level,
@@ -148,6 +150,7 @@ const QC = {
 	CategoryId:         ColumnFamilies.Standard + ":" + ColumnNames.CategoryId,
 	CategoryName:       ColumnFamilies.Virtual  + ":" + ColumnNames.CategoryName,
 	ElementFlags:       ColumnFamilies.Standard + ":" + ColumnNames.ElementFlags,
+	Elevation:          ColumnFamilies.Standard + ":" + ColumnNames.Elevation,
 	SystemClass:        ColumnFamilies.Standard + ":" + ColumnNames.SystemClass,
 	OSystemClass:       ColumnFamilies.Standard + ":" + ColumnNames.OSystemClass,
 	FamilyPath:         ColumnFamilies.Standard + ":" + ColumnNames.FamilyPath,
@@ -162,7 +165,7 @@ const QC = {
 	XSystemPrev:        ColumnFamilies.Xrefs   + ":" + ColumnNames.Previous,
 	XSystemNext:        ColumnFamilies.Xrefs   + ":" + ColumnNames.Next,
 	XSystemUnassigned:  ColumnFamilies.Xrefs   + ":" + ColumnNames.Unassigned,
-	RowKey: "k"
+	Key:                "k"
 };
 
 const QCOverrides = {
