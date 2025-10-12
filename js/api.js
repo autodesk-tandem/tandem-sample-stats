@@ -1,5 +1,5 @@
 import { getEnv } from './config.js';
-import { ColumnFamilies, QC } from './../sdk/dt-schema.js';
+import { ColumnFamilies, ElementFlags, QC } from './../sdk/dt-schema.js';
 
 const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;
@@ -267,12 +267,10 @@ export async function getStreams(facilityURN) {
     
     const data = await response.json();
     
-    // Filter for elements that are streams (ElementFlags.Stream === 0x01000003 = 16777219)
-    // Stream flag value from dt-schema.js ElementFlags.Stream
-    const STREAM_FLAG = 0x01000003; // 16777219 in decimal
+    // Filter for elements that are streams (ElementFlags.Stream)
     const streams = data.filter(row => {
       const flags = row[QC.ElementFlags];
-      return flags && flags[0] === STREAM_FLAG;
+      return flags && flags[0] === ElementFlags.Stream;
     });
     
     return streams;
