@@ -74,14 +74,20 @@ This is the #1 source of confusion when working with Tandem.
 
 **Conversion:**
 ```javascript
+import { getLastSeenStreamValues } from '../api.js';
 import { toShortKey } from '../sdk/keys.js';
 
-// API returns long key, but you need short key to query
-const longKey = elementData.k;  // 24 bytes
-const shortKey = toShortKey(longKey);  // 20 bytes
+...
+const streamKeys = streams.map(s => s[QC.Key]);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+const result = {};
 
-// Now you can query with the short key
-const elements = await getElementsByKeys(modelURN, [shortKey]);
+// API returns long key, but you need short key to query
+for (const [longKey, value] of Object.entries(lastSeenValues)) {
+  const shortKey = toShortKey(longKey);
+
+  result[shortKey] = value;
+}  
 ```
 
 **When to convert:**
@@ -248,8 +254,8 @@ const oNameCol = QC.OName;
 
 **Solution:** Always check override columns first:
 ```javascript
-const name = element[QC.OName] || element[QC.Name] || 'Unnamed';
-//                      ↑ override first     ↑ standard second
+const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
+//                      ↑ override first          ↑ standard second
 ```
 
 ### Pitfall 5: Wrong Host Reference Priority
@@ -258,8 +264,8 @@ const name = element[QC.OName] || element[QC.Name] || 'Unnamed';
 
 **Solution:** Check in this order:
 ```javascript
-const hostRef = stream[QC.XParent] || stream[QC.OXRooms] || stream[QC.XRooms];
-//                        ↑ Parent first        ↑ Override second     ↑ Legacy last
+const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
+//                        ↑ Parent first             ↑ Override second          ↑ Legacy last
 ```
 
 ### Pitfall 6: Fetching Schema Repeatedly
@@ -275,7 +281,7 @@ const hostRef = stream[QC.XParent] || stream[QC.OXRooms] || stream[QC.XRooms];
 **Solution:** Filter it out:
 ```javascript
 const data = await response.json();
-const elements = data.filter(item => typeof item === 'object' && item !== null && item.k);
+const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
 ```
 
 ---
