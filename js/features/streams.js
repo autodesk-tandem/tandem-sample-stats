@@ -2,7 +2,7 @@ import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { ColumnFamilies, ColumnNames } from '../../sdk/dt-schema.js';
+import { QC } from '../../sdk/dt-schema.js';
 import { decodeXref, toShortKey } from '../../sdk/keys.js';
 
 /**
@@ -448,7 +448,7 @@ export async function displayStreams(container, streams, facilityURN) {
   await loadSchemaForModel(defaultModelURN);
   
   // Fetch last seen values for all streams
-  const streamKeys = streams.map(s => s['k']);
+  const streamKeys = streams.map(s => s[QC.Key]);
   const lastSeenValuesRaw = await getLastSeenStreamValues(facilityURN, streamKeys);
   
   // Convert long keys to short keys so we can match them with our stream objects
@@ -458,21 +458,12 @@ export async function displayStreams(container, streams, facilityURN) {
   const hostInfoMap = new Map(); // Map xref -> {name, type}
   const xrefsByModel = new Map(); // Map modelURN -> array of {xref, shortKey}
   
-  // Build qualified column names using SDK constants
-  const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
-  const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
-  const categoryCol = `${ColumnFamilies.Standard}:${ColumnNames.CategoryId}`;
-  const classificationCol = `${ColumnFamilies.Standard}:${ColumnNames.Classification}`;
-  const oClassificationCol = `${ColumnFamilies.Standard}:${ColumnNames.OClassification}`;
-  const xParentCol = `${ColumnFamilies.Xrefs}:${ColumnNames.Parent}`;
-  const xRoomsCol = `${ColumnFamilies.Xrefs}:${ColumnNames.Rooms}`;
-  
   // Decode all xrefs and group by model
   
   for (const stream of streams) {
     // Host reference priority: x:p (parent) > x:r (room)
     // Tandem UI uses x:p as the primary host reference
-    const hostRef = stream[xParentCol]?.[0] || stream[xRoomsCol]?.[0];
+    const hostRef = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
     if (hostRef) {
       const decoded = decodeXref(hostRef);
       if (decoded) {
@@ -500,12 +491,12 @@ export async function displayStreams(container, streams, facilityURN) {
       // Map elements back to xrefs using short key matching
       for (let i = 0; i < items.length; i++) {
         const item = items[i];
-        const element = elements.find(e => e.k === item.shortKey);
+        const element = elements.find(e => e[QC.Key] === item.shortKey);
         
         if (element) {
           // Name: Use override if present, otherwise standard
-          const name = element[oNameCol]?.[0] || element[nameCol]?.[0] || 'Unnamed';
-          const categoryId = element[categoryCol]?.[0];
+          const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
+          const categoryId = element[QC.CategoryId]?.[0];
           const type = CATEGORY_NAMES[categoryId] || `Category ${categoryId}`;
           
           hostInfoMap.set(item.xref, { name, type });
@@ -523,14 +514,14 @@ export async function displayStreams(container, streams, facilityURN) {
     const stream = streams[i];
     
     // Name: Use override if present, otherwise standard
-    const streamName = stream[oNameCol]?.[0] || stream[nameCol]?.[0] || 'Unnamed Stream';
-    const streamKey = stream['k']; // Stream key
+    const streamName = stream[QC.OName]?.[0] || stream[QC.Name]?.[0] || 'Unnamed Stream';
+    const streamKey = stream[QC.Key]; // Stream key
     
     // Classification: Use override if present, otherwise standard
-    const classification = stream[oClassificationCol]?.[0] || stream[classificationCol]?.[0];
-    
+    const classification = stream[QC.OClassification]?.[0] || stream[QC.Classification]?.[0];
+
     // Host information: Priority x:p (parent) > x:r (room)
-    const hostRef = stream[xParentCol]?.[0] || stream[xRoomsCol]?.[0];
+    const hostRef = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
     const hostInfo = hostRef ? hostInfoMap.get(hostRef) : null;
     
     // Get last seen values for this stream

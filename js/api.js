@@ -1,4 +1,5 @@
 import { getEnv } from './config.js';
+import { ColumnFamilies, QC } from './../sdk/dt-schema.js';
 
 const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;
@@ -180,7 +181,7 @@ export async function getElementCount(modelURN) {
   try {
     // Scan with minimal data to count elements
     const payload = JSON.stringify({
-      families: ['n'], // Standard column family
+      families: [ColumnFamilies.Standard], // Standard column family
       includeHistory: false
     });
     
@@ -244,7 +245,11 @@ export async function getStreams(facilityURN) {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
     const payload = JSON.stringify({
-      families: ['n', 'z', 'x'], // Standard, DtProperties, and Xrefs column families
+      families: [
+        ColumnFamilies.Standard,
+        ColumnFamilies.DtProperties,
+        ColumnFamilies.Xrefs
+      ], // Standard, DtProperties, and Xrefs column families
       includeHistory: false
     });
     
@@ -266,7 +271,7 @@ export async function getStreams(facilityURN) {
     // Stream flag value from dt-schema.js ElementFlags.Stream
     const STREAM_FLAG = 0x01000003; // 16777219 in decimal
     const streams = data.filter(row => {
-      const flags = row['n:a']; // Element flags (n:a = Standard:ElementFlags)
+      const flags = row[QC.ElementFlags];
       return flags && flags[0] === STREAM_FLAG;
     });
     
@@ -287,7 +292,7 @@ export async function getElementsByKeys(modelURN, keys) {
   try {
     const payload = JSON.stringify({
       keys: keys,
-      families: ['n'], // Standard column family for name
+      families: [ColumnFamilies.Standard], // Standard column family for name
       includeHistory: false
     });
     
@@ -407,7 +412,7 @@ export async function getLevels(facilityURN) {
     
     for (const model of models) {
       const payload = JSON.stringify({
-        qualifiedColumns: ['n:c', 'n:n', 'n:e'], // CategoryId, Name, Elevation
+        qualifiedColumns: [QC.CategoryId, QC.Name, QC.Elevation], // CategoryId, Name, Elevation
         includeHistory: false
       });
       
@@ -422,16 +427,16 @@ export async function getLevels(facilityURN) {
       const elements = await response.json();
       
       // Filter for levels (CategoryId === 240)
-      const levels = elements.filter(row => row['n:c']?.[0] === 240);
+      const levels = elements.filter(row => row[QC.CategoryId]?.[0] === 240);
       
       // Add model info to each level
       levels.forEach(level => {
         allLevels.push({
           modelId: model.modelId,
           modelName: model.label,
-          key: level.k,
-          name: level['n:n']?.[0] || 'Unnamed Level',
-          elevation: level['n:e']?.[0] // Elevation value
+          key: level[QC.Key],
+          name: level[QC.Name]?.[0] || 'Unnamed Level',
+          elevation: level[QC.Elevation]?.[0] // Elevation value
         });
       });
     }
@@ -477,7 +482,7 @@ export async function getRooms(facilityURN, schemaCache = null) {
       const volumeUnit = volumeAttr?.forgeUnit || 'cubic feet'; // Default to cubic feet if not specified
       
       // Build the list of qualified columns to fetch
-      const qualifiedColumns = ['n:c', 'n:n']; // CategoryId, Name
+      const qualifiedColumns = [QC.CategoryId, QC.Name]; // CategoryId, Name
       if (areaQualifiedProp) {
         qualifiedColumns.push(areaQualifiedProp); // Add the Area qualified property
       }
@@ -501,13 +506,13 @@ export async function getRooms(facilityURN, schemaCache = null) {
       const elements = await response.json();
       
       // Filter for rooms (CategoryId === 160)
-      const rooms = elements.filter(row => row['n:c']?.[0] === 160);
+      const rooms = elements.filter(row => row[QC.CategoryId]?.[0] === 160);
       rooms.forEach(room => {
         allRooms.push({
           modelId: model.modelId,
           modelName: model.label,
-          key: room.k,
-          name: room['n:n']?.[0] || 'Unnamed Room',
+          key: room[QC.Key],
+          name: room[QC.Name]?.[0] || 'Unnamed Room',
           area: areaQualifiedProp ? room[areaQualifiedProp]?.[0] : null,
           areaUnit: areaUnit,
           volume: volumeQualifiedProp ? room[volumeQualifiedProp]?.[0] : null,
@@ -517,13 +522,13 @@ export async function getRooms(facilityURN, schemaCache = null) {
       });
       
       // Filter for spaces (CategoryId === 3600)
-      const spaces = elements.filter(row => row['n:c']?.[0] === 3600);
+      const spaces = elements.filter(row => row[QC.CategoryId]?.[0] === 3600);
       spaces.forEach(space => {
         allRooms.push({
           modelId: model.modelId,
           modelName: model.label,
-          key: space.k,
-          name: space['n:n']?.[0] || 'Unnamed Space',
+          key: space[QC.Key],
+          name: space[QC.Name]?.[0] || 'Unnamed Space',
           area: areaQualifiedProp ? space[areaQualifiedProp]?.[0] : null,
           areaUnit: areaUnit,
           volume: volumeQualifiedProp ? space[volumeQualifiedProp]?.[0] : null,
@@ -588,7 +593,7 @@ export async function getTaggedAssetsDetails(facilityURN) {
       // Process each element
       elements.forEach(element => {
         const keys = Object.keys(element);
-        const zProperties = keys.filter(key => key.startsWith('z:'));
+        const zProperties = keys.filter(key => key.startsWith(`${ColumnFamilies.DtProperties}:`));
         
         if (zProperties.length > 0) {
           totalTaggedAssets++;
