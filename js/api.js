@@ -1,5 +1,6 @@
 import { getEnv } from './config.js';
-import { ColumnFamilies, ElementFlags, QC } from './../sdk/dt-schema.js';
+import { ColumnFamilies, ElementFlags, QC, SystemClassNames } from './../sdk/dt-schema.js';
+import { toFullKey, toSystemId } from './../sdk/keys.js';
 
 const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;
@@ -544,6 +545,175 @@ export async function getRooms(facilityURN, schemaCache = null) {
 }
 
 /**
+ * Get systems from the default model
+ * Systems are elements with ElementFlags.Systems flag
+ * @param {string} facilityURN - Facility URN
+ * @param {Array} models - Array of model objects
+ * @returns {Promise<Array>} Array of system objects with name, key, systemId, and subsystems
+ */
+export async function getSystems(facilityURN, models) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    
+    const payload = JSON.stringify({
+      families: [
+        ColumnFamilies.Standard,
+        ColumnFamilies.Systems,
+        ColumnFamilies.Refs
+      ],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      // 403 Forbidden typically means no default model exists yet
+      if (response.status === 403) {
+        console.log('No default model found - systems not available');
+        return [];
+      }
+      throw new Error(`Failed to fetch systems: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Filter for elements that are systems (ElementFlags.System)
+    const systemElements = data.filter(row => {
+      const flags = row[QC.ElementFlags];
+      return flags && flags[0] === ElementFlags.System;
+    });
+    
+    // Process systems and build hierarchy
+    const systems = [];
+    const subsystems = [];
+    
+    for (const item of systemElements) {
+      const name = item[QC.OName]?.[0] ?? item[QC.Name]?.[0];
+      const key = item[QC.Key];
+      const parent = item[QC.Parent]?.[0];
+      
+      if (parent) {
+        // This is a subsystem
+        subsystems.push({
+          name: name || 'Unnamed Subsystem',
+          key: key,
+          parent: parent,
+          systemClass: item[QC.OSystemClass]?.[0] ?? item[QC.SystemClass]?.[0]
+        });
+      } else {
+        // This is a main system
+        const fullKey = toFullKey(key, true);
+        const systemId = toSystemId(fullKey);
+        
+        systems.push({
+          name: name || 'Unnamed System',
+          key: key,
+          systemId: systemId,
+          systemClass: item[QC.OSystemClass]?.[0] ?? item[QC.SystemClass]?.[0],
+          elementCount: 0 // will be calculated later
+        });
+      }
+    }
+    
+    // Attach subsystems to their parent systems
+    systems.forEach(system => {
+      system.subsystems = subsystems.filter(sub => sub.parent === system.key);
+    });
+    // calculate element count for each system
+    const systemMap = {};
+
+    for (const system of systems) {
+      systemMap[system.systemId] = system;
+    }
+    const systemElementsMap = {};
+    const systemClassMap = {};
+
+    for (const model of models) {
+      const payload = JSON.stringify({
+        families: [
+          ColumnFamilies.Standard,
+          ColumnFamilies.Systems
+        ],
+        includeHistory: false
+      });
+      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+
+      if (!response.ok) {
+        console.error(`Failed to fetch elements for model ${model.modelId}`);
+        continue;
+      }
+      const data = await response.json();
+
+      for (const element of data) {
+        const key = element[QC.Key];
+
+        if (!key) {
+          continue;
+        }
+        const elementFlags = element[QC.ElementFlags]?.[0];
+
+        if (elementFlags === ElementFlags.Deleted || elementFlags === ElementFlags.System) {
+          continue;
+        }
+        const elementClass = element[QC.OSystemClass] ?? element[QC.SystemClass];
+
+        if (!elementClass) {
+          continue;
+        }
+        let elementClassNames = systemClassMap[elementClass];
+
+        if (!elementClassNames) {
+          elementClassNames = systemClassToList(elementClass);
+          systemClassMap[elementClass] = elementClassNames;
+        }
+        for (const item in element) {
+          // we need to handle both fam:col and fam:!col formats
+          const [, family, systemId] = item.match(/^([^:]+):!?(.+)$/) ?? [];
+
+          if (family !== ColumnFamilies.Systems) {
+            continue;
+          }
+          const system = systemMap[systemId];
+
+          if (!system) {
+            continue;
+          }
+          let classNames = systemClassMap[system.systemClass];
+
+          if (!classNames) {
+            classNames = systemClassToList(system.systemClass);
+            systemClassMap[system.systemClass] = classNames;
+          }
+          const matches = elementClassNames.some(name => classNames.includes(name));
+
+          if (matches) {
+            // if system has filter, then check that element matches it
+            const elementList = systemElementsMap[systemId] || new Set();
+
+            elementList.add(key);
+            systemElementsMap[systemId] = elementList;
+          }
+        }
+      }
+    }
+    // update element count
+    for (const [systemId, elementSet] of Object.entries(systemElementsMap)) {
+      const system = systemMap[systemId];
+
+      if (system) {
+        system.elementCount = elementSet.size;
+      }
+    }
+    return systems;
+  } catch (error) {
+    console.error('Error fetching systems:', error);
+    return [];
+  }
+}
+
+/**
  * Get count of tagged assets (elements with user-defined properties) from all models in a facility
  * Tagged assets are elements that have at least one property in the 'z' (DtProperties) family
  * @param {string} facilityURN - Facility URN
@@ -618,4 +788,18 @@ export async function getTaggedAssetsDetails(facilityURN) {
       propertyUsage: {}
     };
   }
+}
+
+function systemClassToList(flags) {
+  if (!flags) {
+    return [];
+  }
+  const result = [];
+
+	for (let i = 0; i < SystemClassNames.length; i++) {
+		if (flags & (1 << i)) {
+			result.push(SystemClassNames[i]);
+		}
+	}
+	return result;
 }
