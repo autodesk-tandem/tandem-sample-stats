@@ -302,6 +302,8 @@ This is the **gateway to all Tandem data**. Without it, your app can only work w
 **The Logic (Reusable):**
 
 ```javascript
+import { SchemaVersion } from '../sdk/dt-schema.js';
+
 // Step 1: Fetch user's groups (called "accounts" or "teams" in the UI)
 const groups = await getGroups();
 
@@ -325,7 +327,7 @@ async function loadFacility(facilityURN) {
   const info = await getFacilityInfo(facilityURN);
   
   // Check schema version compatibility
-  if (info.schemaVersion !== 2) {
+  if (info.schemaVersion < SchemaVersion) {
     showError('This facility needs to be upgraded in Tandem first');
     return;
   }
@@ -376,8 +378,10 @@ async function loadFacility(facilityURN) {
 
 4. **Schema Version Check:**
    ```javascript
+   import { SchemaVersion } from '../sdk/dt-schema.js';
+
    // Always check before loading facility data
-   if (info.schemaVersion !== 2) {
+   if (info.schemaVersion < SchemaVersion) {
      // Don't try to load - will fail or return invalid data
      showIncompatibilityWarning();
      return;
