@@ -20,6 +20,7 @@ import { displayStreams } from './features/streams.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
+import { SchemaVersion } from '../sdk/dt-schema.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
@@ -314,7 +315,7 @@ async function loadFacility(facilityURN) {
       `;
       
       // Check schema version - API only supports version 2
-      if (schemaVersion !== 2) {
+      if (schemaVersion < SchemaVersion) {
         // Clear all data sections
         modelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         streamsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;

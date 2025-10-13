@@ -51,17 +51,16 @@ if (element[QC.ElementFlags]?.[0] === ElementFlags.Stream) {
 
 **Example:**
 ```javascript
-import { toShortKey, decodeXref } from './sdk/keys.js';
+import { decodeXref } from './sdk/keys.js';
 
 // Problem: API returns long keys, but you need short keys to query
-const longKey = streamData.k;  // 24 bytes
-const shortKey = toShortKey(longKey);  // 20 bytes - now you can query with this
+const longKey = streamData[QC.Key];  // 24 bytes
 
 // Problem: Stream has a host room reference, need to fetch that room
-const hostXref = stream['x:p']?.[0];  // Xref is 40 bytes (16 model + 24 element)
+const hostXref = stream[QC.XParent]?.[0];  // Xref is 40 bytes (16 model + 24 element)
 const { modelURN, elementKey } = decodeXref(hostXref);  // Extract components
-const shortKey = toShortKey(elementKey);  // Convert to short key
-const rooms = await getElementsByKeys(modelURN, [shortKey]);  // Query the room
+
+const rooms = await getElementsByKeys(modelURN, [elementKey]);  // Query the room
 ```
 
 ## Key Concepts
@@ -89,9 +88,9 @@ Xrefs link elements across different models:
 | **Total** | **40 bytes** | Complete xref |
 
 **Common xref columns:**
-- `x:p` - Parent (use this first!)
-- `x:r` - Room
-- `x:!r` - Room override
+- `x:p` = `QC.XParent` - Parent (use this first!)
+- `x:r` = `QC.XRooms` - Room
+- `x:!r` = `QC.XORooms` - Room override
 
 ### Column Families
 
@@ -119,25 +118,18 @@ const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
 ### Pattern 2: Decode Stream Host
 
 ```javascript
-import { ColumnFamilies, ColumnNames } from './sdk/dt-schema.js';
-import { decodeXref, toShortKey } from './sdk/keys.js';
-
-// Build column names
-const xParentCol = `${ColumnFamilies.Xrefs}:${ColumnNames.Parent}`;
-const xRoomsCol = `${ColumnFamilies.Xrefs}:${ColumnNames.Rooms}`;
+import { ColumnFamilies, ColumnNames, QC } from './sdk/dt-schema.js';
+import { decodeXref } from './sdk/keys.js';
 
 // Get host reference (priority: parent > room)
-const hostXref = stream[xParentCol]?.[0] || stream[xRoomsCol]?.[0];
+const hostXref = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
 
 if (hostXref) {
   // Decode xref to get model and element
   const { modelURN, elementKey } = decodeXref(hostXref);
   
-  // Convert long key to short key for querying
-  const shortKey = toShortKey(elementKey);
-  
   // Fetch the host element
-  const hosts = await getElementsByKeys(modelURN, [shortKey]);
+  const hosts = await getElementsByKeys(modelURN, [elementKey]);
   const host = hosts[0];
   
   // Get host name
@@ -148,28 +140,28 @@ if (hostXref) {
 ### Pattern 3: Batch Process Elements by Model
 
 ```javascript
-import { decodeXref, toShortKey } from './sdk/keys.js';
+import { QC } from './sdk/dt-schema.js';
+import { decodeXref } from './sdk/keys.js';
 
 // Group xrefs by model URN
 const xrefsByModel = new Map();
 
 for (const stream of streams) {
-  const hostXref = stream['x:p']?.[0];
+  const hostXref = stream[QC.XParent]?.[0];
   if (hostXref) {
     const { modelURN, elementKey } = decodeXref(hostXref);
-    const shortKey = toShortKey(elementKey);
     
     if (!xrefsByModel.has(modelURN)) {
       xrefsByModel.set(modelURN, []);
     }
-    xrefsByModel.get(modelURN).push({ xref: hostXref, shortKey });
+    xrefsByModel.get(modelURN).push({ xref: hostXref, elementKey });
   }
 }
 
 // Batch fetch per model (efficient!)
 for (const [modelURN, items] of xrefsByModel.entries()) {
-  const shortKeys = items.map(item => item.shortKey);
-  const elements = await getElementsByKeys(modelURN, shortKeys);
+  const keys = items.map(item => item.elementKey);
+  const elements = await getElementsByKeys(modelURN, keys);
   // Process elements...
 }
 ```

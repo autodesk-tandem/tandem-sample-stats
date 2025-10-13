@@ -74,24 +74,31 @@ This is the #1 source of confusion when working with Tandem.
 
 **Conversion:**
 ```javascript
+import { getLastSeenStreamValues } from '../api.js';
 import { toShortKey } from '../sdk/keys.js';
 
-// API returns long key, but you need short key to query
-const longKey = elementData.k;  // 24 bytes
-const shortKey = toShortKey(longKey);  // 20 bytes
+...
+const streamKeys = streams.map(s => s[QC.Key]);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+const result = {};
 
-// Now you can query with the short key
-const elements = await getElementsByKeys(modelURN, [shortKey]);
+// API returns long key, but you need short key to query
+for (const [longKey, value] of Object.entries(lastSeenValues)) {
+  const shortKey = toShortKey(longKey);
+
+  result[shortKey] = value;
+}  
 ```
 
 **When to convert:**
-- ✅ Convert long → short when querying elements
-- ✅ Convert long → short when matching stream data
-- ❌ Don't convert xrefs to short keys until you extract the element key portion
+- ✅ Convert short → long when matching stream data (i.e. returned by `POST timeseries/models/{urn}/streams`)
+- ✅ Convert long → xref when creating cross-model references
+- ❌ Don't convert xrefs to short keys directly. Extract model + element key first, then element key → short
 
 ### 2. Xrefs (Cross-References)
 
 **Xrefs** link elements across models. Format: `[16 bytes modelId][24 bytes elementKey]` (40 bytes total)
+- Example: `mV4WfNj2TGK5posd80KtjQAAAAAFTj9PwGNI1aKw8A9xKDWoABmOdA`
 
 **Use Cases:**
 - Linking streams to their host rooms/spaces
@@ -111,9 +118,8 @@ const hostXref = stream['x:p']?.[0];  // Get parent xref
 const decoded = decodeXref(hostXref);
 // Returns: { modelURN: "urn:adsk.dtm:...", elementKey: "..." }
 
-// Convert long key to short key for querying
-const shortKey = toShortKey(decoded.elementKey);
-const elements = await getElementsByKeys(decoded.modelURN, [shortKey]);
+// Query element for details
+const elements = await getElementsByKeys(decoded.modelURN, [decoded.elementKey]);
 ```
 
 **Priority Order:** When looking for a stream's host, check in this order:
@@ -130,6 +136,7 @@ Tandem uses a **column-family database** structure. Properties are namespaced wi
 - `z:` - DtProperties (user-defined custom properties)
 - `x:` - Xrefs (cross-model references)
 - `l:` - Refs (same-model references)
+- `m:` - Systems
 - `s:` - Status
 - `t:` - Tags
 
@@ -145,16 +152,14 @@ Tandem uses a **column-family database** structure. Properties are namespaced wi
 
 **ALWAYS use SDK constants instead of hardcoding strings:**
 ```javascript
-import { ColumnFamilies, ColumnNames } from '../sdk/dt-schema.js';
+import { QC } from '../sdk/dt-schema.js';
 
 // ❌ BAD - hardcoded strings
 const name = element['n:n'];
 const override = element['n:!n'];
 
 // ✅ GOOD - use SDK constants
-const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
-const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
-const name = element[oNameCol] || element[nameCol];
+const name = element[QC.OName] ?? element[QC.Name];
 ```
 
 ### 4. Element Flags
@@ -199,6 +204,7 @@ if (isDefaultModel(facilityURN, modelURN)) {
   // This is the main facility model
 }
 ```
+**Note** Always check if facility has default model. It is created by Tandem UI when needed i.e. when stream is created.
 
 ---
 
@@ -236,10 +242,10 @@ const decoded = atob(standardB64);
 
 **Solution:** Use SDK constants from `sdk/dt-schema.js`:
 ```javascript
-import { ColumnFamilies, ColumnNames } from '../sdk/dt-schema.js';
+import { QC } from '../sdk/dt-schema.js';
 
-const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
-const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
+const nameCol = QC.Name;
+const oNameCol = QC.OName;
 ```
 
 ### Pitfall 4: Not Prioritizing Overrides
@@ -248,8 +254,8 @@ const oNameCol = `${ColumnFamilies.Standard}:${ColumnNames.OName}`;
 
 **Solution:** Always check override columns first:
 ```javascript
-const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
-//                 ↑ override first    ↑ standard second
+const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
+//                      ↑ override first          ↑ standard second
 ```
 
 ### Pitfall 5: Wrong Host Reference Priority
@@ -258,8 +264,8 @@ const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
 
 **Solution:** Check in this order:
 ```javascript
-const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
-//              ↑ Parent first      ↑ Override second   ↑ Legacy last
+const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
+//                        ↑ Parent first             ↑ Override second          ↑ Legacy last
 ```
 
 ### Pitfall 6: Fetching Schema Repeatedly
@@ -275,7 +281,7 @@ const hostRef = stream['x:p']?.[0] || stream['x:!r']?.[0] || stream['x:r']?.[0];
 **Solution:** Filter it out:
 ```javascript
 const data = await response.json();
-const elements = data.filter(item => typeof item === 'object' && item !== null && item.k);
+const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
 ```
 
 ---
@@ -296,6 +302,8 @@ This is the **gateway to all Tandem data**. Without it, your app can only work w
 **The Logic (Reusable):**
 
 ```javascript
+import { SchemaVersion } from '../sdk/dt-schema.js';
+
 // Step 1: Fetch user's groups (called "accounts" or "teams" in the UI)
 const groups = await getGroups();
 
@@ -319,7 +327,7 @@ async function loadFacility(facilityURN) {
   const info = await getFacilityInfo(facilityURN);
   
   // Check schema version compatibility
-  if (info.schemaVersion !== 2) {
+  if (info.schemaVersion < SchemaVersion) {
     showError('This facility needs to be upgraded in Tandem first');
     return;
   }
@@ -370,8 +378,10 @@ async function loadFacility(facilityURN) {
 
 4. **Schema Version Check:**
    ```javascript
+   import { SchemaVersion } from '../sdk/dt-schema.js';
+
    // Always check before loading facility data
-   if (info.schemaVersion !== 2) {
+   if (info.schemaVersion < SchemaVersion) {
      // Don't try to load - will fail or return invalid data
      showIncompatibilityWarning();
      return;
