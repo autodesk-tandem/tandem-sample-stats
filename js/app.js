@@ -7,6 +7,7 @@ import {
   getFacilityThumbnail,
   getModels,
   getStreams,
+  getSystems,
   getLevels,
   getRooms,
   getDocuments
@@ -17,6 +18,7 @@ import { displayLevels } from './features/levels.js';
 import { displayRooms } from './features/rooms.js';
 import { displayDocuments } from './features/documents.js';
 import { displayStreams } from './features/streams.js';
+import { displaySystems } from './features/systems.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
@@ -35,6 +37,7 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
+const systemsList = document.getElementById('systemsList');
 const levelsList = document.getElementById('levelsList');
 const roomsList = document.getElementById('roomsList');
 const documentsList = document.getElementById('documentsList');
@@ -323,6 +326,7 @@ async function loadFacility(facilityURN) {
         levelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         roomsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         documentsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        systemsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         schemaList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         diagnosticsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         
@@ -394,6 +398,10 @@ async function loadStats(facilityURN) {
     
     const streams = hasDefaultModel ? await getStreams(facilityURN) : [];
     await displayStreams(streamsList, streams, facilityURN);
+    
+    // Get and display systems (only if default model exists)
+    const systems = hasDefaultModel ? await getSystems(facilityURN, models) : [];
+    await displaySystems(systemsList, systems, facilityURN);
     
     // Display tagged assets
     await displayTaggedAssets(taggedAssetsList, facilityURN, models);

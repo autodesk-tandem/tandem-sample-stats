@@ -3,11 +3,14 @@
  * Adapted from tandem-sample-rest-testbed
  */
 
+import { KeyFlags } from './dt-schema.js';
+
 // Constants
 const kModelIdSize = 16;
 const kElementIdSize = 20;
 const kElementFlagsSize = 4;
 const kElementIdWithFlagsSize = kElementIdSize + kElementFlagsSize;
+const kSystemIdSize = 9;
 
 /**
  * Convert to websafe base64 (replace +/= with -_)
@@ -42,6 +45,27 @@ export function toShortKey(fullKey) {
   // Skip first 4 bytes (flags) and copy the remaining 20 bytes (element ID)
   shortKey.set(binData.subarray(kElementFlagsSize));
   return makeWebsafe(btoa(String.fromCharCode.apply(null, shortKey)));
+}
+
+export function toFullKey(shortKey, isLogical) {
+  const tmp = shortKey.replace(/-/g, '+').replace(/_/g, '/');
+  let standardB64 = tmp;
+  while (standardB64.length % 4) {
+    standardB64 += '=';
+  }
+
+  const binData = new Uint8Array(atob(standardB64).split('').map(c => c.charCodeAt(0)));
+  const fullKey = new Uint8Array(kElementIdWithFlagsSize);
+
+  const flagValue = isLogical ? KeyFlags.Logical : KeyFlags.Physical;
+  fullKey[0] = (flagValue >>> 24) & 0xFF;
+  fullKey[1] = (flagValue >>> 16) & 0xFF;
+  fullKey[2] = (flagValue >>> 8) & 0xFF;
+  fullKey[3] = flagValue & 0xFF;
+
+  fullKey.set(binData, kElementFlagsSize);
+
+  return makeWebsafe(btoa(String.fromCharCode.apply(null, fullKey)));
 }
 
 /**
@@ -156,5 +180,67 @@ export function fromXrefKeyArray(text) {
   }
   
   return [modelKeys, elementKeys];
+}
+
+/**
+ * Write a variable-length integer (varint) to a buffer
+ * @param {Uint8Array} buffer - Buffer to write to
+ * @param {Array<number>} offset - Array with single offset value (for reference)
+ * @param {number} value - Value to write
+ * @returns {number} Number of bytes written
+ */
+function writeVarint(buffer, offset, value) {
+  const startOffset = offset[0];
+
+  do {
+    let byte = 0 | (value & 0x7f);
+
+    value >>>= 7;
+    if (value) {
+      byte |= 0x80;
+    }
+    buffer[offset[0]++] = byte;
+  } while (value);
+  return offset[0] - startOffset;
+}
+
+/**
+ * Convert full key to system ID
+ * Extracts the last 4 bytes from the full key and converts them to a varint-encoded base64 string
+ * @param {string} fullKey - Full element key with flags (base64 encoded)
+ * @returns {string} System ID (base64 encoded, URL-safe, no padding)
+ */
+export function toSystemId(fullKey) {
+  try {
+    // Convert from URL-safe base64 to standard base64
+    const tmp = fullKey.replace(/-/g, '+').replace(/_/g, '/');
+    // Add padding if needed
+    let standardB64 = tmp;
+    while (standardB64.length % 4) {
+      standardB64 += '=';
+    }
+    
+    // Decode base64 to binary
+    const buff = new Uint8Array(atob(standardB64).split('').map(c => c.charCodeAt(0)));
+    
+    // Extract the last 4 bytes and build the ID
+    let id = buff[buff.length - 4] << 24;
+    id |= buff[buff.length - 3] << 16;
+    id |= buff[buff.length - 2] << 8;
+    id |= buff[buff.length - 1];
+    
+    // Create result buffer and write varint
+    const res = new Uint8Array(kSystemIdSize);
+    const offset = [0];
+    
+    const len = writeVarint(res, offset, id);
+    const result = res.subarray(0, len);
+    
+    // Convert to base64 and make URL-safe, remove padding
+    return makeWebsafe(btoa(String.fromCharCode.apply(null, result)));
+  } catch (error) {
+    console.error('Error converting to system ID:', error, fullKey);
+    return fullKey; // Fallback to original key
+  }
 }
 
