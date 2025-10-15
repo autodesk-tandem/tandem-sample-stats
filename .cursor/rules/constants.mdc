@@ -1,0 +1,119 @@
+---
+description: Tandem Constants
+globs:
+alwaysApply: true
+---
+
+# Tandem Constants
+For Tandem API related code ALWAYS use constants instead of hardcoded values. Required import is
+`tandem/constants.js`.
+
+## Element Flag
+Element flag is special property which is used to store type (i.e. Stream or Room) or state (i.e. Deleted) of the element. It can be also used to determine if element is physical (= has geometry) or logical. The property can be accessed using `QC.ElementFlags` identifier.
+
+### Examples
+```javascript
+// BAD - Magic numbers
+const STREAM_FLAG = 0x01000003; // 16777219
+const SYSTEMS_FLAG = 0x01000002; // 16777218
+
+// GOOD - Using imported constants
+import { ElementFlags, QC } from '../tandem/constants.js';
+
+const streams = data.filter(row => {
+  const flags = row[QC.ElementFlags];
+  return flags && flags[0] === ElementFlags.Stream;
+});
+
+```
+
+## Column Families
+Properties are organized into groups called families. Tandem is using predefined families i.e.:
+- `ColumnFamilies.Standard` - standard Tandem properties (i.e. name)
+- `ColumnFamilies.Refs` - references within same model (i.e. asset to level)
+- `ColumnFamilies.XRefs` - cross model references (i.e. stream to host)
+- `ColumnFamilies.DtProperties` - user defined properties
+
+### Examples
+```javascript
+// BAD - hard coded names
+const payload = {
+    families: [ 'n', 'x', 'z' ]
+};
+
+// GOOD - Using imported constants
+import { ColumnFamilies } from '../tandem/constants';
+
+const payload = {
+    families: [ ColumnFamilies.Standard, ColumnFamilies.XRefs, ColumnFamilies.DtProperties ]
+};
+```
+
+## Column Names
+Column name is used to identify property within Column Family, for example:
+- `ColumnNames.Name`- refers to name
+- `ColumnNames.OName`- refers to name override
+
+### Examples
+```javascript
+// BAD - hard coded names
+const payload = [
+    ['i', 'n', '!n', 'Test']
+];
+
+// GOOD - Using imported constants
+import { ColumnFamilies, ColumnNames } from '../tandem/constants';
+
+const payload = [
+    [ 'i', ColumnFamilies.Standard, ColumnNames.OName, 'Test' ]
+];
+```
+
+## Qualified Columns
+The qualified colum is full id of the property, which contains both family id (= Column Family) and property id (= Column Name) separated by colon (`:`) i.e.:
+- `QC.Name` - refers to Name
+- `QC.OName` - refers to Name override
+
+### Examples
+```javascript
+// BAD - hard coded names
+const payload = {
+    qualifiedColumns: [ 'n:n', 'n:!n' ]
+};
+
+// GOOD - Using imported constants
+import { QC } from '../tandem/constants.js';
+
+const payload = {
+    qualifiedColumns: [ QC.Name, QC.OName ]
+};
+```
+
+## Error Handling
+When using constants, ensure proper error handling:
+
+### Examples
+```javascript
+// BAD - hard coded names
+const elementName = element['n:!n']?.[0] ?? element['n:n']?.[0] ?? 'Unnamed Element';
+const systemClass = element['n:!b']?.[0] ?? element['n:b']?.[0];
+
+// GOOD - Using imported constants
+import { QC } from '../tandem/constants.js';
+
+const elementName = element[QC.OName]?.[0] ?? element[QC.Name]?.[0] ?? 'Unnamed Element';
+const systemClass = element[QC.SystemClass]?.[0] ?? element[QC.OSystemClass]?.[0];
+```
+## Validation Rules
+Always validate that constants are properly imported and used:
+
+1. **Import Check**: Ensure all required constants are imported
+2. **Usage Check**: Verify no hardcoded values exist when constants are available
+3. **Consistency Check**: Use the same constant throughout the codebase
+
+## Enforcement Rules
+
+1. **Import Requirements**: Always import required constants at the top of files
+2. **No Magic Numbers**: Reject any hardcoded numbers that have corresponding constants
+3. **No Magic Strings**: Reject any hardcoded strings that have corresponding constants
+4. **Consistent Naming**: Use the exact constant names as defined in the `tandem/constants.js` file
