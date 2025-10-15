@@ -2,8 +2,8 @@ import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { QC } from '../../sdk/dt-schema.js';
-import { decodeXref, toShortKey } from '../../sdk/keys.js';
+import { QC } from '../../tandem/constants.js';
+import { decodeXref, toShortKey } from '../../tandem/keys.js';
 
 /**
  * Category ID to type name mapping

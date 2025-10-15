@@ -14,21 +14,21 @@ This project is designed to be an **AI-friendly template** for building Tandem a
 - Tandem API architecture and key concepts
 - Common pitfalls (short keys vs long keys, xrefs, column families)
 - Reusable patterns from this codebase
-- SDK utilities in the `sdk/` directory
+- Reusable utilities in the `tandem/` directory
 
 **🎯 Quick Wins:** This codebase provides:
 - ⭐ **Account & Facility switching** - The essential pattern for accessing user data (`js/app.js`)
 - OAuth authentication flow with PKCE (`js/auth.js`)
 - API wrapper with proper headers and token refresh (`js/api.js`)
-- Key/xref conversion utilities (`sdk/keys.js`)
+- Key/xref conversion utilities (`tandem/keys.js`)
 - Schema caching pattern (`js/state/schemaCache.js`)
-- Column name constants to avoid magic strings (`sdk/dt-schema.js`)
+- Column name constants to avoid magic strings (`tandem/constants.js`)
 
 ### Key Implementation Challenges
 
 Working with the Tandem REST API revealed some areas that required careful attention:
 
-- **Short Keys vs. Long Keys**: The API uses two different key formats for element identification. Short keys (20 bytes) are used when querying elements, but the API sometimes returns long keys (24 bytes with flags) in responses. Understanding when to convert between these formats was crucial, particularly when working with stream data. See `sdk/keys.js` for conversion utilities.
+- **Short Keys vs. Long Keys**: The API uses two different key formats for element identification. Short keys (20 bytes) are used when querying elements, but the API sometimes returns long keys (24 bytes with flags) in responses. Understanding when to convert between these formats was crucial, particularly when working with stream data. See `tandem/keys.js` for conversion utilities.
 
 - **Schema-based Property Lookups**: Property IDs in Tandem are qualified properties (e.g., `z:LQ`, `n:n`) that are model-specific. To display human-readable property names (e.g., "Streams.Temperature"), the application must fetch the schema for each model and build lookup maps. This per-model schema requirement adds complexity but enables proper property name resolution.
 
@@ -93,31 +93,31 @@ Having the reference implementation available allowed Claude to discover these p
 tandem-stats/
 ├── index.html                    # Main HTML page
 ├── AI_DEVELOPMENT_GUIDE.md       # 📚 Comprehensive guide for AI-assisted development
-├── sdk/                          # 🔧 Reusable utilities (copy to new projects!)
-│   ├── README.md                #    SDK documentation and usage examples
-│   ├── dt-schema.js             #    Column families, names, element flags
-│   └── keys.js                  #    Key/xref conversion utilities
+├── tandem/                       # 🔧 Reusable utilities (copy to new projects!)
+│   ├── README.md                 # Documentation and usage examples
+│   ├── constants.js              # Column families, names, element flags
+│   └── keys.js                   # Key/xref conversion utilities
 ├── js/
-│   ├── app.js                   # Main application logic
-│   ├── auth.js                  # OAuth 3-legged PKCE flow
-│   ├── api.js                   # Tandem API wrapper
-│   ├── config.js                # Environment configuration
-│   ├── utils.js                 # General utilities
-│   ├── state/                   # State management
-│   │   └── schemaCache.js      #    Schema caching pattern
-│   ├── components/              # Reusable UI components
-│   │   └── toggleHeader.js     #    Collapsible sections
-│   └── features/                # Feature-specific modules
-│       ├── diagnostics.js      #    Schema diagnostics
-│       ├── documents.js        #    Document listing
-│       ├── levels.js           #    Level listing
-│       ├── models.js           #    Model listing
-│       ├── rooms.js            #    Room statistics
-│       ├── schema.js           #    Schema viewer
-│       ├── streams.js          #    Stream monitoring & charts
-│       └── taggedAssets.js     #    Tagged assets
-├── README.md                    # User documentation
-└── QUICKSTART.md               # Quick setup guide
+│   ├── app.js                    # Main application logic
+│   ├── auth.js                   # OAuth 3-legged PKCE flow
+│   ├── api.js                    # Tandem API wrapper
+│   ├── config.js                 # Environment configuration
+│   ├── utils.js                  # General utilities
+│   ├── state/                    # State management
+│   │   └── schemaCache.js        # Schema caching pattern
+│   ├── components/               # Reusable UI components
+│   │   └── toggleHeader.js       # Collapsible sections
+│   └── features/                 # Feature-specific modules
+│       ├── diagnostics.js        # Schema diagnostics
+│       ├── documents.js          # Document listing
+│       ├── levels.js             # Level listing
+│       ├── models.js             # Model listing
+│       ├── rooms.js              # Room statistics
+│       ├── schema.js             # Schema viewer
+│       ├── streams.js            # Stream monitoring & charts
+│       └── taggedAssets.js       # Tagged assets
+├── README.md                     # User documentation
+└── QUICKSTART.md                 # Quick setup guide
 ```
 
 ## Configuration

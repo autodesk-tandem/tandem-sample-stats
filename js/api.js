@@ -1,6 +1,6 @@
 import { getEnv } from './config.js';
-import { ColumnFamilies, ElementFlags, QC, SystemClassNames } from './../sdk/dt-schema.js';
-import { toFullKey, toSystemId } from './../sdk/keys.js';
+import { ColumnFamilies, ElementFlags, QC, SystemClassNames } from './../tandem/constants.js';
+import { toFullKey, toSystemId } from './../tandem/keys.js';
 
 const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;

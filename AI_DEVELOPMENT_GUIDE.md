@@ -12,7 +12,7 @@ This guide provides essential context about the Autodesk Tandem REST API, common
 2. [Critical Concepts](#critical-concepts)
 3. [Common Pitfalls & Solutions](#common-pitfalls--solutions)
 4. [Reusable Patterns](#reusable-patterns)
-5. [SDK Reference](#sdk-reference)
+5. [Tandem API Reference](#tandem-api-reference)
 6. [File Organization](#file-organization)
 7. [Development Workflow](#development-workflow)
 
@@ -75,7 +75,7 @@ This is the #1 source of confusion when working with Tandem.
 **Conversion:**
 ```javascript
 import { getLastSeenStreamValues } from '../api.js';
-import { toShortKey } from '../sdk/keys.js';
+import { toShortKey } from '../tandem/keys.js';
 
 ...
 const streamKeys = streams.map(s => s[QC.Key]);
@@ -112,7 +112,7 @@ for (const [longKey, value] of Object.entries(lastSeenValues)) {
 
 **Decoding Xrefs:**
 ```javascript
-import { decodeXref, toShortKey } from '../sdk/keys.js';
+import { decodeXref, toShortKey } from '../tandem/keys.js';
 
 const hostXref = stream['x:p']?.[0];  // Get parent xref
 const decoded = decodeXref(hostXref);
@@ -150,15 +150,15 @@ Tandem uses a **column-family database** structure. Properties are namespaced wi
 - `l:l` - Level ref
 - `k` - Row key (the element's key)
 
-**ALWAYS use SDK constants instead of hardcoding strings:**
+**ALWAYS use pre-defined constants instead of hardcoding strings:**
 ```javascript
-import { QC } from '../sdk/dt-schema.js';
+import { QC } from '../tandem/constants.js';
 
 // ❌ BAD - hardcoded strings
 const name = element['n:n'];
 const override = element['n:!n'];
 
-// ✅ GOOD - use SDK constants
+// ✅ GOOD - use pre-defined constants
 const name = element[QC.OName] ?? element[QC.Name];
 ```
 
@@ -170,7 +170,7 @@ Elements have type flags in their keys:
 - `0x01000003` - Stream
 - `0x00000005` - Room
 
-See `sdk/dt-schema.js` for full `ElementFlags` enum.
+See `tandem/constants.js` for full `ElementFlags` enum.
 
 ### 5. Property Schemas
 
@@ -230,7 +230,7 @@ const elementsWithShortKeys = convertLongKeysToShortKeys(elements);
 
 **Solution:** Always convert before using `atob()`:
 ```javascript
-// In sdk/keys.js - already handled for you
+// In tandem/keys.js - already handled for you
 let standardB64 = urlSafeB64.replace(/-/g, '+').replace(/_/g, '/');
 while (standardB64.length % 4) standardB64 += '=';  // Add padding
 const decoded = atob(standardB64);
@@ -240,9 +240,9 @@ const decoded = atob(standardB64);
 
 **Problem:** Using magic strings like `'n:n'`, `'x:p'`.
 
-**Solution:** Use SDK constants from `sdk/dt-schema.js`:
+**Solution:** Use pre-defined constants from `tandem/constants.js`:
 ```javascript
-import { QC } from '../sdk/dt-schema.js';
+import { QC } from '../tandem/constants.js';
 
 const nameCol = QC.Name;
 const oNameCol = QC.OName;
@@ -302,7 +302,7 @@ This is the **gateway to all Tandem data**. Without it, your app can only work w
 **The Logic (Reusable):**
 
 ```javascript
-import { SchemaVersion } from '../sdk/dt-schema.js';
+import { SchemaVersion } from '../tandem/constants.js';
 
 // Step 1: Fetch user's groups (called "accounts" or "teams" in the UI)
 const groups = await getGroups();
@@ -378,7 +378,7 @@ async function loadFacility(facilityURN) {
 
 4. **Schema Version Check:**
    ```javascript
-   import { SchemaVersion } from '../sdk/dt-schema.js';
+   import { SchemaVersion } from '../tandem/constants.js';
 
    // Always check before loading facility data
    if (info.schemaVersion < SchemaVersion) {
@@ -541,9 +541,9 @@ export function convertLongKeysToShortKeys(data) {
 
 ---
 
-## SDK Reference
+## Tandem API Reference
 
-### `sdk/dt-schema.js`
+### `tandem/constants.js`
 
 **Purpose:** Constants for Tandem database schema.
 
@@ -555,7 +555,7 @@ export function convertLongKeysToShortKeys(data) {
 
 **Usage:**
 ```javascript
-import { ColumnFamilies, ColumnNames, ElementFlags, QC } from '../sdk/dt-schema.js';
+import { ColumnFamilies, ColumnNames, ElementFlags, QC } from '../tandem/constantsa.js';
 
 // Method 1: Build dynamically
 const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
@@ -565,7 +565,7 @@ const name = element[QC.Name];
 const overrideName = element[QC.OName];
 ```
 
-### `sdk/keys.js`
+### `tandem/keys.js`
 
 **Purpose:** Utilities for key and xref manipulation.
 
@@ -602,9 +602,9 @@ const [modelKeys, elementKeys] = fromXrefKeyArray(xrefsB64);
 
 ```
 tandem-stats/
-├── index.html                   # Main HTML entry point
-├── sdk/                         # Reusable SDK utilities (COPY THIS TO NEW PROJECTS)
-│   ├── dt-schema.js            # Column families, names, element flags
+├── index.html                  # Main HTML entry point
+├── tandem/                     # Reusable utilities (COPY THIS TO NEW PROJECTS)
+│   ├── constants.js            # Column families, names, element flags
 │   └── keys.js                 # Key/xref conversion utilities
 ├── js/
 │   ├── config.js               # Environment configuration (prod/stg)
@@ -633,7 +633,7 @@ tandem-stats/
 ### What to Reuse in New Projects
 
 **Always Copy:**
-- ✅ `sdk/` directory - Core utilities
+- ✅ `tandem/` directory - Core utilities
 - ✅ `js/auth.js` - OAuth implementation
 - ✅ `js/api.js` - API wrapper pattern
 - ✅ `js/config.js` - Environment config pattern
@@ -658,9 +658,9 @@ tandem-stats/
 
 ### Starting a New Tandem Project
 
-1. **Copy the SDK:**
+1. **Copy the utilities:**
    ```bash
-   cp -r tandem-stats/sdk/ my-new-project/sdk/
+   cp -r tandem-stats/tandem/ my-new-project/tandem/
    ```
 
 2. **Copy Auth & API:**
@@ -674,10 +674,10 @@ tandem-stats/
    - Replace `apsKey` with new client ID
    - Set `loginRedirect` to your redirect URI
 
-4. **Import SDK utilities:**
+4. **Import utilities:**
    ```javascript
-   import { ColumnFamilies, ColumnNames, ElementFlags } from '../sdk/dt-schema.js';
-   import { decodeXref, toShortKey } from '../sdk/keys.js';
+   import { ColumnFamilies, ColumnNames, ElementFlags } from '../tandem/constants.js';
+   import { decodeXref, toShortKey } from '../tandem/keys.js';
    ```
 
 5. **Follow the patterns above for common tasks.**
@@ -714,9 +714,9 @@ console.log(`Flags: 0x${flags.toString(16).padStart(8, '0')}`);
 | Get facility info | `getFacilityInfo(facilityURN)` | `js/api.js` |
 | OAuth login | `login()` | `js/auth.js` |
 | Get access token | `getAccessToken()` | `js/auth.js` |
-| Convert long key → short key | `toShortKey(longKey)` | `sdk/keys.js` |
-| Decode xref | `decodeXref(xref)` | `sdk/keys.js` |
-| Get column name constants | Import from `sdk/dt-schema.js` | `sdk/dt-schema.js` |
+| Convert long key → short key | `toShortKey(longKey)` | `tandem/keys.js` |
+| Decode xref | `decodeXref(xref)` | `tandem/keys.js` |
+| Get column name constants | Import from `tandem/constants.js` | `tandem/constants.js` |
 | Query elements | `getElementsByKeys(modelURN, shortKeys)` | `js/api.js` |
 | Fetch schema | `loadSchemaForModel(modelURN)` | `js/state/schemaCache.js` |
 | Get property display name | `getPropertyDisplayName(modelURN, qualifiedProp)` | `js/state/schemaCache.js` |

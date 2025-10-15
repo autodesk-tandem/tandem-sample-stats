@@ -1,10 +1,10 @@
-# Tandem SDK Utilities
+# Tandem API Utilities
 
 This directory contains reusable utilities for working with the Autodesk Tandem REST API. These are adapted from the official [tandem-sample-rest-testbed](https://github.com/autodesk-tandem/tandem-sample-rest-testbed) project.
 
 ## Files
 
-### `dt-schema.js`
+### `constants.js`
 
 **Purpose:** Constants and definitions for Tandem's database schema.
 
@@ -18,7 +18,7 @@ This directory contains reusable utilities for working with the Autodesk Tandem 
 
 **Example:**
 ```javascript
-import { ColumnFamilies, ColumnNames, ElementFlags, QC } from './sdk/dt-schema.js';
+import { ColumnFamilies, ColumnNames, ElementFlags, QC } from './tandem/dt-schema.js';
 
 // Method 1: Build column names dynamically
 const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;  // "n:n"
@@ -51,7 +51,7 @@ if (element[QC.ElementFlags]?.[0] === ElementFlags.Stream) {
 
 **Example:**
 ```javascript
-import { decodeXref } from './sdk/keys.js';
+import { decodeXref } from './tandem/keys.js';
 
 // Problem: API returns long keys, but you need short keys to query
 const longKey = streamData[QC.Key];  // 24 bytes
@@ -109,7 +109,7 @@ Tandem properties use `family:name` format:
 ### Pattern 1: Get Element Name (with override support)
 
 ```javascript
-import { QC } from './sdk/dt-schema.js';
+import { QC } from './tandem/constants.js';
 
 // Always check override first, then standard
 const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
@@ -118,8 +118,8 @@ const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
 ### Pattern 2: Decode Stream Host
 
 ```javascript
-import { ColumnFamilies, ColumnNames, QC } from './sdk/dt-schema.js';
-import { decodeXref } from './sdk/keys.js';
+import { ColumnFamilies, ColumnNames, QC } from './tandem/dt-schema.js';
+import { decodeXref } from './tandem/keys.js';
 
 // Get host reference (priority: parent > room)
 const hostXref = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
@@ -140,8 +140,8 @@ if (hostXref) {
 ### Pattern 3: Batch Process Elements by Model
 
 ```javascript
-import { QC } from './sdk/dt-schema.js';
-import { decodeXref } from './sdk/keys.js';
+import { QC } from './tandem/dt-schema.js';
+import { decodeXref } from './tandem/keys.js';
 
 // Group xrefs by model URN
 const xrefsByModel = new Map();
@@ -170,16 +170,16 @@ for (const [modelURN, items] of xrefsByModel.entries()) {
 
 ### Quick Start
 
-1. **Copy this entire `sdk/` directory to your project:**
+1. **Copy this entire `tandem/` directory to your project:**
    ```bash
-   cp -r tandem-stats/sdk/ my-project/sdk/
+   cp -r tandem-stats/tandem/ my-project/tandem/
    ```
 
 2. **Import what you need:**
    ```javascript
    // In your JavaScript files
-   import { ColumnFamilies, ColumnNames, ElementFlags, QC } from '../sdk/dt-schema.js';
-   import { toShortKey, decodeXref } from '../sdk/keys.js';
+   import { ColumnFamilies, ColumnNames, ElementFlags, QC } from '../tandem/constants.js';
+   import { toShortKey, decodeXref } from '../tandem/keys.js';
    ```
 
 3. **Use constants instead of magic strings:**
@@ -188,14 +188,14 @@ for (const [modelURN, items] of xrefsByModel.entries()) {
    const name = element['n:n'];
    const category = element['n:c'];
    
-   // ✅ GOOD - SDK constants
+   // ✅ GOOD - pre-defined constants
    const name = element[QC.Name];
    const category = element[QC.CategoryId];
    ```
 
 ### Best Practices
 
-1. **Always use SDK constants** - Prevents typos, makes refactoring easier
+1. **Always use pre-defined constants** - Prevents typos, makes refactoring easier
 2. **Cache decoded xrefs** - Decoding is expensive, reuse results when possible
 3. **Batch queries by model** - Don't query elements one-by-one
 4. **Check overrides first** - Many properties have override versions (e.g., `n:!n` before `n:n`)
@@ -217,7 +217,7 @@ const elements = await getElementsByKeys(modelURN, [shortKey]);
 
 **Cause:** Keys/xrefs use URL-safe base64 (`-` and `_` instead of `+` and `/`).
 
-**Fix:** This is handled internally by the SDK. Just use the functions as-is.
+**Fix:** This is handled internally by the utilities. Just use the functions as-is.
 
 ### Xref decode returns wrong model
 
@@ -236,5 +236,5 @@ For more details, see:
 - [Official Tandem API Docs](https://aps.autodesk.com/en/docs/tandem/v1/developers_guide/overview/)
 - [tandem-sample-rest-testbed](https://github.com/autodesk-tandem/tandem-sample-rest-testbed) - Reference implementation
 
-**This SDK is the foundation for any Tandem application. Master these utilities, and the rest becomes much easier!**
+**Those Tandem API utilities are the foundation for any Tandem application. Master these utilities, and the rest becomes much easier!**
 
