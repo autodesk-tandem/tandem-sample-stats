@@ -3,14 +3,14 @@
  * Adapted from tandem-sample-rest-testbed
  */
 
-import { KeyFlags } from './dt-schema.js';
-
-// Constants
-const kModelIdSize = 16;
-const kElementIdSize = 20;
-const kElementFlagsSize = 4;
-const kElementIdWithFlagsSize = kElementIdSize + kElementFlagsSize;
-const kSystemIdSize = 9;
+import {
+  kElementFlagsSize,
+  kElementIdSize,
+  kElementIdWithFlagsSize,
+  kModelIdSize,
+  kSystemIdSize,
+  KeyFlags
+} from './constants.js';
 
 /**
  * Convert to websafe base64 (replace +/= with -_)

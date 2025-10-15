@@ -2,10 +2,10 @@
  * Utility functions for Tandem Stats
  */
 
-import { toShortKey } from '../sdk/keys.js';
+import { toShortKey } from '../tandem/keys.js';
 
 /**
- * Attribute type enum mapping from Tandem SDK
+ * Attribute type enum mapping from Tandem
  * Maps numeric type codes to human-readable names
  */
 export const AttributeType = {
@@ -36,7 +36,7 @@ export function getDataTypeName(typeCode) {
 /**
  * Create a map of stream data indexed by short keys
  * The API returns data with long keys, but we need to map them back to short keys
- * Uses toShortKey from SDK for consistency
+ * Uses toShortKey from keys.js for consistency
  * @param {Object} lastSeenValues - Object with long keys
  * @returns {Object} Object with short keys
  */

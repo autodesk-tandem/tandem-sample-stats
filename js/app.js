@@ -22,7 +22,7 @@ import { displaySystems } from './features/systems.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
-import { SchemaVersion } from '../sdk/dt-schema.js';
+import { SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
