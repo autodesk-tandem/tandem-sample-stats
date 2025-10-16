@@ -141,6 +141,44 @@ export function makeXrefKey(modelURN, elemKey) {
 }
 
 /**
+ * Converts encoded string of short keys to array of keys (either short or full).
+ * 
+ * @param {string} text 
+ * @param {boolean} useFullKeys 
+ * @param {boolean} [isLogical]
+ * @returns {Array.<string>}
+ */
+export function fromShortKeyArray(text, useFullKeys, isLogical) {
+  const tmp = text.replace(/-/g, '+').replace(/_/g, '/');
+  const binData = new Uint8Array(atob(tmp).split('').map(c => c.charCodeAt(0)));
+  const buffSize = useFullKeys ? kElementIdWithFlagsSize : kElementIdSize;
+  const buff = new Uint8Array(buffSize);
+  const result = [];
+  let offset = 0;
+
+  while (offset < binData.length) {
+      const size = binData.length - offset;
+
+      if (size < kElementIdSize) {
+          break;
+      }
+      if (useFullKeys) {
+        const keyFlags = isLogical ? KeyFlags.Logical : KeyFlags.Physical;
+
+        writeInt32BE(buff, keyFlags);
+        buff.set(binData.subarray(offset, offset + kElementIdSize), kElementFlagsSize);
+      } else {
+        buff.set(binData.subarray(offset, offset + kElementIdSize));
+      }
+      const elementKey = makeWebsafe(btoa(String.fromCharCode.apply(null, buff)));
+
+      result.push(elementKey);
+      offset += kElementIdSize;
+  }
+  return result;
+}
+
+/**
  * Converts xref key to model and element keys.
  * Returns arrays of model keys and element keys extracted from the xref array
  * @param {string} text - Base64 encoded xref(s)
@@ -180,6 +218,20 @@ export function fromXrefKeyArray(text) {
   }
   
   return [modelKeys, elementKeys];
+}
+
+/**
+ * This is "equivalent" to the Node.js Buffer.writeInt32BE() function.
+ * 
+ * @param {Array} array 
+ * @param {any} value 
+ * @param {number} [offset]
+ */
+function writeInt32BE(array, value, offset = 0) {
+  array[offset] = (value >> 24) & 0xff;
+  array[offset + 1] = (value >> 16) & 0xff;
+  array[offset + 2] = (value >> 8) & 0xff;
+  array[offset + 3] = (value >> 8) & 0xff;
 }
 
 /**
