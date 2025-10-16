@@ -803,3 +803,75 @@ function systemClassToList(flags) {
 	}
 	return result;
 }
+
+/**
+ * Get change history for a model
+ * @param {string} modelURN - Model URN
+ * @param {Object} options - History query options
+ * @param {Array<number>} options.timestamps - Specific timestamps to query (milliseconds)
+ * @param {number} options.min - Minimum timestamp for range query (milliseconds)
+ * @param {number} options.max - Maximum timestamp for range query (milliseconds)
+ * @param {number} options.limit - Limit number of results
+ * @param {boolean} options.includeChanges - Include detailed change information (default: true)
+ * @returns {Promise<Array>} Array of history entries
+ */
+export async function getHistory(modelURN, options = {}) {
+  try {
+    // Build payload object, only including defined properties
+    const payloadObj = {
+      includeChanges: options.includeChanges !== false,
+      useFullKeys: true
+    };
+    
+    // Only add optional parameters if they are explicitly provided
+    if (options.timestamps !== undefined) {
+      payloadObj.timestamps = options.timestamps;
+    }
+    if (options.min !== undefined) {
+      payloadObj.min = options.min;
+    }
+    if (options.max !== undefined) {
+      payloadObj.max = options.max;
+    }
+    if (options.limit !== undefined) {
+      payloadObj.limit = options.limit;
+    }
+    
+    const payload = JSON.stringify(payloadObj);
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/history`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch history: ${response.statusText}`);
+    }
+    
+    const history = await response.json();
+    return history;
+  } catch (error) {
+    console.error('Error fetching history:', error);
+    return [];
+  }
+}
+
+/**
+ * Get model properties (phase, last updated, etc.)
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<Object|null>} Model properties object or null if error
+ */
+export async function getModelProperties(modelURN) {
+  try {
+    const requestPath = `${tandemBaseURL}/models/${modelURN}/props`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model properties: ${response.statusText}`);
+    }
+    
+    const props = await response.json();
+    return props;
+  } catch (error) {
+    console.error('Error fetching model properties:', error);
+    return null;
+  }
+}
