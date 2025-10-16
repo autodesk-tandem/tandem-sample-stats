@@ -97,7 +97,7 @@ export async function displaySystems(container, systems, facilityURN) {
           <div class="flex items-start justify-between mb-3">
             <div class="flex-grow">
               <div class="flex items-center space-x-2 mb-1">
-                <h3 class="text-lg font-semibold text-dark-text">${escapeHtml(system.name)}</h3>
+                <h3 class="text-base font-semibold text-dark-text">${escapeHtml(system.name)}</h3>
               </div>
               <div class="text-xs text-dark-text-secondary mt-1">Element count: ${system.elementCount}</div>
             </div>

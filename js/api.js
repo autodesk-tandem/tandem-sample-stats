@@ -853,3 +853,25 @@ export async function getHistory(modelURN, options = {}) {
     return [];
   }
 }
+
+/**
+ * Get model properties (phase, last updated, etc.)
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<Object|null>} Model properties object or null if error
+ */
+export async function getModelProperties(modelURN) {
+  try {
+    const requestPath = `${tandemBaseURL}/models/${modelURN}/props`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch model properties: ${response.statusText}`);
+    }
+    
+    const props = await response.json();
+    return props;
+  } catch (error) {
+    console.error('Error fetching model properties:', error);
+    return null;
+  }
+}

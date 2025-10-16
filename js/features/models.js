@@ -1,4 +1,4 @@
-import { getElementCount, getHistory } from '../api.js';
+import { getElementCount, getHistory, getModelProperties } from '../api.js';
 import { isDefaultModel } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 
@@ -84,7 +84,7 @@ export async function displayModels(container, models, facilityURN) {
             </div>
             <div class="flex-grow">
               <div class="flex items-center space-x-2 mb-1">
-                <h3 class="text-lg font-semibold text-dark-text">${model.label || (isDefault ? '** Default Model **' : 'Untitled Model')}</h3>
+                <h3 class="text-base font-semibold text-dark-text">${model.label || (isDefault ? '** Default Model **' : 'Untitled Model')}</h3>
               </div>
               <div class="flex items-center gap-2 flex-wrap">
                 ${isDefault ? '<span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-purple-500/20 text-purple-300">Default</span>' : ''}
@@ -103,7 +103,7 @@ export async function displayModels(container, models, facilityURN) {
           </div>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+        <div class="space-y-2 text-sm">
           <div>
             <span class="font-medium text-dark-text">Model ID:</span>
             <span class="text-dark-text-secondary ml-2 font-mono text-xs break-all">${model.modelId}</span>
@@ -112,6 +112,16 @@ export async function displayModels(container, models, facilityURN) {
           <div>
             <span class="font-medium text-dark-text">Version:</span>
             <span class="text-dark-text-secondary ml-2">${model.version}</span>
+          </div>
+          ` : ''}
+          ${!isDefault ? `
+          <div id="detail-phase-${i}">
+            <span class="font-medium text-dark-text">Phase:</span>
+            <span class="text-dark-text-secondary ml-2"><span class="inline-block animate-pulse">...</span></span>
+          </div>
+          <div id="detail-last-updated-${i}">
+            <span class="font-medium text-dark-text">Last Updated:</span>
+            <span class="text-dark-text-secondary ml-2"><span class="inline-block animate-pulse">...</span></span>
           </div>
           ` : ''}
           ${model.createdAt ? `
@@ -181,6 +191,89 @@ export async function displayModels(container, models, facilityURN) {
       totalElement.textContent = `${total.toLocaleString()} elements`;
     }
   });
+  
+  // Fetch model properties asynchronously for each model (skip default models)
+  for (let i = 0; i < models.length; i++) {
+    const model = models[i];
+    const isDefault = isDefaultModel(facilityURN, model.modelId);
+    
+    // Skip fetching properties for default model
+    if (isDefault) {
+      continue;
+    }
+    
+    getModelProperties(model.modelId).then(props => {
+      // Extract data from dataSource object
+      const data = props?.dataSource;
+      
+      // Update Phase/View
+      const phaseElement = document.getElementById(`detail-phase-${i}`);
+      if (phaseElement && data?.phaseOrViewName) {
+        const phaseOrView = data.phaseOrViewName;
+        let label = 'Phase';
+        let displayValue = phaseOrView;
+        
+        // Determine label and value based on prefix
+        if (phaseOrView.startsWith('phase:')) {
+          label = 'Phase';
+          displayValue = phaseOrView.substring(6);
+        } else if (phaseOrView.startsWith('view:')) {
+          label = 'View';
+          displayValue = phaseOrView.substring(5);
+        }
+        
+        phaseElement.innerHTML = `
+          <span class="font-medium text-dark-text">${label}:</span>
+          <span class="text-dark-text-secondary ml-2">${displayValue}</span>
+        `;
+      } else if (phaseElement) {
+        phaseElement.innerHTML = `
+          <span class="font-medium text-dark-text">Phase:</span>
+          <span class="text-dark-text-secondary ml-2">-</span>
+        `;
+      }
+      
+      // Update Last Updated
+      const lastUpdatedElement = document.getElementById(`detail-last-updated-${i}`);
+      if (lastUpdatedElement && data?.lastUpdated) {
+        const date = new Date(data.lastUpdated);
+        const formattedDate = date.toLocaleString('en-US', {
+          year: 'numeric',
+          month: 'short',
+          day: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        lastUpdatedElement.innerHTML = `
+          <span class="font-medium text-dark-text">Last Updated:</span>
+          <span class="text-dark-text-secondary ml-2">${formattedDate}</span>
+        `;
+      } else if (lastUpdatedElement) {
+        lastUpdatedElement.innerHTML = `
+          <span class="font-medium text-dark-text">Last Updated:</span>
+          <span class="text-dark-text-secondary ml-2">-</span>
+        `;
+      }
+    }).catch(error => {
+      console.error(`Error getting model properties for ${model.label}:`, error);
+      // Update with error state
+      const phaseElement = document.getElementById(`detail-phase-${i}`);
+      if (phaseElement) {
+        phaseElement.innerHTML = `
+          <span class="font-medium text-dark-text">Phase:</span>
+          <span class="text-dark-text-secondary ml-2">-</span>
+        `;
+      }
+      const lastUpdatedElement = document.getElementById(`detail-last-updated-${i}`);
+      if (lastUpdatedElement) {
+        lastUpdatedElement.innerHTML = `
+          <span class="font-medium text-dark-text">Last Updated:</span>
+          <span class="text-dark-text-secondary ml-2">-</span>
+        `;
+      }
+    });
+  }
 }
 
 /**
@@ -935,15 +1028,24 @@ async function viewModelsHistory(facilityURN, models, button = null) {
           includeChanges: true
         });
         
+        // Use consistent naming with model detail pane
+        const isDefault = isDefaultModel(facilityURN, model.modelId);
+        const displayName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
+        
         return {
-          modelName: model.label || 'Untitled Model',
+          modelName: displayName,
           modelId: model.modelId,
           history: history || []
         };
       } catch (error) {
         console.error(`Error fetching history for ${model.label}:`, error);
+        
+        // Use consistent naming with model detail pane
+        const isDefault = isDefaultModel(facilityURN, model.modelId);
+        const displayName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
+        
         return {
-          modelName: model.label || 'Untitled Model',
+          modelName: displayName,
           modelId: model.modelId,
           history: []
         };

@@ -565,7 +565,7 @@ export async function displayStreams(container, streams, facilityURN) {
             </div>
             <div class="flex-grow">
               <div class="flex items-center gap-2 mb-1">
-                <h3 class="text-lg font-semibold text-dark-text">${streamName}</h3>
+                <h3 class="text-base font-semibold text-dark-text">${streamName}</h3>
                 ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-500/30 to-green-600/30 text-green-300 rounded">${classification}</span>` : ''}
               </div>
               ${hostInfo ? `<p class="text-xs text-dark-text-secondary mt-1">Host: ${hostInfo.name} (${hostInfo.type})</p>` : ''}
