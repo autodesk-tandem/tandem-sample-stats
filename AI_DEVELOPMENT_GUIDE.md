@@ -106,15 +106,16 @@ for (const [longKey, value] of Object.entries(lastSeenValues)) {
 - Cross-model relationships
 
 **Column Names:**
-- `x:p` - Parent xref (primary host reference)
-- `x:r` - Room xref (legacy)
-- `x:!r` - Room xref override
+- `x:p` (`QC.Parent`) - Parent xref (primary host reference)
+- `x:r` (`QC.XRooms`) - Room xref (legacy)
+- `x:!r` (`QC.OXRooms`) - Room xref override
 
 **Decoding Xrefs:**
 ```javascript
+import { QC } from '../tandem/constants.js';
 import { decodeXref, toShortKey } from '../tandem/keys.js';
 
-const hostXref = stream['x:p']?.[0];  // Get parent xref
+const hostXref = stream[QC.XParent]?.[0];  // Get parent xref
 const decoded = decodeXref(hostXref);
 // Returns: { modelURN: "urn:adsk.dtm:...", elementKey: "..." }
 
@@ -123,32 +124,31 @@ const elements = await getElementsByKeys(decoded.modelURN, [decoded.elementKey])
 ```
 
 **Priority Order:** When looking for a stream's host, check in this order:
-1. `x:p` (Parent) - **Use this first** (matches Tandem UI behavior)
-2. `x:!r` (Room override)
-3. `x:r` (Room)
+1. `QC.XParent` (Parent) - **Use this first** (matches Tandem UI behavior)
+2. `QC.OXRooms` (Room override)
+3. `QC.XRooms` (Room)
 
 ### 3. Column Families and Names
 
 Tandem uses a **column-family database** structure. Properties are namespaced with `family:name` format.
 
 **Column Families:**
-- `n:` - Standard properties (name, category, flags, etc.)
-- `z:` - DtProperties (user-defined custom properties)
-- `x:` - Xrefs (cross-model references)
-- `l:` - Refs (same-model references)
-- `m:` - Systems
-- `s:` - Status
-- `t:` - Tags
+- `n:` (`ColumnFamilies.Standard`) - Standard properties (name, category, flags, etc.)
+- `z:` (`ColumnFamilies.DtProperties`) - DtProperties (user-defined custom properties)
+- `x:` (`ColumnFamilies.XRefs`) - Xrefs (cross-model references)
+- `l:` (`ColumnFamilies.Refs`) - Refs (same-model references)
+- `m:` (`ColumnFamilies.Systems`) - Systems
+- `r:` (`ColumnFamilies.Source`) - Source properties (extracted from model file)
 
 **Common Columns:**
-- `n:n` - Name
-- `n:!n` - Name override (use this first if present)
-- `n:c` - Category ID
-- `n:a` - Element flags
-- `x:p` - Parent xref
-- `l:p` - Parent ref (same model)
-- `l:l` - Level ref
-- `k` - Row key (the element's key)
+- `n:n` (`QC.Name`) - Name
+- `n:!n` (`QC.OName`) - Name override (use this first if present)
+- `n:c` (`QC.CategoryId`) - Category ID
+- `n:a` (`QC.ElementFlags`) - Element flags
+- `x:p` (`QC.XParent`) - Parent xref
+- `l:p` (`QC.Parent`) - Parent ref (same model)
+- `l:l` (`QC.Level`) - Level ref
+- `k` (`QC.Key`) - Row key (the element's key)
 
 **ALWAYS use pre-defined constants instead of hardcoding strings:**
 ```javascript
@@ -164,7 +164,7 @@ const name = element[QC.OName] ?? element[QC.Name];
 
 ### 4. Element Flags
 
-Elements have type flags in their keys:
+Elements have type flags in their keys, i.e.:
 - `0x00000000` - Simple physical element
 - `0x01000000` - Logical element (Level, FamilyType, etc.)
 - `0x01000003` - Stream
@@ -216,12 +216,14 @@ if (isDefaultModel(facilityURN, modelURN)) {
 
 **Solution:** Convert to short keys first:
 ```javascript
-const elements = await getLastSeenStreamValues(facilityURN, streamKeys);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
 // elements has long keys as object keys
 
-// Convert to short keys
-import { convertLongKeysToShortKeys } from './utils.js';
-const elementsWithShortKeys = convertLongKeysToShortKeys(elements);
+for (const [key, value] of Object.entries(lastSeenValues)) {
+  const shortKey = toShortKey(key);
+
+  result[shortKey] = value;
+} 
 ```
 
 ### Pitfall 2: Forgetting URL-Safe Base64
@@ -254,7 +256,7 @@ const oNameCol = QC.OName;
 
 **Solution:** Always check override columns first:
 ```javascript
-const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
+const name = element[QC.OName]?.[0] ?? element[QC.Name]?.[0] ?? 'Unnamed';
 //                      ↑ override first          ↑ standard second
 ```
 
@@ -264,7 +266,7 @@ const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
 
 **Solution:** Check in this order:
 ```javascript
-const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
+const hostRef = stream[QC.XParent]?.[0] ?? stream[QC.OXRooms]?.[0] ?? stream[QC.XRooms]?.[0];
 //                        ↑ Parent first             ↑ Override second          ↑ Legacy last
 ```
 
@@ -735,4 +737,3 @@ console.log(`Flags: 0x${flags.toString(16).padStart(8, '0')}`);
 ---
 
 **Good luck with your Tandem development! If you encounter issues, consult this guide and the reference implementations. The patterns here have been battle-tested through real development.**
-

@@ -1,0 +1,348 @@
+description: Tandem Keys
+globs:
+alwaysApply: true
+---
+
+# Tandem Keys
+
+For Tandem API related code ALWAYS use the key utilities from `tandem/keys.js` instead of manually manipulating keys. Required imports:
+- `tandem/keys.js` - Key conversion utilities
+- `tandem/constants.js` - Key size constants
+
+## Short Keys vs. Long Keys ⚠️ CRITICAL
+
+This is the #1 source of confusion when working with Tandem. Understanding the difference is essential.
+
+### Key Types
+
+| Type | Size | Contains | Used For | Example |
+|------|------|----------|----------|---------|
+| Short Key | 20 bytes | Element ID only | **Querying** elements via API | `7b5gM3RGD3FJCYUQppO6XEc` |
+| Long Key | 24 bytes | 4 bytes flags + 20 bytes element ID | **Identifying** elements (returned by API) | `AAAAAF57M0gPcUkJhRCmk7pcRw` |
+
+### Rule of Thumb
+- some API endpoints return long keys → convert to short keys → compare
+- `POST scan` supports both short and long keys as input but returns short keys.
+
+### Examples
+
+```javascript
+// BAD - Using long from response can't be used for comparison
+import { getLastSeenStreamValues } from '../api.js';
+import { toShortKey } from '../sdk/keys.js';
+
+...
+const streamKeys = streams.map(s => s[QC.Key]);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+
+for (const [key, value] of Object.entries(lastSeenValues)) {
+  result[key] = value;
+}  
+
+// GOOD - Convert to short key first
+import { getLastSeenStreamValues } from '../api.js';
+import { toShortKey } from '../sdk/keys.js';
+
+...
+const streamKeys = streams.map(s => s[QC.Key]);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+
+for (const [key, value] of Object.entries(lastSeenValues)) {
+  // this is missing in example above
+  const shortKey = toShortKey(key);
+
+  result[shortKey] = value;
+}  
+```
+
+```javascript
+// BAD - Converting stream data without using utility
+const streamKeys = streams.map(s => s[QC.Key]);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+// Result has long keys, manual conversion is error-prone
+
+// GOOD - Using utility functions
+import { toShortKey } from '../tandem/keys.js';
+
+const streamKeys = streams.map(s => s[QC.Key]);
+const lastSeenValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+const result = {};
+
+// API returns long key, convert to short key
+for (const [longKey, value] of Object.entries(lastSeenValues)) {
+  const shortKey = toShortKey(longKey);
+  result[shortKey] = value;
+}
+```
+
+## Xrefs (Cross-References)
+
+**Xrefs** link elements across different models. Typical example can be stream to asset or asset to room (assuming that rooms are defined in different model).
+
+### Structure
+
+| Component | Size | Description |
+|-----------|------|-------------|
+| Model ID | 16 bytes | Which model the element is in |
+| Element Key | 24 bytes | The element (long key with flags) |
+| **Total** | **40 bytes** | Complete xref |
+
+### Common Xref Columns
+
+Use these in priority order when looking for relationships:
+
+```javascript
+import { QC } from '../tandem/constants.js';
+
+// Priority order for stream hosts:
+const hostXref = stream[QC.XParent]?.[0]     // 1. Parent (USE THIS FIRST!)
+              ?? stream[QC.OXRooms]?.[0]     // 2. Room override
+              ?? stream[QC.XRooms]?.[0];     // 3. Room (legacy)
+```
+
+### Decoding Xrefs
+
+```javascript
+// BAD - Trying to use xref directly
+const hostXref = stream[QC.XParent]?.[0];
+const elements = await getElementsByKeys(modelURN, [hostXref]);  // ❌ FAILS!
+
+// GOOD - Decode xref first
+import { decodeXref, toShortKey } from '../tandem/keys.js';
+
+const hostXref = stream[QC.XParent]?.[0];
+if (hostXref) {
+  const { modelURN, elementKey } = decodeXref(hostXref);
+  const elements = await getElementsByKeys(modelURN, [elementKey]);
+}
+```
+
+### Batch Processing by Model
+
+```javascript
+// BAD - Processing one at a time
+for (const stream of streams) {
+  const hostXref = stream[QC.XParent]?.[0];
+  if (hostXref) {
+    const decoded = decodeXref(hostXref);
+    const elements = await getElementsByKeys(decoded.modelURN, [decoded.elementKey]);
+    // Process each element...
+  }
+}
+
+// GOOD - Group by model and batch fetch
+import { decodeXref, toShortKey } from '../tandem/keys.js';
+
+const xrefsByModel = new Map();
+
+// Group xrefs by model
+for (const stream of streams) {
+  const hostXref = stream[QC.XParent]?.[0];
+  if (hostXref) {
+    const { modelURN, elementKey } = decodeXref(hostXref);
+    
+    if (!xrefsByModel.has(modelURN)) {
+      xrefsByModel.set(modelURN, []);
+    }
+    xrefsByModel.get(modelURN).push({ 
+      stream, 
+      key: elementKey
+    });
+  }
+}
+
+// Batch fetch per model (efficient!)
+for (const [modelURN, items] of xrefsByModel.entries()) {
+  const keys = items.map(item => item.key);
+  const elements = await getElementsByKeys(modelURN, keys);
+    // Process all elements for this model...
+}
+```
+
+## Key Size Constants
+
+Always use constants from `tandem/constants.js` instead of hardcoding sizes:
+
+```javascript
+// BAD - Magic numbers
+const modelSize = 16;
+const elementSize = 20;
+const flagsSize = 4;
+const fullKeySize = 24;
+
+// GOOD - Using imported constants
+import { 
+  kModelIdSize, 
+  kElementIdSize, 
+  kElementFlagsSize, 
+  kElementIdWithFlagsSize 
+} from '../tandem/constants.js';
+
+const modelSize = kModelIdSize;         // 16
+const elementSize = kElementIdSize;     // 20
+const flagsSize = kElementFlagsSize;    // 4
+const fullKeySize = kElementIdWithFlagsSize;  // 24
+```
+
+## Available Key Utilities
+
+All utilities are in `tandem/keys.js`:
+
+### `toShortKey(fullKey)`
+Converts 24-byte long key to 20-byte short key (removes flags).
+
+```javascript
+import { toShortKey } from '../tandem/keys.js';
+
+const longKey = element[QC.Key];  // 24 bytes from API
+const shortKey = toShortKey(longKey);  // 20 bytes for querying
+```
+
+### `toFullKey(shortKey, isLogical)`
+Converts 20-byte short key to 24-byte long key (adds flags).
+
+```javascript
+import { toFullKey } from '../tandem/keys.js';
+import { KeyFlags } from '../tandem/constants.js';
+
+const shortKey = '7b5gM3RGD3FJCYUQppO6XEc';
+const longKey = toFullKey(shortKey, false);  // false = physical element
+const logicalKey = toFullKey(shortKey, true);  // true = logical element
+```
+
+### `decodeXref(xref)`
+Extracts model URN and element key from 40-byte xref.
+
+```javascript
+import { decodeXref } from '../tandem/keys.js';
+
+const xref = stream[QC.XParent]?.[0];
+const { modelURN, elementKey } = decodeXref(xref);
+// modelURN: 'urn:adsk.dtm:...'
+// elementKey: long key (24 bytes with flags)
+```
+
+### `makeXrefKey(modelURN, elemKey)`
+Creates xref from model URN and element key (inverse of decodeXref).
+
+```javascript
+import { makeXrefKey } from '../tandem/keys.js';
+
+const xref = makeXrefKey(modelURN, elementKey);
+// Returns: 40-byte xref suitable for cross-model references
+```
+
+### `fromXrefKeyArray(text)`
+Parses multiple xrefs from base64 string.
+
+```javascript
+import { fromXrefKeyArray } from '../tandem/keys.js';
+
+const [modelKeys, elementKeys] = fromXrefKeyArray(xrefsB64);
+// Returns: [array of model keys, array of element keys]
+```
+
+### `toSystemId(fullKey)`
+Converts full key to system ID (varint-encoded).
+
+```javascript
+import { toSystemId } from '../tandem/keys.js';
+
+const systemId = toSystemId(fullKey);
+```
+
+## Common Patterns
+
+### Pattern 1: Get Element Name with Host
+
+```javascript
+import { QC } from '../tandem/constants.js';
+import { decodeXref, toShortKey } from '../tandem/keys.js';
+
+// Get stream with host information
+const streamName = stream[QC.OName]?.[0] || stream[QC.Name]?.[0] || 'Unnamed';
+
+// Get host reference (priority: parent > room override > room)
+const hostXref = stream[QC.XParent]?.[0] 
+              ?? stream[QC.OXRooms]?.[0] 
+              ?? stream[QC.XRooms]?.[0];
+
+if (hostXref) {
+  const { modelURN, elementKey } = decodeXref(hostXref);
+  const key = toShortKey(elementKey);
+  const hosts = await getElementsByKeys(modelURN, [key]);
+  const host = hosts[0];
+  const hostName = host[QC.OName]?.[0] ?? host[QC.Name]?.[0];
+  console.log(`Stream ${streamName} in ${hostName}`);
+}
+```
+
+### Pattern 2: Convert Stream Values Keys
+
+```javascript
+import { toShortKey } from '../tandem/keys.js';
+
+// API returns stream values with long keys
+const streamValues = await getLastSeenStreamValues(facilityURN, streamKeys);
+
+// Convert to short keys for lookups
+const result = {};
+for (const [longKey, value] of Object.entries(streamValues)) {
+  const shortKey = toShortKey(longKey);
+  result[shortKey] = value;
+}
+```
+
+## Error Handling
+
+### Xref decode returns null
+
+**Cause:** Invalid xref or wrong column family.
+
+**Fix:**
+```javascript
+// Make sure you're using xref columns (x:), not refs (l:)
+const xref = element[QC.XParent]?.[0];  // ✅ Xref
+const ref = element[QC.Parent]?.[0];     // ❌ Ref (same-model, don't decode)
+
+if (xref) {
+  const decoded = decodeXref(xref);
+  if (!decoded) {
+    console.error('Failed to decode xref:', xref);
+  }
+}
+```
+
+### "Invalid base64" errors
+
+**Cause:** Keys/xrefs use URL-safe base64.
+
+**Fix:** The utilities in `tandem/keys.js` already handle this conversion internally. Just use the functions as-is.
+
+## Validation Rules
+
+Always validate that key utilities are properly used:
+
+1. **Import Check**: Import key utilities from `tandem/keys.js`
+2. **Conversion Check**: Convert long keys to short keys before matching with other data
+3. **Xref Decoding**: Always decode xrefs before using element keys
+4. **Batch Processing**: Group xrefs by model for efficient fetching
+5. **Priority Order**: Check xref columns in correct priority (parent > override > legacy)
+
+## When to Convert Keys
+
+| Scenario | Action | Why |
+|----------|--------|-----|
+| API returns element keys | Convert long → short | API returns 24-byte keys |
+| Stream data lookup | Convert long → short | Stream values use long keys as object keys |
+| Xref to element query | Decode xref, then long → short | Xrefs contain long keys |
+| Creating xrefs | Use long keys | Xrefs always use 24-byte keys with flags |
+| Display/logging | Either is fine | Both are valid identifiers |
+
+## Enforcement Rules
+
+1. **Always Import Utilities**: Use functions from `tandem/keys.js`, never manually manipulate keys
+2. **Always Decode Xrefs**: Extract model URN and element key before using
+3. **Use Constants**: Import key size constants from `tandem/constants.js`
+4. **Check for Nulls**: Always validate xref decoding results before using
+5. **Batch Operations**: Group by model for efficient queries
