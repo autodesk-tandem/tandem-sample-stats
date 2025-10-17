@@ -1,7 +1,7 @@
 import { formatUnitName } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { viewAssetDetails } from './assetDetails.js';
-import { viewRoomTreemap } from './roomTreemap.js';
+import { viewRoomBarChart } from './roomBarChart.js';
 
 // Listen for messages from bar chart window to open room details
 window.addEventListener('message', (event) => {
@@ -281,7 +281,7 @@ export async function displayRooms(container, rooms, sortColumn = null, sortDire
   const visualizeBtn = document.getElementById('rooms-visualize-btn');
   if (visualizeBtn) {
     visualizeBtn.addEventListener('click', () => {
-      viewRoomTreemap(rooms);
+      viewRoomBarChart(rooms);
     });
   }
   

@@ -1039,6 +1039,78 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       }
     });
     
+    // Excel Export Utilities
+    const ExcelUtils = {
+      headerStyle: {
+        font: { bold: true, color: { rgb: "000000" } },
+        fill: { fgColor: { rgb: "D3D3D3" } },
+        alignment: { vertical: "center", horizontal: "left" }
+      },
+      
+      blankRowStyle: {
+        fill: { 
+          patternType: "gray125",
+          fgColor: { rgb: "BFBFBF" },
+          bgColor: { rgb: "FFFFFF" }
+        },
+        border: {
+          top: { style: "thin", color: { rgb: "D0D0D0" } },
+          bottom: { style: "thin", color: { rgb: "D0D0D0" } },
+          left: { style: "thin", color: { rgb: "D0D0D0" } },
+          right: { style: "thin", color: { rgb: "D0D0D0" } }
+        }
+      },
+      
+      sanitizeSheetName: function(name, fallback = 'Sheet') {
+        if (!name) return fallback;
+        let sanitized = name
+          .split(':').join('_')
+          .split('/').join('_')
+          .split(String.fromCharCode(92)).join('_')
+          .split('?').join('_')
+          .split('*').join('_')
+          .split('[').join('_')
+          .split(']').join('_')
+          .trim()
+          .substring(0, 31);
+        return sanitized || fallback;
+      },
+      
+      makeUnique: function(baseName, usedNames) {
+        let uniqueName = baseName;
+        let counter = 1;
+        while (usedNames.has(uniqueName)) {
+          const suffix = '_' + counter;
+          uniqueName = baseName.substring(0, 31 - suffix.length) + suffix;
+          counter++;
+        }
+        return uniqueName;
+      },
+      
+      styleHeaderRow: function(sheet, columns, style) {
+        columns.forEach(cell => {
+          if (sheet[cell]) {
+            sheet[cell].s = style;
+          }
+        });
+      },
+      
+      styleBlankRows: function(sheet, data, columns, style) {
+        for (let rowNum = 2; rowNum <= data.length; rowNum++) {
+          const rowData = data[rowNum - 1];
+          if (rowData && rowData.every(cell => cell === '')) {
+            columns.forEach(col => {
+              const cellRef = col + rowNum;
+              if (!sheet[cellRef]) {
+                sheet[cellRef] = { t: 's', v: '', w: '' };
+              }
+              sheet[cellRef].s = style;
+            });
+          }
+        }
+      }
+    };
+    
     // Export to Excel functionality
     async function exportToExcel() {
       const exportBtn = document.getElementById('export-btn');
@@ -1048,7 +1120,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         exportBtn.disabled = true;
         exportBtn.innerHTML = '<span>⏳</span><span>Exporting...</span>';
         
-        // Create workbook
         const workbook = XLSX.utils.book_new();
         
         // Fetch ALL element details once per model (used for both summary and detail sheets)
@@ -1090,8 +1161,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         }
         
         const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
-        
-        // Set column widths
         summarySheet['!cols'] = [
           { wch: 30 }, // Model Name
           { wch: 30 }, // Element Name
@@ -1100,19 +1169,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
           { wch: 35 }  // Element Key
         ];
         
-        // Style header row (row 1)
-        const summaryHeaderCols = ['A', 'B', 'C', 'D', 'E'];
-        summaryHeaderCols.forEach(col => {
-          const cellRef = col + '1';
-          if (summarySheet[cellRef]) {
-            summarySheet[cellRef].s = {
-              font: { bold: true, color: { rgb: "000000" } },
-              fill: { fgColor: { rgb: "D3D3D3" } },
-              alignment: { vertical: "center", horizontal: "left" }
-            };
-          }
-        });
-        
+        ExcelUtils.styleHeaderRow(summarySheet, ['A1', 'B1', 'C1', 'D1', 'E1'], ExcelUtils.headerStyle);
         XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
         
         // Track sheet names to avoid duplicates
@@ -1152,8 +1209,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
           
           if (detailData.length > 1) {
             const detailSheet = XLSX.utils.aoa_to_sheet(detailData);
-            
-            // Set column widths
             detailSheet['!cols'] = [
               { wch: 35 }, // Element Key
               { wch: 30 }, // Element Name
@@ -1163,73 +1218,16 @@ function generateAssetDetailsHTML(elementsByModel, title) {
               { wch: 40 }  // Value
             ];
             
-            // Style header row (row 1)
             const detailHeaderCols = ['A', 'B', 'C', 'D', 'E', 'F'];
-            detailHeaderCols.forEach(col => {
-              const cellRef = col + '1';
-              if (detailSheet[cellRef]) {
-                detailSheet[cellRef].s = {
-                  font: { bold: true, color: { rgb: "000000" } },
-                  fill: { fgColor: { rgb: "D3D3D3" } },
-                  alignment: { vertical: "center", horizontal: "left" }
-                };
-              }
-            });
+            ExcelUtils.styleHeaderRow(detailSheet, ['A1', 'B1', 'C1', 'D1', 'E1', 'F1'], ExcelUtils.headerStyle);
+            ExcelUtils.styleBlankRows(detailSheet, detailData, detailHeaderCols, ExcelUtils.blankRowStyle);
             
-            // Style blank separator rows (gray hatch pattern)
-            for (let rowNum = 2; rowNum <= detailData.length; rowNum++) {
-              // Check if this is a blank row (all cells empty)
-              const rowData = detailData[rowNum - 1];
-              if (rowData && rowData.every(cell => cell === '')) {
-                detailHeaderCols.forEach(col => {
-                  const cellRef = col + rowNum;
-                  // Ensure cell exists in sheet
-                  if (!detailSheet[cellRef]) {
-                    detailSheet[cellRef] = { t: 's', v: '', w: '' };
-                  }
-                  // Apply gray hatch pattern (darker)
-                  detailSheet[cellRef].s = {
-                    fill: { 
-                      patternType: "gray125",
-                      fgColor: { rgb: "BFBFBF" },
-                      bgColor: { rgb: "FFFFFF" }
-                    },
-                    border: {
-                      top: { style: "thin", color: { rgb: "D0D0D0" } },
-                      bottom: { style: "thin", color: { rgb: "D0D0D0" } },
-                      left: { style: "thin", color: { rgb: "D0D0D0" } },
-                      right: { style: "thin", color: { rgb: "D0D0D0" } }
-                    }
-                  };
-                });
-              }
-            }
-            
-            // Sanitize sheet name (max 31 chars, no special chars)
-            let sheetName = modelData.modelName || 'Model';
-            // Replace each invalid character (Excel doesn't allow: : / \\ ? * [ ])
-            sheetName = sheetName.split(':').join('_');
-            sheetName = sheetName.split('/').join('_');
-            sheetName = sheetName.split(String.fromCharCode(92)).join('_'); // backslash
-            sheetName = sheetName.split('?').join('_');
-            sheetName = sheetName.split('*').join('_');
-            sheetName = sheetName.split('[').join('_');
-            sheetName = sheetName.split(']').join('_');
-            // Trim and truncate
-            sheetName = sheetName.trim().substring(0, 31);
-            // Ensure sheet name is not empty after sanitization
-            if (!sheetName || sheetName === '') {
-              sheetName = 'Model_' + DATA.indexOf(modelData);
-            }
-            
-            // Ensure unique sheet name
-            let uniqueSheetName = sheetName;
-            let counter = 1;
-            while (usedSheetNames.has(uniqueSheetName)) {
-              const suffix = '_' + counter;
-              uniqueSheetName = sheetName.substring(0, 31 - suffix.length) + suffix;
-              counter++;
-            }
+            // Sanitize and ensure unique sheet name
+            const baseName = ExcelUtils.sanitizeSheetName(
+              modelData.modelName, 
+              'Model_' + DATA.indexOf(modelData)
+            );
+            const uniqueSheetName = ExcelUtils.makeUnique(baseName, usedSheetNames);
             usedSheetNames.add(uniqueSheetName);
             
             XLSX.utils.book_append_sheet(workbook, detailSheet, uniqueSheetName);

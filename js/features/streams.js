@@ -119,6 +119,7 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
   <title>Stream Chart: ${streamName}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -138,8 +139,14 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
       margin-bottom: 20px;
       border: 1px solid #404040;
     }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
     h1 {
-      margin: 0 0 10px 0;
+      margin: 0;
       color: #0696D7;
       font-size: 24px;
       font-weight: 600;
@@ -199,12 +206,39 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
       position: relative;
       height: 400px;
     }
+    .export-btn {
+      background: #0696D7;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .export-btn:hover {
+      background: #0580b8;
+    }
+    .export-btn:disabled {
+      background: #404040;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="main-header">
-      <h1>${streamName}</h1>
+      <div class="header-top">
+        <h1>${streamName}</h1>
+        <button id="export-btn" class="export-btn">
+          <span>📊</span>
+          <span>Export to Excel</span>
+        </button>
+      </div>
       <div class="info">Stream Key: ${streamKey}</div>
       <div class="info">Model: ${defaultModelURN}</div>
       <div class="info">Time Range: Last 30 days</div>
@@ -335,6 +369,125 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
         }
       });
     });
+    
+    // Excel Export Utilities
+    const ExcelUtils = {
+      headerStyle: {
+        font: { bold: true, color: { rgb: "000000" } },
+        fill: { fgColor: { rgb: "D3D3D3" } },
+        alignment: { vertical: "center", horizontal: "left" }
+      },
+      
+      sanitizeSheetName: function(name, fallback = 'Sheet') {
+        if (!name) return fallback;
+        let sanitized = name
+          .split(':').join('_')
+          .split('/').join('_')
+          .split(String.fromCharCode(92)).join('_')
+          .split('?').join('_')
+          .split('*').join('_')
+          .split('[').join('_')
+          .split(']').join('_')
+          .trim()
+          .substring(0, 31);
+        return sanitized || fallback;
+      },
+      
+      styleHeaderRow: function(sheet, columns, style) {
+        columns.forEach(cell => {
+          if (sheet[cell]) {
+            sheet[cell].s = style;
+          }
+        });
+      }
+    };
+    
+    // Export to Excel functionality
+    function exportToExcel() {
+      const exportBtn = document.getElementById('export-btn');
+      const originalText = exportBtn.innerHTML;
+      
+      try {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span>⏳</span><span>Exporting...</span>';
+        
+        const workbook = XLSX.utils.book_new();
+        
+        // Summary sheet
+        const summaryData = [
+          ['Stream Name', '${streamName}'],
+          ['Stream Key', '${streamKey}'],
+          ['Model', '${defaultModelURN}'],
+          ['Time Range', 'Last 30 days'],
+          ['Export Date', new Date().toLocaleString()],
+          [],
+          ['Property', 'Data Points', 'Last Value', 'Last Seen']
+        ];
+        
+        chartData.forEach(chart => {
+          const lastSeenDate = new Date(chart.lastSeenTimestamp).toLocaleString();
+          summaryData.push([
+            chart.displayName,
+            chart.dataPointCount,
+            chart.lastSeenValue,
+            lastSeenDate
+          ]);
+        });
+        
+        const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+        summarySheet['!cols'] = [{ wch: 25 }, { wch: 50 }];
+        ExcelUtils.styleHeaderRow(summarySheet, ['A7', 'B7', 'C7', 'D7'], ExcelUtils.headerStyle);
+        XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+        
+        // Property sheets
+        chartData.forEach(chart => {
+          const sheetData = [['Timestamp', 'Date', 'Time', chart.displayName]];
+          
+          chart.data.forEach(point => {
+            const date = new Date(point.x);
+            sheetData.push([
+              date.toISOString(),
+              date.toLocaleDateString(),
+              date.toLocaleTimeString(),
+              point.y
+            ]);
+          });
+          
+          const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+          sheet['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
+          ExcelUtils.styleHeaderRow(sheet, ['A1', 'B1', 'C1', 'D1'], ExcelUtils.headerStyle);
+          
+          const sheetName = ExcelUtils.sanitizeSheetName(
+            chart.displayName, 
+            'Property_' + chartData.indexOf(chart)
+          );
+          XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+        });
+        
+        // Download
+        const filename = 'stream-chart-${streamName.replace(/[^a-zA-Z0-9]/g, '_')}-' + 
+                        new Date().toISOString().slice(0, 10) + '.xlsx';
+        XLSX.writeFile(workbook, filename);
+        
+        // Success feedback
+        exportBtn.innerHTML = '<span>✓</span><span>Exported!</span>';
+        setTimeout(() => {
+          exportBtn.innerHTML = originalText;
+          exportBtn.disabled = false;
+        }, 2000);
+        
+      } catch (error) {
+        console.error('Export error:', error);
+        exportBtn.innerHTML = '<span>✗</span><span>Export Failed</span>';
+        setTimeout(() => {
+          exportBtn.innerHTML = originalText;
+          exportBtn.disabled = false;
+        }, 2000);
+      }
+    }
+    
+    // Set up export button
+    document.getElementById('export-btn').addEventListener('click', exportToExcel);
   </script>
 </body>
 </html>`;

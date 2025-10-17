@@ -5,7 +5,7 @@ import { viewAssetDetails } from './assetDetails.js';
  * Generate and open the Room Bar Chart visualization page
  * @param {Array} rooms - Array of room objects with area data
  */
-export function viewRoomTreemap(rooms) {
+export function viewRoomBarChart(rooms) {
   if (!rooms || rooms.length === 0) {
     alert('No rooms or spaces with area data found.');
     return;
@@ -19,18 +19,8 @@ export function viewRoomTreemap(rooms) {
     return;
   }
 
-  // Group by model for hierarchical treemap
-  const dataByModel = {};
-  roomsWithArea.forEach(room => {
-    if (!dataByModel[room.modelId]) {
-      dataByModel[room.modelId] = {
-        modelName: room.modelName || 'Unknown Model',
-        modelId: room.modelId,
-        rooms: []
-      };
-    }
-    dataByModel[room.modelId].rooms.push(room);
-  });
+  // Note: rooms are already grouped by model in the source data
+  // No additional grouping needed for bar chart visualization
 
   const html = generateBarChartHTML(roomsWithArea);
   
