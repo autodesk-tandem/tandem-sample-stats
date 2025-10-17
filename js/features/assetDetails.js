@@ -958,44 +958,41 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         // Create workbook
         const workbook = XLSX.utils.book_new();
         
+        // Fetch ALL element details once per model (used for both summary and detail sheets)
+        // Use Promise.all to fetch all models in parallel for maximum speed
+        const fetchPromises = DATA
+          .filter(modelData => modelData.keys && modelData.keys.length > 0)
+          .map(async modelData => {
+            const elements = await fetchElementDetails(modelData.modelURN, modelData.keys);
+            return {
+              modelData: modelData,
+              elements: elements
+            };
+          });
+        
+        const modelElementsCache = await Promise.all(fetchPromises);
+        
         // Sheet 1: Summary - one row per element
         const summaryData = [
           ['Model Name', 'Element Name', 'Category', 'Classification', 'Element Key']
         ];
         
-        // Fetch element names in batches per model (much more efficient)
-        for (const modelData of DATA) {
-          // Skip if no keys provided
-          if (!modelData.keys || modelData.keys.length === 0) {
-            continue;
-          }
-          
-          // Fetch all elements for this model at once
-          const elements = await fetchElementNames(modelData.modelURN, modelData.keys);
-          
-          // Create a map for quick lookup
-          const elementMap = new Map();
-          elements.forEach(el => {
-            elementMap.set(el['k'], el);
-          });
-          
-          // Add rows in the original key order
-          for (const key of modelData.keys) {
-            const el = elementMap.get(key);
-            if (el) {
-              const name = el['n:!n']?.[0] || el['n:n']?.[0] || 'Unnamed';
-              const categoryId = el['n:c']?.[0];
-              const categoryName = categoryId ? getCategoryName(categoryId) : 'Unknown';
-              const classification = el['n:!v']?.[0] || el['n:v']?.[0] || '';
-              
-              summaryData.push([
-                modelData.modelName,
-                name,
-                categoryName,
-                classification,
-                key
-              ]);
-            }
+        // Build summary from cached data
+        for (const cached of modelElementsCache) {
+          for (const element of cached.elements) {
+            const key = element['k'];
+            const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
+            const categoryId = element['n:c']?.[0];
+            const categoryName = categoryId ? getCategoryName(categoryId) : 'Unknown';
+            const classification = element['n:!v']?.[0] || element['n:v']?.[0] || '';
+            
+            summaryData.push([
+              cached.modelData.modelName,
+              name,
+              categoryName,
+              classification,
+              key
+            ]);
           }
         }
         
@@ -1028,19 +1025,14 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         // Track sheet names to avoid duplicates
         const usedSheetNames = new Set(['Summary']);
         
-        // Sheets 2+: Detailed properties per model
-        for (const modelData of DATA) {
-          // Skip if no keys provided
-          if (!modelData.keys || modelData.keys.length === 0) {
-            continue;
-          }
+        // Sheets 2+: Detailed properties per model (using cached data)
+        for (const cached of modelElementsCache) {
+          const modelData = cached.modelData;
+          const elements = cached.elements;
           
           const detailData = [
             ['Element Key', 'Element Name', 'Property ID', 'Category', 'Property Name', 'Value']
           ];
-          
-          // Fetch all element details for this model
-          const elements = await fetchElementDetails(modelData.modelURN, modelData.keys);
           
           for (let i = 0; i < elements.length; i++) {
             const element = elements[i];
@@ -1122,7 +1114,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
             
             // Sanitize sheet name (max 31 chars, no special chars)
             let sheetName = modelData.modelName || 'Model';
-            console.log('Original model name:', sheetName);
             // Replace each invalid character (Excel doesn't allow: : / \\ ? * [ ])
             sheetName = sheetName.split(':').join('_');
             sheetName = sheetName.split('/').join('_');
@@ -1131,7 +1122,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
             sheetName = sheetName.split('*').join('_');
             sheetName = sheetName.split('[').join('_');
             sheetName = sheetName.split(']').join('_');
-            console.log('After sanitization:', sheetName);
             // Trim and truncate
             sheetName = sheetName.trim().substring(0, 31);
             // Ensure sheet name is not empty after sanitization
@@ -1148,8 +1138,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
               counter++;
             }
             usedSheetNames.add(uniqueSheetName);
-            
-            console.log('Final sheet name:', uniqueSheetName);
             
             XLSX.utils.book_append_sheet(workbook, detailSheet, uniqueSheetName);
           }
