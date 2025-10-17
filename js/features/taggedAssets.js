@@ -1,6 +1,7 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { getTaggedAssetsDetails } from '../api.js';
+import { getTaggedAssetsDetails, getElementsByProperty } from '../api.js';
 import { getSchemaCache } from '../state/schemaCache.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle tagged assets detail view
@@ -18,8 +19,9 @@ const toggleTaggedAssetsDetail = createToggleFunction({
  * @param {Array} propertyDetails - Array of property detail objects
  * @param {string} sortColumn - Column to sort by
  * @param {string} sortDirection - 'asc' or 'desc'
+ * @param {string} facilityURN - Facility URN for fetching element keys
  */
-function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDirection = 'desc') {
+function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDirection = 'desc', facilityURN = null) {
   const tableContainer = document.getElementById('taggedAssets-table');
   if (!tableContainer) return;
 
@@ -88,11 +90,18 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
   
   sortedProperties.forEach(prop => {
     tableHtml += `
-      <tr class="hover:bg-dark-bg/30">
+      <tr class="hover:bg-dark-bg/30" data-property-id="${prop.id}">
         <td class="px-3 py-2 text-dark-text">${prop.category}</td>
         <td class="px-3 py-2 text-dark-text">${prop.name}</td>
         <td class="px-3 py-2 text-dark-text-secondary font-mono">${prop.id}</td>
-        <td class="px-3 py-2 text-right text-dark-text font-semibold">${prop.count.toLocaleString()}</td>
+        <td class="px-3 py-2 text-right text-dark-text font-semibold">
+          <button class="tagged-asset-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
+                  data-property-id="${prop.id}"
+                  data-property-name="${prop.category}.${prop.name}"
+                  title="Click to view ${prop.count} element${prop.count !== 1 ? 's' : ''}">
+            ${prop.count.toLocaleString()}
+          </button>
+        </td>
       </tr>
     `;
   });
@@ -110,7 +119,46 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      renderTaggedAssetsTable(propertyDetails, column, direction);
+      renderTaggedAssetsTable(propertyDetails, column, direction, facilityURN);
+    });
+  });
+
+  // Add click handlers for count buttons
+  const countButtons = tableContainer.querySelectorAll('.tagged-asset-count-btn');
+  countButtons.forEach(button => {
+    button.addEventListener('click', async () => {
+      const propertyId = button.getAttribute('data-property-id');
+      const propertyName = button.getAttribute('data-property-name');
+      
+      if (!facilityURN || !propertyId) {
+        console.error('Missing facilityURN or propertyId');
+        return;
+      }
+      
+      // Show loading state
+      const originalText = button.textContent;
+      button.textContent = '...';
+      button.disabled = true;
+      
+      try {
+        // Fetch element keys grouped by model
+        const elementsByModel = await getElementsByProperty(facilityURN, propertyId);
+        
+        if (elementsByModel.length === 0) {
+          alert('No elements found with this property');
+          return;
+        }
+        
+        // Open details page directly
+        viewAssetDetails(elementsByModel, `Asset Details: ${propertyName}`);
+      } catch (error) {
+        console.error('Error fetching elements:', error);
+        alert('Failed to fetch element keys. See console for details.');
+      } finally {
+        // Restore button state
+        button.textContent = originalText;
+        button.disabled = false;
+      }
     });
   });
 }
@@ -140,11 +188,11 @@ export async function displayTaggedAssets(container, facilityURN, models) {
   `;
 
   try {
-    // Fetch tagged assets details
-    const details = await getTaggedAssetsDetails(facilityURN);
+    // Fetch tagged assets details AND collect element keys in one pass
+    const details = await getTaggedAssetsDetails(facilityURN, true);
     const schemaCache = getSchemaCache();
     
-    // Build header with toggle button
+    // Build header with Asset Details button and toggle button
     let headerHtml = `
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center space-x-2">
@@ -153,16 +201,26 @@ export async function displayTaggedAssets(container, facilityURN, models) {
             <div>Element${details.totalCount !== 1 ? 's' : ''} with user-defined properties</div>
           </div>
         </div>
-        <button id="toggle-taggedAssets-btn"
-                class="p-2 hover:bg-dark-bg/50 rounded transition"
-                title="Show more">
-          <svg id="toggle-taggedAssets-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-          </svg>
-          <svg id="toggle-taggedAssets-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-          </svg>
-        </button>
+        <div class="flex items-center space-x-3">
+          <button id="taggedAssets-asset-details-btn"
+                  class="inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                  title="View detailed information">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Details
+          </button>
+          <button id="toggle-taggedAssets-btn"
+                  class="p-2 hover:bg-dark-bg/50 rounded transition"
+                  title="Show more">
+            <svg id="toggle-taggedAssets-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+            <svg id="toggle-taggedAssets-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     `;
     
@@ -218,13 +276,28 @@ export async function displayTaggedAssets(container, facilityURN, models) {
     
     // Render the sortable table (default sort by count descending)
     if (propertyKeys.length > 0) {
-      renderTaggedAssetsTable(propertyDetails, 'count', 'desc');
+      renderTaggedAssetsTable(propertyDetails, 'count', 'desc', facilityURN);
     }
     
     // Attach toggle event listener
     const toggleBtn = document.getElementById('toggle-taggedAssets-btn');
     if (toggleBtn) {
       toggleBtn.addEventListener('click', toggleTaggedAssetsDetail);
+    }
+    
+    // Attach Asset Details button event listener
+    const assetDetailsBtn = document.getElementById('taggedAssets-asset-details-btn');
+    if (assetDetailsBtn) {
+      assetDetailsBtn.addEventListener('click', () => {
+        // Use the cached elementsByModel data from initial load
+        if (!details.elementsByModel || details.elementsByModel.length === 0) {
+          alert('No tagged assets found');
+          return;
+        }
+        
+        // Open Details page with cached data (no additional API calls!)
+        viewAssetDetails(details.elementsByModel, `Tagged Asset Details`);
+      });
     }
   } catch (error) {
     console.error('Error fetching tagged assets:', error);

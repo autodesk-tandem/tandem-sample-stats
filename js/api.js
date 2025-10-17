@@ -1,6 +1,7 @@
 import { getEnv } from './config.js';
 import { ColumnFamilies, ElementFlags, QC, SystemClassNames } from './../tandem/constants.js';
 import { toFullKey, toSystemId } from './../tandem/keys.js';
+import { isDefaultModel } from './utils.js';
 
 const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;
@@ -620,11 +621,13 @@ export async function getSystems(facilityURN, models) {
     systems.forEach(system => {
       system.subsystems = subsystems.filter(sub => sub.parent === system.key);
     });
-    // calculate element count for each system
+    // calculate element count for each system and track by model
     const systemMap = {};
 
     for (const system of systems) {
       systemMap[system.systemId] = system;
+      // Initialize elementsByModel as an object to group keys by model
+      system.elementsByModel = {};
     }
     const systemElementsMap = {};
     const systemClassMap = {};
@@ -689,22 +692,35 @@ export async function getSystems(facilityURN, models) {
           const matches = elementClassNames.some(name => classNames.includes(name));
 
           if (matches) {
-            // if system has filter, then check that element matches it
+            // Track total count
             const elementList = systemElementsMap[systemId] || new Set();
-
             elementList.add(key);
             systemElementsMap[systemId] = elementList;
+            
+            // Track by model
+            if (!system.elementsByModel[model.modelId]) {
+              system.elementsByModel[model.modelId] = {
+                modelURN: model.modelId,
+                modelName: model.label || 'Unknown Model',
+                keys: new Set()
+              };
+            }
+            system.elementsByModel[model.modelId].keys.add(key);
           }
         }
       }
     }
-    // update element count
-    for (const [systemId, elementSet] of Object.entries(systemElementsMap)) {
-      const system = systemMap[systemId];
-
-      if (system) {
-        system.elementCount = elementSet.size;
-      }
+    // update element count and convert Sets to Arrays
+    for (const system of systems) {
+      const elementSet = systemElementsMap[system.systemId];
+      system.elementCount = elementSet ? elementSet.size : 0;
+      
+      // Convert elementsByModel Sets to Arrays
+      system.elementsByModel = Object.values(system.elementsByModel).map(model => ({
+        modelURN: model.modelURN,
+        modelName: model.modelName,
+        keys: Array.from(model.keys)
+      }));
     }
     return systems;
   } catch (error) {
@@ -732,13 +748,15 @@ export async function getTaggedAssetsCount(facilityURN) {
 /**
  * Get detailed information about tagged assets and their user-defined properties
  * @param {string} facilityURN - Facility URN
- * @returns {Promise<Object>} Object with totalCount and properties map
+ * @param {boolean} includeKeys - If true, also collect element keys grouped by model
+ * @returns {Promise<Object>} Object with totalCount, propertyUsage, and optionally elementsByModel
  */
-export async function getTaggedAssetsDetails(facilityURN) {
+export async function getTaggedAssetsDetails(facilityURN, includeKeys = false) {
   try {
     const models = await getModels(facilityURN);
     let totalTaggedAssets = 0;
     const propertyUsage = {}; // Map of qualifiedProp -> count
+    const elementsByModel = []; // Array of {modelURN, modelName, keys}
     
     for (const model of models) {
       // Scan for elements with user-defined properties (z family = DtProperties)
@@ -757,6 +775,7 @@ export async function getTaggedAssetsDetails(facilityURN) {
       }
       
       const elements = await response.json();
+      const modelKeys = [];
       
       // Process each element
       elements.forEach(element => {
@@ -765,6 +784,11 @@ export async function getTaggedAssetsDetails(facilityURN) {
         
         if (zProperties.length > 0) {
           totalTaggedAssets++;
+          
+          // Collect element key if requested
+          if (includeKeys && element[QC.Key]) {
+            modelKeys.push(element[QC.Key]);
+          }
           
           // Count usage of each z: property
           zProperties.forEach(prop => {
@@ -775,18 +799,99 @@ export async function getTaggedAssetsDetails(facilityURN) {
           });
         }
       });
+      
+      // Add model to results if it has tagged assets
+      if (includeKeys && modelKeys.length > 0) {
+        elementsByModel.push({
+          modelURN: model.modelId,
+          modelName: model.label || 'Unknown Model',
+          keys: modelKeys
+        });
+      }
     }
     
-    return {
+    const result = {
       totalCount: totalTaggedAssets,
       propertyUsage: propertyUsage
     };
+    
+    if (includeKeys) {
+      result.elementsByModel = elementsByModel;
+    }
+    
+    return result;
   } catch (error) {
     console.error('Error fetching tagged assets details:', error);
     return {
       totalCount: 0,
-      propertyUsage: {}
+      propertyUsage: {},
+      elementsByModel: includeKeys ? [] : undefined
     };
+  }
+}
+
+/**
+ * Get element keys for elements that have a specific property, grouped by model
+ * @param {string} facilityURN - Facility URN
+ * @param {string} qualifiedProp - Qualified property (e.g., 'z:LQ')
+ * @returns {Promise<Array<{modelURN: string, modelName: string, keys: Array<string>}>>} Array of models with their element keys
+ */
+export async function getElementsByProperty(facilityURN, qualifiedProp) {
+  try {
+    const models = await getModels(facilityURN);
+    const resultsByModel = [];
+    
+    // Extract family from qualified property (e.g., 'z' from 'z:LQ')
+    const [family] = qualifiedProp.split(':');
+    
+    for (const model of models) {
+      // Scan for elements with the specific property
+      const payload = JSON.stringify({
+        families: [family],
+        qualifiedColumns: [qualifiedProp],
+        includeHistory: false,
+        skipArrays: true
+      });
+      
+      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch elements for model ${model.modelId}`);
+        continue;
+      }
+      
+      const elements = await response.json();
+      const elementKeys = [];
+      
+      // Process each element - filter out version string
+      elements.forEach(element => {
+        if (typeof element === 'object' && element !== null && element[QC.Key]) {
+          // Check if the element has the property
+          if (element[qualifiedProp]) {
+            elementKeys.push(element[QC.Key]);
+          }
+        }
+      });
+      
+      // Only include models that have elements with this property
+      if (elementKeys.length > 0) {
+        // Determine model name
+        const isDefault = isDefaultModel(facilityURN, model.modelId);
+        const modelName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
+        
+        resultsByModel.push({
+          modelURN: model.modelId,
+          modelName: modelName,
+          keys: elementKeys
+        });
+      }
+    }
+    
+    return resultsByModel;
+  } catch (error) {
+    console.error('Error fetching elements by property:', error);
+    return [];
   }
 }
 

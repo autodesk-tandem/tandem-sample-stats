@@ -1,6 +1,7 @@
 import { getElementCount, getHistory, getModelProperties } from '../api.js';
 import { isDefaultModel } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle models detail view
@@ -506,10 +507,27 @@ function generateHistoryHTML(allHistory, facilityURN) {
     }
     
     .modal-header h2 {
-      margin: 0;
+      margin: 0 0 4px 0;
       color: #0696D7;
       font-size: 18px;
       font-weight: 600;
+    }
+    
+    .modal-model-info {
+      font-size: 12px;
+      color: #a0a0a0;
+    }
+    
+    .modal-model-name {
+      font-weight: 600;
+      color: #0696D7;
+      margin-bottom: 2px;
+    }
+    
+    .modal-model-urn {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #808080;
     }
     
     .modal-header-actions {
@@ -565,44 +583,30 @@ function generateHistoryHTML(allHistory, facilityURN) {
       flex: 1;
     }
     
-    .element-key {
+    .element-keys-textarea {
+      width: 100%;
       font-family: 'Courier New', monospace;
       font-size: 12px;
-      padding: 8px 12px;
+      padding: 12px;
       background: #1a1a1a;
       border: 1px solid #404040;
       border-radius: 4px;
-      margin-bottom: 8px;
       color: #e0e0e0;
-      word-break: break-all;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      resize: vertical;
+      min-height: 200px;
+      max-height: 500px;
+      line-height: 1.5;
     }
     
-    .element-key-text {
-      flex: 1;
-      margin-right: 10px;
+    .element-keys-textarea:focus {
+      outline: none;
+      border-color: #0696D7;
+      box-shadow: 0 0 0 2px rgba(6, 150, 215, 0.2);
     }
     
-    .copy-btn {
+    .element-keys-textarea::selection {
       background: #0696D7;
-      border: none;
       color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.2s;
-    }
-    
-    .copy-btn:hover {
-      background: #057ab5;
-    }
-    
-    .copy-btn.copied {
-      background: #10b981;
     }
     
     .element-count-btn {
@@ -613,11 +617,36 @@ function generateHistoryHTML(allHistory, facilityURN) {
       font-family: inherit;
       color: #0696D7;
       font-weight: 600;
+      cursor: pointer;
     }
     
     .element-count-btn:hover {
       color: #057ab5;
       text-decoration: underline;
+    }
+    
+    .view-details-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border: 1px solid #0696D7;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 4px;
+      color: #0696D7;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .view-details-btn:hover {
+      background: #0696D7;
+      color: white;
+    }
+    
+    .view-details-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   </style>
 </head>
@@ -629,10 +658,18 @@ function generateHistoryHTML(allHistory, facilityURN) {
           <h1>Model Change History</h1>
           <div class="info">Facility: ${facilityURN}</div>
         </div>
-        <div class="time-range-controls">
-          <button class="time-range-btn active" data-range="7days">7 Days</button>
-          <button class="time-range-btn" data-range="30days">30 Days</button>
-          <button class="time-range-btn" data-range="all">All Time</button>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button id="view-all-details-btn" class="view-details-btn">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; margin-right: 6px;">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Details
+          </button>
+          <div class="time-range-controls">
+            <button class="time-range-btn active" data-range="7days">7 Days</button>
+            <button class="time-range-btn" data-range="30days">30 Days</button>
+            <button class="time-range-btn" data-range="all">All Time</button>
+          </div>
         </div>
       </div>
       <div class="stats">
@@ -644,6 +681,10 @@ function generateHistoryHTML(allHistory, facilityURN) {
           <span class="stat-label">Total Changes</span>
           <span class="stat-value" id="stat-changes">0</span>
         </div>
+        <div class="stat-item">
+          <span class="stat-label">Unique Elements</span>
+          <span class="stat-value" id="stat-elements">0</span>
+        </div>
       </div>
     </div>
     
@@ -654,7 +695,10 @@ function generateHistoryHTML(allHistory, facilityURN) {
   <div class="modal-overlay" id="element-modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Element Keys</h2>
+        <div>
+          <h2>Element Keys</h2>
+          <div id="modal-model-info" class="modal-model-info"></div>
+        </div>
         <div class="modal-header-actions">
           <button class="copy-all-btn" id="copy-all-btn">Copy All</button>
           <button class="modal-close" id="modal-close">&times;</button>
@@ -710,9 +754,21 @@ function generateHistoryHTML(allHistory, facilityURN) {
       const modelsWithHistory = filteredHistory.filter(item => item.history && item.history.length > 0);
       const totalChanges = filteredHistory.reduce((sum, item) => sum + item.history.length, 0);
       
+      // Calculate unique elements across all changes
+      const uniqueElementsSet = new Set();
+      filteredHistory.forEach(model => {
+        model.history.forEach(entry => {
+          if (entry.k && Array.isArray(entry.k)) {
+            entry.k.forEach(key => uniqueElementsSet.add(key));
+          }
+        });
+      });
+      const uniqueElements = uniqueElementsSet.size;
+      
       // Update stats
       document.getElementById('stat-models').textContent = modelsWithHistory.length;
       document.getElementById('stat-changes').textContent = totalChanges;
+      document.getElementById('stat-elements').textContent = uniqueElements;
       
       if (modelsWithHistory.length === 0) {
         container.innerHTML = '<div class="empty-state">No changes found in the selected time range</div>';
@@ -774,6 +830,8 @@ function generateHistoryHTML(allHistory, facilityURN) {
                 data-elements="\${elementCount}"
                 data-author="\${author}"
                 data-description="\${description}"
+                data-model-name="\${item.modelName}"
+                data-model-id="\${item.modelId}"
                 data-element-keys='\${elementKeys}'>
               <td class="px-4 py-3 text-sm text-dark-text-secondary">\${i + 1}</td>
               <td class="px-4 py-3 text-sm text-dark-text-secondary">\${timeStr}</td>
@@ -905,22 +963,31 @@ function generateHistoryHTML(allHistory, facilityURN) {
     // Modal functionality
     const modal = document.getElementById('element-modal');
     const modalClose = document.getElementById('modal-close');
+    const modalModelInfo = document.getElementById('modal-model-info');
     const elementKeysList = document.getElementById('element-keys-list');
     const copyAllBtn = document.getElementById('copy-all-btn');
-    let currentElementKeys = [];
+    let currentElementData = null;
     
     modalClose.addEventListener('click', () => {
       modal.classList.remove('active');
     });
     
-    // Copy all element keys as JSON array
+    // Copy all element keys in structured format
     copyAllBtn.addEventListener('click', () => {
-      if (currentElementKeys.length === 0) {
+      if (!currentElementData || currentElementData.keys.length === 0) {
         return;
       }
       
-      const jsonArray = JSON.stringify(currentElementKeys, null, 2);
-      navigator.clipboard.writeText(jsonArray).then(() => {
+      // Format as structured JSON (same as Tagged Assets)
+      const structuredData = [{
+        modelURN: currentElementData.modelURN,
+        modelName: currentElementData.modelName,
+        elementCount: currentElementData.keys.length,
+        elementKeys: currentElementData.keys
+      }];
+      
+      const jsonOutput = JSON.stringify(structuredData, null, 2);
+      navigator.clipboard.writeText(jsonOutput).then(() => {
         const originalText = copyAllBtn.textContent;
         copyAllBtn.textContent = 'Copied!';
         copyAllBtn.classList.add('copied');
@@ -947,41 +1014,112 @@ function generateHistoryHTML(allHistory, facilityURN) {
       }
     });
     
+    // View all details button handler
+    document.getElementById('view-all-details-btn').addEventListener('click', () => {
+      // Collect all unique element keys from the currently displayed (filtered) history
+      const allRows = document.querySelectorAll('#tables-container tr[data-element-keys]');
+      
+      if (allRows.length === 0) {
+        alert('No changes found in the selected time range');
+        return;
+      }
+      
+      // Group elements by model
+      const modelMap = new Map();
+      
+      allRows.forEach(row => {
+        const modelId = row.dataset.modelId;
+        const modelName = row.dataset.modelName;
+        const elementKeys = JSON.parse(row.dataset.elementKeys || '[]');
+        
+        if (!modelMap.has(modelId)) {
+          modelMap.set(modelId, {
+            modelURN: modelId,
+            modelName: modelName,
+            keys: new Set()
+          });
+        }
+        
+        // Add all keys (Set automatically deduplicates)
+        elementKeys.forEach(key => modelMap.get(modelId).keys.add(key));
+      });
+      
+      // Convert sets to arrays and filter out models with no keys
+      const elementsByModel = Array.from(modelMap.values())
+        .map(model => ({
+          modelURN: model.modelURN,
+          modelName: model.modelName,
+          keys: Array.from(model.keys)
+        }))
+        .filter(model => model.keys.length > 0); // Only include models with keys
+      
+      // Check if we have any valid models
+      if (elementsByModel.length === 0) {
+        alert('No elements found in the selected changes');
+        return;
+      }
+      
+      // Calculate total
+      const totalElements = elementsByModel.reduce((sum, model) => sum + model.keys.length, 0);
+      
+      // Create title based on current filter
+      let timeRangeText = '';
+      if (currentTimeRange === '7days') {
+        timeRangeText = '7 Days';
+      } else if (currentTimeRange === '30days') {
+        timeRangeText = '30 Days';
+      } else {
+        timeRangeText = 'All Time';
+      }
+      
+      const title = \`History Details: \${timeRangeText}\`;
+      
+      if (window.viewAssetDetails) {
+        window.viewAssetDetails(elementsByModel, title);
+      } else {
+        alert('Asset details functionality is not available');
+      }
+    });
+    
     // Event delegation for dynamic content
     document.addEventListener('click', (e) => {
       if (e.target.classList.contains('element-count-btn')) {
         const row = e.target.closest('tr');
         const elementKeys = JSON.parse(row.dataset.elementKeys || '[]');
+        const modelName = row.dataset.modelName;
+        const modelId = row.dataset.modelId;
+        const operation = row.dataset.operation;
+        const timestamp = row.dataset.timestamp;
         
         if (elementKeys.length === 0) {
           return;
         }
         
-        // Store element keys for copy all functionality
-        currentElementKeys = elementKeys;
-        
-        elementKeysList.innerHTML = elementKeys.map((key, index) => \`
-          <div class="element-key">
-            <span class="element-key-text">\${index + 1}. \${key}</span>
-            <button class="copy-btn" data-key="\${key}">Copy</button>
-          </div>
-        \`).join('');
-        
-        modal.classList.add('active');
-      }
-      
-      if (e.target.classList.contains('copy-btn')) {
-        const key = e.target.dataset.key;
-        navigator.clipboard.writeText(key).then(() => {
-          const originalText = e.target.textContent;
-          e.target.textContent = 'Copied!';
-          e.target.classList.add('copied');
-          
-          setTimeout(() => {
-            e.target.textContent = originalText;
-            e.target.classList.remove('copied');
-          }, 2000);
+        // Format timestamp for title
+        const date = new Date(parseInt(timestamp));
+        const dateStr = date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
         });
+        
+        // Open Asset Details page
+        const elementsByModel = [{
+          modelURN: modelId,
+          modelName: modelName,
+          keys: elementKeys
+        }];
+        
+        const title = \`Change Details: \${dateStr}\`;
+        
+        if (window.viewAssetDetails) {
+          window.viewAssetDetails(elementsByModel, title);
+        } else {
+          alert('Asset details functionality is not available');
+        }
       }
     });
     
@@ -1080,6 +1218,9 @@ async function viewModelsHistory(facilityURN, models, button = null) {
     
     historyWindow.document.write(htmlContent);
     historyWindow.document.close();
+    
+    // Expose viewAssetDetails to the child window
+    historyWindow.viewAssetDetails = viewAssetDetails;
   } catch (error) {
     console.error('Error viewing model history:', error);
     alert('Failed to load model history. See console for details.');

@@ -4,6 +4,7 @@
  */
 
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle systems detail view
@@ -26,20 +27,12 @@ export async function displaySystems(container, systems, facilityURN) {
   try {
     if (!systems || systems.length === 0) {
       container.innerHTML = `
-        <div class="flex items-center justify-between mb-3">
-          <div class="flex items-center space-x-2">
-            <div class="text-xl font-bold text-tandem-blue">0</div>
-            <div class="text-sm text-dark-text-secondary">
-              <div>Systems</div>
-              <div class="text-xs text-dark-text-secondary">No systems found</div>
-            </div>
-          </div>
+        <div class="flex items-center space-x-2 mb-3">
+          <div class="text-xl font-bold text-tandem-blue">0</div>
+          <div class="text-sm text-dark-text-secondary">Systems</div>
         </div>
-        <div class="text-dark-text-secondary text-sm">
-          <p>No systems found in the default model.</p>
-          <p class="text-xs mt-2 text-dark-text-secondary/70">
-            Systems are typically created when you define system classifications in Autodesk Tandem.
-          </p>
+        <div class="text-dark-text-secondary text-xs">
+          Systems are created when you define system classifications in Autodesk Tandem.
         </div>
       `;
       return;
@@ -99,19 +92,31 @@ export async function displaySystems(container, systems, facilityURN) {
               <div class="flex items-center space-x-2 mb-1">
                 <h3 class="text-base font-semibold text-dark-text">${escapeHtml(system.name)}</h3>
               </div>
-              <div class="text-xs text-dark-text-secondary mt-1">Element count: ${system.elementCount}</div>
+              <div class="flex items-center space-x-4 mt-2">
+                <div class="text-xs text-dark-text-secondary">
+                  <span class="font-medium text-dark-text">${system.elementCount}</span> element${system.elementCount !== 1 ? 's' : ''}
+                </div>
+                <div class="text-dark-text-secondary">•</div>
+                <div class="text-xs text-dark-text-secondary">
+                  <span class="font-medium text-dark-text">${subsystemCount}</span> subsystem${subsystemCount !== 1 ? 's' : ''}
+                </div>
+              </div>
             </div>
-            <div class="text-right flex-shrink-0">
-              <div class="text-lg font-bold text-tandem-blue">${subsystemCount}</div>
-              <div class="text-xs text-dark-text-secondary">Subsystems</div>
-            </div>
+            ${system.elementCount > 0 ? `
+              <button class="system-details-btn inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                      data-system-index="${i}"
+                      title="View system elements">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                </svg>
+                Details
+              </button>
+            ` : ''}
           </div>
           
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-            <div>
-              <span class="font-medium text-dark-text">System ID:</span>
-              <span class="text-dark-text-secondary ml-2 font-mono text-xs break-all">${escapeHtml(system.systemId)}</span>
-            </div>
+          <div class="text-xs text-dark-text-secondary">
+            <span class="font-medium text-dark-text">System ID:</span>
+            <span class="ml-2 font-mono">${escapeHtml(system.systemId)}</span>
           </div>
       `;
 
@@ -159,6 +164,21 @@ export async function displaySystems(container, systems, facilityURN) {
     if (toggleBtn) {
       toggleBtn.addEventListener('click', toggleSystemsDetail);
     }
+
+    // Bind Details button event listeners
+    const detailButtons = container.querySelectorAll('.system-details-btn');
+    detailButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const systemIndex = parseInt(btn.dataset.systemIndex);
+        const system = sortedSystems[systemIndex];
+        
+        if (system && system.elementsByModel && system.elementsByModel.length > 0) {
+          // Pass the grouped element data directly to viewAssetDetails
+          viewAssetDetails(system.elementsByModel, `${system.name} System Details`);
+        }
+      });
+    });
 
   } catch (error) {
     console.error('Error displaying systems:', error);

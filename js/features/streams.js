@@ -2,6 +2,7 @@ import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 import { QC } from '../../tandem/constants.js';
 import { decodeXref, toShortKey } from '../../tandem/keys.js';
 
@@ -118,6 +119,7 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
   <title>Stream Chart: ${streamName}</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+  <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
@@ -137,8 +139,14 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
       margin-bottom: 20px;
       border: 1px solid #404040;
     }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
     h1 {
-      margin: 0 0 10px 0;
+      margin: 0;
       color: #0696D7;
       font-size: 24px;
       font-weight: 600;
@@ -198,12 +206,39 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
       position: relative;
       height: 400px;
     }
+    .export-btn {
+      background: #0696D7;
+      color: white;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .export-btn:hover {
+      background: #0580b8;
+    }
+    .export-btn:disabled {
+      background: #404040;
+      cursor: not-allowed;
+    }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="main-header">
-      <h1>${streamName}</h1>
+      <div class="header-top">
+        <h1>${streamName}</h1>
+        <button id="export-btn" class="export-btn">
+          <span>📊</span>
+          <span>Export to Excel</span>
+        </button>
+      </div>
       <div class="info">Stream Key: ${streamKey}</div>
       <div class="info">Model: ${defaultModelURN}</div>
       <div class="info">Time Range: Last 30 days</div>
@@ -334,6 +369,125 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
         }
       });
     });
+    
+    // Excel Export Utilities
+    const ExcelUtils = {
+      headerStyle: {
+        font: { bold: true, color: { rgb: "000000" } },
+        fill: { fgColor: { rgb: "D3D3D3" } },
+        alignment: { vertical: "center", horizontal: "left" }
+      },
+      
+      sanitizeSheetName: function(name, fallback = 'Sheet') {
+        if (!name) return fallback;
+        let sanitized = name
+          .split(':').join('_')
+          .split('/').join('_')
+          .split(String.fromCharCode(92)).join('_')
+          .split('?').join('_')
+          .split('*').join('_')
+          .split('[').join('_')
+          .split(']').join('_')
+          .trim()
+          .substring(0, 31);
+        return sanitized || fallback;
+      },
+      
+      styleHeaderRow: function(sheet, columns, style) {
+        columns.forEach(cell => {
+          if (sheet[cell]) {
+            sheet[cell].s = style;
+          }
+        });
+      }
+    };
+    
+    // Export to Excel functionality
+    function exportToExcel() {
+      const exportBtn = document.getElementById('export-btn');
+      const originalText = exportBtn.innerHTML;
+      
+      try {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span>⏳</span><span>Exporting...</span>';
+        
+        const workbook = XLSX.utils.book_new();
+        
+        // Summary sheet
+        const summaryData = [
+          ['Stream Name', '${streamName}'],
+          ['Stream Key', '${streamKey}'],
+          ['Model', '${defaultModelURN}'],
+          ['Time Range', 'Last 30 days'],
+          ['Export Date', new Date().toLocaleString()],
+          [],
+          ['Property', 'Data Points', 'Last Value', 'Last Seen']
+        ];
+        
+        chartData.forEach(chart => {
+          const lastSeenDate = new Date(chart.lastSeenTimestamp).toLocaleString();
+          summaryData.push([
+            chart.displayName,
+            chart.dataPointCount,
+            chart.lastSeenValue,
+            lastSeenDate
+          ]);
+        });
+        
+        const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+        summarySheet['!cols'] = [{ wch: 25 }, { wch: 50 }];
+        ExcelUtils.styleHeaderRow(summarySheet, ['A7', 'B7', 'C7', 'D7'], ExcelUtils.headerStyle);
+        XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+        
+        // Property sheets
+        chartData.forEach(chart => {
+          const sheetData = [['Timestamp', 'Date', 'Time', chart.displayName]];
+          
+          chart.data.forEach(point => {
+            const date = new Date(point.x);
+            sheetData.push([
+              date.toISOString(),
+              date.toLocaleDateString(),
+              date.toLocaleTimeString(),
+              point.y
+            ]);
+          });
+          
+          const sheet = XLSX.utils.aoa_to_sheet(sheetData);
+          sheet['!cols'] = [{ wch: 25 }, { wch: 12 }, { wch: 12 }, { wch: 15 }];
+          ExcelUtils.styleHeaderRow(sheet, ['A1', 'B1', 'C1', 'D1'], ExcelUtils.headerStyle);
+          
+          const sheetName = ExcelUtils.sanitizeSheetName(
+            chart.displayName, 
+            'Property_' + chartData.indexOf(chart)
+          );
+          XLSX.utils.book_append_sheet(workbook, sheet, sheetName);
+        });
+        
+        // Download
+        const filename = 'stream-chart-${streamName.replace(/[^a-zA-Z0-9]/g, '_')}-' + 
+                        new Date().toISOString().slice(0, 10) + '.xlsx';
+        XLSX.writeFile(workbook, filename);
+        
+        // Success feedback
+        exportBtn.innerHTML = '<span>✓</span><span>Exported!</span>';
+        setTimeout(() => {
+          exportBtn.innerHTML = originalText;
+          exportBtn.disabled = false;
+        }, 2000);
+        
+      } catch (error) {
+        console.error('Export error:', error);
+        exportBtn.innerHTML = '<span>✗</span><span>Export Failed</span>';
+        setTimeout(() => {
+          exportBtn.innerHTML = originalText;
+          exportBtn.disabled = false;
+        }, 2000);
+      }
+    }
+    
+    // Set up export button
+    document.getElementById('export-btn').addEventListener('click', exportToExcel);
   </script>
 </body>
 </html>`;
@@ -414,7 +568,7 @@ export async function displayStreams(container, streams, facilityURN) {
     return;
   }
 
-  // Build header with toggle button (always visible)
+  // Build header with Asset Details button and toggle button
   let headerHtml = `
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
@@ -423,16 +577,26 @@ export async function displayStreams(container, streams, facilityURN) {
           <div>Stream${streams.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
-      <button id="toggle-streams-btn"
-              class="p-2 hover:bg-dark-bg/50 rounded transition"
-              title="Show more">
-        <svg id="toggle-streams-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-        </svg>
-        <svg id="toggle-streams-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-        </svg>
-      </button>
+      <div class="flex items-center space-x-3">
+        <button id="streams-asset-details-btn"
+                class="inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                title="View detailed information">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          Details
+        </button>
+        <button id="toggle-streams-btn"
+                class="p-2 hover:bg-dark-bg/50 rounded transition"
+                title="Show more">
+          <svg id="toggle-streams-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+          <svg id="toggle-streams-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   `;
   
@@ -597,6 +761,29 @@ export async function displayStreams(container, streams, facilityURN) {
   const toggleBtn = document.getElementById('toggle-streams-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleStreamsDetail);
+  }
+  
+  // Add Asset Details button event listener
+  const assetDetailsBtn = document.getElementById('streams-asset-details-btn');
+  if (assetDetailsBtn) {
+    assetDetailsBtn.addEventListener('click', () => {
+      // Get default model URN (streams are always in default model)
+      const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+      const defaultModelName = '** Default Model **';
+      
+      // Collect all stream keys
+      const streamKeys = streams.map(s => s[QC.Key]);
+      
+      // Create element data structure for Asset Details
+      const elementsByModel = [{
+        modelURN: defaultModelURN,
+        modelName: defaultModelName,
+        keys: streamKeys
+      }];
+      
+      // Open Details page
+      viewAssetDetails(elementsByModel, `Stream Details`);
+    });
   }
   
   // Bind view chart button event listeners
