@@ -188,8 +188,8 @@ export async function displayTaggedAssets(container, facilityURN, models) {
   `;
 
   try {
-    // Fetch tagged assets details
-    const details = await getTaggedAssetsDetails(facilityURN);
+    // Fetch tagged assets details AND collect element keys in one pass
+    const details = await getTaggedAssetsDetails(facilityURN, true);
     const schemaCache = getSchemaCache();
     
     // Build header with Asset Details button and toggle button
@@ -288,54 +288,15 @@ export async function displayTaggedAssets(container, facilityURN, models) {
     // Attach Asset Details button event listener
     const assetDetailsBtn = document.getElementById('taggedAssets-asset-details-btn');
     if (assetDetailsBtn) {
-      assetDetailsBtn.addEventListener('click', async () => {
-        // Show loading state
-        const originalHTML = assetDetailsBtn.innerHTML;
-        assetDetailsBtn.innerHTML = '<svg class="w-4 h-4 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Loading...';
-        assetDetailsBtn.disabled = true;
-        
-        try {
-          // Collect ALL elements that have ANY user-defined property
-          const allElementsByModel = new Map();
-          
-          // Iterate through all properties and collect element keys
-          for (const propId of propertyKeys) {
-            const elementsByModel = await getElementsByProperty(facilityURN, propId);
-            
-            // Merge into our map
-            elementsByModel.forEach(modelData => {
-              if (!allElementsByModel.has(modelData.modelURN)) {
-                allElementsByModel.set(modelData.modelURN, {
-                  modelURN: modelData.modelURN,
-                  modelName: modelData.modelName,
-                  keys: new Set()
-                });
-              }
-              // Add all keys to the set (automatically deduplicates)
-              modelData.keys.forEach(key => {
-                allElementsByModel.get(modelData.modelURN).keys.add(key);
-              });
-            });
-          }
-          
-          // Convert sets to arrays
-          const elementsByModelArray = Array.from(allElementsByModel.values()).map(model => ({
-            modelURN: model.modelURN,
-            modelName: model.modelName,
-            keys: Array.from(model.keys)
-          }));
-          
-          // Open Details page
-          viewAssetDetails(elementsByModelArray, `Tagged Asset Details`);
-          
-        } catch (error) {
-          console.error('Error loading asset details:', error);
-          alert('Failed to load asset details. See console for details.');
-        } finally {
-          // Restore button state
-          assetDetailsBtn.innerHTML = originalHTML;
-          assetDetailsBtn.disabled = false;
+      assetDetailsBtn.addEventListener('click', () => {
+        // Use the cached elementsByModel data from initial load
+        if (!details.elementsByModel || details.elementsByModel.length === 0) {
+          alert('No tagged assets found');
+          return;
         }
+        
+        // Open Details page with cached data (no additional API calls!)
+        viewAssetDetails(details.elementsByModel, `Tagged Asset Details`);
       });
     }
   } catch (error) {

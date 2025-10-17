@@ -4,6 +4,7 @@
  */
 
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle systems detail view
@@ -101,9 +102,21 @@ export async function displaySystems(container, systems, facilityURN) {
               </div>
               <div class="text-xs text-dark-text-secondary mt-1">Element count: ${system.elementCount}</div>
             </div>
-            <div class="text-right flex-shrink-0">
-              <div class="text-lg font-bold text-tandem-blue">${subsystemCount}</div>
-              <div class="text-xs text-dark-text-secondary">Subsystems</div>
+            <div class="flex items-center space-x-3 flex-shrink-0">
+              ${system.elementCount > 0 ? `
+                <button class="system-details-btn inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                        data-system-index="${i}"
+                        title="View system elements">
+                  <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+                  </svg>
+                  Details
+                </button>
+              ` : ''}
+              <div class="text-right">
+                <div class="text-lg font-bold text-tandem-blue">${subsystemCount}</div>
+                <div class="text-xs text-dark-text-secondary">Subsystems</div>
+              </div>
             </div>
           </div>
           
@@ -159,6 +172,21 @@ export async function displaySystems(container, systems, facilityURN) {
     if (toggleBtn) {
       toggleBtn.addEventListener('click', toggleSystemsDetail);
     }
+
+    // Bind Details button event listeners
+    const detailButtons = container.querySelectorAll('.system-details-btn');
+    detailButtons.forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const systemIndex = parseInt(btn.dataset.systemIndex);
+        const system = sortedSystems[systemIndex];
+        
+        if (system && system.elementsByModel && system.elementsByModel.length > 0) {
+          // Pass the grouped element data directly to viewAssetDetails
+          viewAssetDetails(system.elementsByModel, `${system.name} System Details`);
+        }
+      });
+    });
 
   } catch (error) {
     console.error('Error displaying systems:', error);
