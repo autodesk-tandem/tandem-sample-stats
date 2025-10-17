@@ -1,6 +1,7 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { getTaggedAssetsDetails } from '../api.js';
+import { getTaggedAssetsDetails, getElementsByProperty } from '../api.js';
 import { getSchemaCache } from '../state/schemaCache.js';
+import { showElementListModal } from '../components/elementListModal.js';
 
 /**
  * Toggle tagged assets detail view
@@ -18,8 +19,9 @@ const toggleTaggedAssetsDetail = createToggleFunction({
  * @param {Array} propertyDetails - Array of property detail objects
  * @param {string} sortColumn - Column to sort by
  * @param {string} sortDirection - 'asc' or 'desc'
+ * @param {string} facilityURN - Facility URN for fetching element keys
  */
-function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDirection = 'desc') {
+function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDirection = 'desc', facilityURN = null) {
   const tableContainer = document.getElementById('taggedAssets-table');
   if (!tableContainer) return;
 
@@ -88,11 +90,18 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
   
   sortedProperties.forEach(prop => {
     tableHtml += `
-      <tr class="hover:bg-dark-bg/30">
+      <tr class="hover:bg-dark-bg/30" data-property-id="${prop.id}">
         <td class="px-3 py-2 text-dark-text">${prop.category}</td>
         <td class="px-3 py-2 text-dark-text">${prop.name}</td>
         <td class="px-3 py-2 text-dark-text-secondary font-mono">${prop.id}</td>
-        <td class="px-3 py-2 text-right text-dark-text font-semibold">${prop.count.toLocaleString()}</td>
+        <td class="px-3 py-2 text-right text-dark-text font-semibold">
+          <button class="tagged-asset-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
+                  data-property-id="${prop.id}"
+                  data-property-name="${prop.category}.${prop.name}"
+                  title="Click to view ${prop.count} element${prop.count !== 1 ? 's' : ''}">
+            ${prop.count.toLocaleString()}
+          </button>
+        </td>
       </tr>
     `;
   });
@@ -110,7 +119,49 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      renderTaggedAssetsTable(propertyDetails, column, direction);
+      renderTaggedAssetsTable(propertyDetails, column, direction, facilityURN);
+    });
+  });
+
+  // Add click handlers for count buttons
+  const countButtons = tableContainer.querySelectorAll('.tagged-asset-count-btn');
+  countButtons.forEach(button => {
+    button.addEventListener('click', async () => {
+      const propertyId = button.getAttribute('data-property-id');
+      const propertyName = button.getAttribute('data-property-name');
+      
+      if (!facilityURN || !propertyId) {
+        console.error('Missing facilityURN or propertyId');
+        return;
+      }
+      
+      // Show loading state
+      const originalText = button.textContent;
+      button.textContent = '...';
+      button.disabled = true;
+      
+      try {
+        // Fetch element keys grouped by model
+        const elementsByModel = await getElementsByProperty(facilityURN, propertyId);
+        
+        if (elementsByModel.length === 0) {
+          alert('No elements found with this property');
+          return;
+        }
+        
+        // Calculate total count
+        const totalCount = elementsByModel.reduce((sum, model) => sum + model.keys.length, 0);
+        
+        // Show modal with grouped element keys
+        showElementListModal(elementsByModel, `Elements with ${propertyName} (${totalCount} total)`);
+      } catch (error) {
+        console.error('Error fetching elements:', error);
+        alert('Failed to fetch element keys. See console for details.');
+      } finally {
+        // Restore button state
+        button.textContent = originalText;
+        button.disabled = false;
+      }
     });
   });
 }
@@ -218,7 +269,7 @@ export async function displayTaggedAssets(container, facilityURN, models) {
     
     // Render the sortable table (default sort by count descending)
     if (propertyKeys.length > 0) {
-      renderTaggedAssetsTable(propertyDetails, 'count', 'desc');
+      renderTaggedAssetsTable(propertyDetails, 'count', 'desc', facilityURN);
     }
     
     // Attach toggle event listener

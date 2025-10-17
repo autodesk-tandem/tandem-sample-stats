@@ -506,10 +506,27 @@ function generateHistoryHTML(allHistory, facilityURN) {
     }
     
     .modal-header h2 {
-      margin: 0;
+      margin: 0 0 4px 0;
       color: #0696D7;
       font-size: 18px;
       font-weight: 600;
+    }
+    
+    .modal-model-info {
+      font-size: 12px;
+      color: #a0a0a0;
+    }
+    
+    .modal-model-name {
+      font-weight: 600;
+      color: #0696D7;
+      margin-bottom: 2px;
+    }
+    
+    .modal-model-urn {
+      font-family: 'Courier New', monospace;
+      font-size: 11px;
+      color: #808080;
     }
     
     .modal-header-actions {
@@ -565,44 +582,30 @@ function generateHistoryHTML(allHistory, facilityURN) {
       flex: 1;
     }
     
-    .element-key {
+    .element-keys-textarea {
+      width: 100%;
       font-family: 'Courier New', monospace;
       font-size: 12px;
-      padding: 8px 12px;
+      padding: 12px;
       background: #1a1a1a;
       border: 1px solid #404040;
       border-radius: 4px;
-      margin-bottom: 8px;
       color: #e0e0e0;
-      word-break: break-all;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
+      resize: vertical;
+      min-height: 200px;
+      max-height: 500px;
+      line-height: 1.5;
     }
     
-    .element-key-text {
-      flex: 1;
-      margin-right: 10px;
+    .element-keys-textarea:focus {
+      outline: none;
+      border-color: #0696D7;
+      box-shadow: 0 0 0 2px rgba(6, 150, 215, 0.2);
     }
     
-    .copy-btn {
+    .element-keys-textarea::selection {
       background: #0696D7;
-      border: none;
       color: white;
-      padding: 4px 8px;
-      border-radius: 4px;
-      font-size: 11px;
-      cursor: pointer;
-      white-space: nowrap;
-      transition: background 0.2s;
-    }
-    
-    .copy-btn:hover {
-      background: #057ab5;
-    }
-    
-    .copy-btn.copied {
-      background: #10b981;
     }
     
     .element-count-btn {
@@ -654,7 +657,10 @@ function generateHistoryHTML(allHistory, facilityURN) {
   <div class="modal-overlay" id="element-modal">
     <div class="modal-content">
       <div class="modal-header">
-        <h2>Element Keys</h2>
+        <div>
+          <h2>Element Keys</h2>
+          <div id="modal-model-info" class="modal-model-info"></div>
+        </div>
         <div class="modal-header-actions">
           <button class="copy-all-btn" id="copy-all-btn">Copy All</button>
           <button class="modal-close" id="modal-close">&times;</button>
@@ -774,6 +780,8 @@ function generateHistoryHTML(allHistory, facilityURN) {
                 data-elements="\${elementCount}"
                 data-author="\${author}"
                 data-description="\${description}"
+                data-model-name="\${item.modelName}"
+                data-model-id="\${item.modelId}"
                 data-element-keys='\${elementKeys}'>
               <td class="px-4 py-3 text-sm text-dark-text-secondary">\${i + 1}</td>
               <td class="px-4 py-3 text-sm text-dark-text-secondary">\${timeStr}</td>
@@ -905,22 +913,31 @@ function generateHistoryHTML(allHistory, facilityURN) {
     // Modal functionality
     const modal = document.getElementById('element-modal');
     const modalClose = document.getElementById('modal-close');
+    const modalModelInfo = document.getElementById('modal-model-info');
     const elementKeysList = document.getElementById('element-keys-list');
     const copyAllBtn = document.getElementById('copy-all-btn');
-    let currentElementKeys = [];
+    let currentElementData = null;
     
     modalClose.addEventListener('click', () => {
       modal.classList.remove('active');
     });
     
-    // Copy all element keys as JSON array
+    // Copy all element keys in structured format
     copyAllBtn.addEventListener('click', () => {
-      if (currentElementKeys.length === 0) {
+      if (!currentElementData || currentElementData.keys.length === 0) {
         return;
       }
       
-      const jsonArray = JSON.stringify(currentElementKeys, null, 2);
-      navigator.clipboard.writeText(jsonArray).then(() => {
+      // Format as structured JSON (same as Tagged Assets)
+      const structuredData = [{
+        modelURN: currentElementData.modelURN,
+        modelName: currentElementData.modelName,
+        elementCount: currentElementData.keys.length,
+        elementKeys: currentElementData.keys
+      }];
+      
+      const jsonOutput = JSON.stringify(structuredData, null, 2);
+      navigator.clipboard.writeText(jsonOutput).then(() => {
         const originalText = copyAllBtn.textContent;
         copyAllBtn.textContent = 'Copied!';
         copyAllBtn.classList.add('copied');
@@ -952,36 +969,33 @@ function generateHistoryHTML(allHistory, facilityURN) {
       if (e.target.classList.contains('element-count-btn')) {
         const row = e.target.closest('tr');
         const elementKeys = JSON.parse(row.dataset.elementKeys || '[]');
+        const modelName = row.dataset.modelName;
+        const modelId = row.dataset.modelId;
         
         if (elementKeys.length === 0) {
           return;
         }
         
-        // Store element keys for copy all functionality
-        currentElementKeys = elementKeys;
+        // Store element data for copy all functionality
+        currentElementData = {
+          modelURN: modelId,
+          modelName: modelName,
+          keys: elementKeys
+        };
         
-        elementKeysList.innerHTML = elementKeys.map((key, index) => \`
-          <div class="element-key">
-            <span class="element-key-text">\${index + 1}. \${key}</span>
-            <button class="copy-btn" data-key="\${key}">Copy</button>
-          </div>
-        \`).join('');
+        // Update modal header with model info
+        modalModelInfo.innerHTML = \`
+          <div class="modal-model-name">\${modelName}</div>
+          <div class="modal-model-urn">\${modelId}</div>
+        \`;
+        
+        // Format keys as JSON array and display in textarea
+        const keysArrayText = JSON.stringify(elementKeys, null, 2);
+        const rows = Math.min(elementKeys.length + 2, 20);
+        
+        elementKeysList.innerHTML = \`<textarea readonly class="element-keys-textarea" rows="\${rows}">\${keysArrayText}</textarea>\`;
         
         modal.classList.add('active');
-      }
-      
-      if (e.target.classList.contains('copy-btn')) {
-        const key = e.target.dataset.key;
-        navigator.clipboard.writeText(key).then(() => {
-          const originalText = e.target.textContent;
-          e.target.textContent = 'Copied!';
-          e.target.classList.add('copied');
-          
-          setTimeout(() => {
-            e.target.textContent = originalText;
-            e.target.classList.remove('copied');
-          }, 2000);
-        });
       }
     });
     

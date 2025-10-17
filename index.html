@@ -239,6 +239,115 @@
         </div>
     </div>
 
+    <!-- Element List Modal -->
+    <div id="element-list-modal" class="hidden fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50">
+        <div class="bg-dark-card border border-dark-border rounded-lg max-w-3xl max-h-[80vh] w-11/12 flex flex-col shadow-2xl">
+            <div class="px-6 py-4 border-b border-dark-border flex justify-between items-center">
+                <h2 id="element-modal-title" class="text-lg font-semibold text-tandem-blue">Element Keys</h2>
+                <div class="flex items-center gap-2">
+                    <button id="element-modal-asset-details" 
+                            class="px-3 py-1.5 border border-tandem-blue text-tandem-blue text-sm font-medium rounded hover:bg-tandem-blue hover:text-white transition">
+                        Asset Details
+                    </button>
+                    <button id="element-modal-copy-all" 
+                            class="px-3 py-1.5 bg-tandem-blue text-white text-sm font-medium rounded hover:bg-blue-600 transition">
+                        Copy All
+                    </button>
+                    <button id="element-modal-close" 
+                            class="text-dark-text-secondary hover:text-dark-text text-2xl w-8 h-8 flex items-center justify-center rounded hover:bg-dark-border transition">
+                        &times;
+                    </button>
+                </div>
+            </div>
+            <div class="px-6 py-4 overflow-y-auto flex-1">
+                <div id="element-modal-keys-list"></div>
+            </div>
+        </div>
+    </div>
+
+    <style>
+        /* Modal active state */
+        #element-list-modal.active {
+            display: flex !important;
+        }
+
+        /* Model group styles */
+        .model-group {
+            margin-bottom: 24px;
+            border: 1px solid #404040;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .model-group:last-child {
+            margin-bottom: 0;
+        }
+
+        .model-group-header {
+            background: #333333;
+            padding: 12px 16px;
+            border-bottom: 1px solid #404040;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .model-group-title {
+            font-size: 14px;
+            font-weight: 600;
+            color: #0696D7;
+            margin: 0 0 4px 0;
+        }
+
+        .model-group-subtitle {
+            font-size: 11px;
+            font-family: 'Courier New', monospace;
+            color: #808080;
+        }
+
+        .model-group-count {
+            font-size: 12px;
+            font-weight: 600;
+            color: #a0a0a0;
+        }
+
+        .model-group-keys {
+            padding: 12px;
+            background: #2a2a2a;
+        }
+
+        /* Element keys textarea */
+        .element-keys-textarea {
+            width: 100%;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            padding: 12px;
+            background: #1a1a1a;
+            border: 1px solid #404040;
+            border-radius: 4px;
+            color: #e0e0e0;
+            resize: vertical;
+            min-height: 100px;
+            max-height: 400px;
+            line-height: 1.5;
+        }
+
+        .element-keys-textarea:focus {
+            outline: none;
+            border-color: #0696D7;
+            box-shadow: 0 0 0 2px rgba(6, 150, 215, 0.2);
+        }
+
+        .element-keys-textarea::selection {
+            background: #0696D7;
+            color: white;
+        }
+
+        #element-modal-copy-all.copied {
+            background: #10b981;
+        }
+    </style>
+
     <!-- Import main app module -->
     <script type="module" src="./js/app.js"></script>
 </body>

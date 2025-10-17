@@ -22,6 +22,7 @@ import { displaySystems } from './features/systems.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
+import { initElementListModal } from './components/elementListModal.js';
 import { SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
@@ -429,6 +430,9 @@ async function loadStats(facilityURN) {
  * Initialize the application
  */
 async function initialize() {
+  // Initialize modal
+  initElementListModal();
+  
   // Set up event listeners
   loginBtn.addEventListener('click', login);
   logoutBtn.addEventListener('click', logout);
