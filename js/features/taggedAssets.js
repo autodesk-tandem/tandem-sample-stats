@@ -1,7 +1,7 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { getTaggedAssetsDetails, getElementsByProperty } from '../api.js';
 import { getSchemaCache } from '../state/schemaCache.js';
-import { showElementListModal } from '../components/elementListModal.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle tagged assets detail view
@@ -152,8 +152,8 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
         // Calculate total count
         const totalCount = elementsByModel.reduce((sum, model) => sum + model.keys.length, 0);
         
-        // Show modal with grouped element keys
-        showElementListModal(elementsByModel, `Elements with ${propertyName} (${totalCount} total)`);
+        // Open asset details page directly
+        viewAssetDetails(elementsByModel, `Elements with ${propertyName} (${totalCount} total)`);
       } catch (error) {
         console.error('Error fetching elements:', error);
         alert('Failed to fetch element keys. See console for details.');

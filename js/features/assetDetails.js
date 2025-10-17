@@ -107,6 +107,9 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       justify-content: space-between;
       align-items: center;
     }
+    .model-header-left {
+      flex: 1;
+    }
     .model-name {
       font-size: 16px;
       font-weight: 600;
@@ -115,6 +118,19 @@ function generateAssetDetailsHTML(elementsByModel, title) {
     .model-count {
       font-size: 12px;
       color: #a0a0a0;
+    }
+    .view-keys-btn {
+      background: #0696D7;
+      color: white;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .view-keys-btn:hover {
+      background: #0580b8;
     }
     .elements-list {
       padding: 0;
@@ -255,6 +271,117 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       text-align: center;
       color: #ff6b6b;
     }
+    /* Modal styles */
+    .keys-modal {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.8);
+      z-index: 1000;
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .keys-modal.active {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding-top: 60px;
+    }
+    .keys-modal-content {
+      background: #2a2a2a;
+      border-radius: 8px;
+      border: 1px solid #404040;
+      max-width: 800px;
+      width: 100%;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+    }
+    .keys-modal-header {
+      padding: 20px;
+      border-bottom: 1px solid #404040;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .keys-modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #0696D7;
+      margin: 0;
+    }
+    .keys-modal-close {
+      background: none;
+      border: none;
+      color: #a0a0a0;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: color 0.2s;
+    }
+    .keys-modal-close:hover {
+      color: #e0e0e0;
+    }
+    .keys-modal-body {
+      padding: 20px;
+      overflow-y: auto;
+    }
+    .keys-modal-subtitle {
+      margin-bottom: 15px;
+    }
+    .keys-modal-model-name {
+      font-size: 14px;
+      font-weight: 600;
+      color: #e0e0e0;
+      margin-bottom: 4px;
+    }
+    .keys-modal-model-urn {
+      font-size: 11px;
+      color: #a0a0a0;
+      font-family: 'Courier New', monospace;
+    }
+    .keys-textarea {
+      width: 100%;
+      background: #1a1a1a;
+      border: 1px solid #404040;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 10px;
+      resize: vertical;
+      min-height: 200px;
+    }
+    .keys-modal-footer {
+      padding: 15px 20px;
+      border-top: 1px solid #404040;
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+    }
+    .keys-modal-btn {
+      padding: 8px 16px;
+      border-radius: 4px;
+      font-size: 14px;
+      cursor: pointer;
+      border: none;
+      transition: background 0.2s;
+    }
+    .keys-modal-btn-primary {
+      background: #0696D7;
+      color: white;
+    }
+    .keys-modal-btn-primary:hover {
+      background: #0580b8;
+    }
   </style>
 </head>
 <body>
@@ -276,6 +403,26 @@ function generateAssetDetailsHTML(elementsByModel, title) {
     
     <div id="content-container">
       <div class="loading">Loading element details...</div>
+    </div>
+  </div>
+  
+  <!-- Modal for viewing element keys -->
+  <div id="keys-modal" class="keys-modal">
+    <div class="keys-modal-content">
+      <div class="keys-modal-header">
+        <h2 class="keys-modal-title" id="keys-modal-title">Element Keys</h2>
+        <button class="keys-modal-close" id="keys-modal-close">&times;</button>
+      </div>
+      <div class="keys-modal-body">
+        <div class="keys-modal-subtitle">
+          <div class="keys-modal-model-name" id="keys-modal-model-name"></div>
+          <div class="keys-modal-model-urn" id="keys-modal-model-urn"></div>
+        </div>
+        <textarea readonly class="keys-textarea" id="keys-textarea" rows="15"></textarea>
+      </div>
+      <div class="keys-modal-footer">
+        <button class="keys-modal-btn keys-modal-btn-primary" id="keys-copy-btn">Copy All</button>
+      </div>
     </div>
   </div>
   
@@ -636,8 +783,11 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         for (const modelData of modelsData) {
           html += '<div class="model-section">';
           html += '<div class="model-header">';
-          html += '<span class="model-name">' + escapeHtml(modelData.modelName) + '</span>';
-          html += '<span class="model-count">' + modelData.elements.length + ' element' + (modelData.elements.length !== 1 ? 's' : '') + '</span>';
+          html += '<div class="model-header-left">';
+          html += '<div class="model-name">' + escapeHtml(modelData.modelName) + '</div>';
+          html += '<div class="model-count">' + modelData.elements.length + ' element' + (modelData.elements.length !== 1 ? 's' : '') + '</div>';
+          html += '</div>';
+          html += '<button class="view-keys-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-model-name="' + escapeHtml(modelData.modelName) + '">View Keys</button>';
           html += '</div>';
           html += '<div class="elements-list">';
           
@@ -683,11 +833,71 @@ function generateAssetDetailsHTML(elementsByModel, title) {
             await toggleElementDetails(modelURN, elementKey, this, detailsDiv);
           });
         });
+        
+        // Add event listeners to all View Keys buttons
+        const viewKeysButtons = container.querySelectorAll('.view-keys-btn');
+        viewKeysButtons.forEach(button => {
+          button.addEventListener('click', function() {
+            const modelURN = this.getAttribute('data-model-urn');
+            const modelName = this.getAttribute('data-model-name');
+            
+            // Find the model data and extract keys
+            const modelData = modelsData.find(m => m.modelURN === modelURN);
+            if (modelData) {
+              const keys = modelData.elements.map(el => el['k']);
+              showKeysModal(modelURN, modelName, keys);
+            }
+          });
+        });
       } catch (error) {
         console.error('Error loading data:', error);
         container.innerHTML = '<div class="error-message">Failed to load asset details</div>';
       }
     }
+    
+    // Modal handling
+    function showKeysModal(modelURN, modelName, keys) {
+      const modal = document.getElementById('keys-modal');
+      const modelNameEl = document.getElementById('keys-modal-model-name');
+      const modelUrnEl = document.getElementById('keys-modal-model-urn');
+      const textarea = document.getElementById('keys-textarea');
+      
+      modelNameEl.textContent = modelName;
+      modelUrnEl.textContent = modelURN;
+      textarea.value = JSON.stringify(keys, null, 2);
+      textarea.rows = Math.min(keys.length + 2, 20);
+      
+      modal.classList.add('active');
+    }
+    
+    function closeKeysModal() {
+      const modal = document.getElementById('keys-modal');
+      modal.classList.remove('active');
+    }
+    
+    function copyKeysToClipboard() {
+      const textarea = document.getElementById('keys-textarea');
+      textarea.select();
+      document.execCommand('copy');
+      
+      const btn = document.getElementById('keys-copy-btn');
+      const originalText = btn.textContent;
+      btn.textContent = 'Copied!';
+      setTimeout(() => {
+        btn.textContent = originalText;
+      }, 2000);
+    }
+    
+    // Set up modal event listeners
+    document.getElementById('keys-modal-close').addEventListener('click', closeKeysModal);
+    document.getElementById('keys-copy-btn').addEventListener('click', copyKeysToClipboard);
+    
+    // Close modal when clicking outside
+    document.getElementById('keys-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'keys-modal') {
+        closeKeysModal();
+      }
+    });
     
     // Load data when page loads
     loadInitialData();
