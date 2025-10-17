@@ -149,11 +149,8 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
           return;
         }
         
-        // Calculate total count
-        const totalCount = elementsByModel.reduce((sum, model) => sum + model.keys.length, 0);
-        
-        // Open asset details page directly
-        viewAssetDetails(elementsByModel, `Elements with ${propertyName} (${totalCount} total)`);
+        // Open details page directly
+        viewAssetDetails(elementsByModel, `Asset Details: ${propertyName}`);
       } catch (error) {
         console.error('Error fetching elements:', error);
         alert('Failed to fetch element keys. See console for details.');
@@ -195,7 +192,7 @@ export async function displayTaggedAssets(container, facilityURN, models) {
     const details = await getTaggedAssetsDetails(facilityURN);
     const schemaCache = getSchemaCache();
     
-    // Build header with toggle button
+    // Build header with Asset Details button and toggle button
     let headerHtml = `
       <div class="flex items-center justify-between mb-3">
         <div class="flex items-center space-x-2">
@@ -204,16 +201,26 @@ export async function displayTaggedAssets(container, facilityURN, models) {
             <div>Element${details.totalCount !== 1 ? 's' : ''} with user-defined properties</div>
           </div>
         </div>
-        <button id="toggle-taggedAssets-btn"
-                class="p-2 hover:bg-dark-bg/50 rounded transition"
-                title="Show more">
-          <svg id="toggle-taggedAssets-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-          </svg>
-          <svg id="toggle-taggedAssets-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-          </svg>
-        </button>
+        <div class="flex items-center space-x-3">
+          <button id="taggedAssets-asset-details-btn"
+                  class="inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                  title="View detailed information">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Details
+          </button>
+          <button id="toggle-taggedAssets-btn"
+                  class="p-2 hover:bg-dark-bg/50 rounded transition"
+                  title="Show more">
+            <svg id="toggle-taggedAssets-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+            </svg>
+            <svg id="toggle-taggedAssets-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+            </svg>
+          </button>
+        </div>
       </div>
     `;
     
@@ -276,6 +283,60 @@ export async function displayTaggedAssets(container, facilityURN, models) {
     const toggleBtn = document.getElementById('toggle-taggedAssets-btn');
     if (toggleBtn) {
       toggleBtn.addEventListener('click', toggleTaggedAssetsDetail);
+    }
+    
+    // Attach Asset Details button event listener
+    const assetDetailsBtn = document.getElementById('taggedAssets-asset-details-btn');
+    if (assetDetailsBtn) {
+      assetDetailsBtn.addEventListener('click', async () => {
+        // Show loading state
+        const originalHTML = assetDetailsBtn.innerHTML;
+        assetDetailsBtn.innerHTML = '<svg class="w-4 h-4 mr-1 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>Loading...';
+        assetDetailsBtn.disabled = true;
+        
+        try {
+          // Collect ALL elements that have ANY user-defined property
+          const allElementsByModel = new Map();
+          
+          // Iterate through all properties and collect element keys
+          for (const propId of propertyKeys) {
+            const elementsByModel = await getElementsByProperty(facilityURN, propId);
+            
+            // Merge into our map
+            elementsByModel.forEach(modelData => {
+              if (!allElementsByModel.has(modelData.modelURN)) {
+                allElementsByModel.set(modelData.modelURN, {
+                  modelURN: modelData.modelURN,
+                  modelName: modelData.modelName,
+                  keys: new Set()
+                });
+              }
+              // Add all keys to the set (automatically deduplicates)
+              modelData.keys.forEach(key => {
+                allElementsByModel.get(modelData.modelURN).keys.add(key);
+              });
+            });
+          }
+          
+          // Convert sets to arrays
+          const elementsByModelArray = Array.from(allElementsByModel.values()).map(model => ({
+            modelURN: model.modelURN,
+            modelName: model.modelName,
+            keys: Array.from(model.keys)
+          }));
+          
+          // Open Details page
+          viewAssetDetails(elementsByModelArray, `Tagged Asset Details`);
+          
+        } catch (error) {
+          console.error('Error loading asset details:', error);
+          alert('Failed to load asset details. See console for details.');
+        } finally {
+          // Restore button state
+          assetDetailsBtn.innerHTML = originalHTML;
+          assetDetailsBtn.disabled = false;
+        }
+      });
     }
   } catch (error) {
     console.error('Error fetching tagged assets:', error);

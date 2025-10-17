@@ -1,6 +1,7 @@
 import { getElementCount, getHistory, getModelProperties } from '../api.js';
 import { isDefaultModel } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle models detail view
@@ -616,11 +617,36 @@ function generateHistoryHTML(allHistory, facilityURN) {
       font-family: inherit;
       color: #0696D7;
       font-weight: 600;
+      cursor: pointer;
     }
     
     .element-count-btn:hover {
       color: #057ab5;
       text-decoration: underline;
+    }
+    
+    .view-details-btn {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border: 1px solid #0696D7;
+      font-size: 12px;
+      font-weight: 500;
+      border-radius: 4px;
+      color: #0696D7;
+      background: transparent;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    
+    .view-details-btn:hover {
+      background: #0696D7;
+      color: white;
+    }
+    
+    .view-details-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
     }
   </style>
 </head>
@@ -632,10 +658,18 @@ function generateHistoryHTML(allHistory, facilityURN) {
           <h1>Model Change History</h1>
           <div class="info">Facility: ${facilityURN}</div>
         </div>
-        <div class="time-range-controls">
-          <button class="time-range-btn active" data-range="7days">7 Days</button>
-          <button class="time-range-btn" data-range="30days">30 Days</button>
-          <button class="time-range-btn" data-range="all">All Time</button>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <button id="view-all-details-btn" class="view-details-btn">
+            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" style="width: 16px; height: 16px; display: inline-block; vertical-align: middle; margin-right: 6px;">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+            </svg>
+            Details
+          </button>
+          <div class="time-range-controls">
+            <button class="time-range-btn active" data-range="7days">7 Days</button>
+            <button class="time-range-btn" data-range="30days">30 Days</button>
+            <button class="time-range-btn" data-range="all">All Time</button>
+          </div>
         </div>
       </div>
       <div class="stats">
@@ -646,6 +680,10 @@ function generateHistoryHTML(allHistory, facilityURN) {
         <div class="stat-item">
           <span class="stat-label">Total Changes</span>
           <span class="stat-value" id="stat-changes">0</span>
+        </div>
+        <div class="stat-item">
+          <span class="stat-label">Unique Elements</span>
+          <span class="stat-value" id="stat-elements">0</span>
         </div>
       </div>
     </div>
@@ -716,9 +754,21 @@ function generateHistoryHTML(allHistory, facilityURN) {
       const modelsWithHistory = filteredHistory.filter(item => item.history && item.history.length > 0);
       const totalChanges = filteredHistory.reduce((sum, item) => sum + item.history.length, 0);
       
+      // Calculate unique elements across all changes
+      const uniqueElementsSet = new Set();
+      filteredHistory.forEach(model => {
+        model.history.forEach(entry => {
+          if (entry.k && Array.isArray(entry.k)) {
+            entry.k.forEach(key => uniqueElementsSet.add(key));
+          }
+        });
+      });
+      const uniqueElements = uniqueElementsSet.size;
+      
       // Update stats
       document.getElementById('stat-models').textContent = modelsWithHistory.length;
       document.getElementById('stat-changes').textContent = totalChanges;
+      document.getElementById('stat-elements').textContent = uniqueElements;
       
       if (modelsWithHistory.length === 0) {
         container.innerHTML = '<div class="empty-state">No changes found in the selected time range</div>';
@@ -964,6 +1014,73 @@ function generateHistoryHTML(allHistory, facilityURN) {
       }
     });
     
+    // View all details button handler
+    document.getElementById('view-all-details-btn').addEventListener('click', () => {
+      // Collect all unique element keys from the currently displayed (filtered) history
+      const allRows = document.querySelectorAll('#tables-container tr[data-element-keys]');
+      
+      if (allRows.length === 0) {
+        alert('No changes found in the selected time range');
+        return;
+      }
+      
+      // Group elements by model
+      const modelMap = new Map();
+      
+      allRows.forEach(row => {
+        const modelId = row.dataset.modelId;
+        const modelName = row.dataset.modelName;
+        const elementKeys = JSON.parse(row.dataset.elementKeys || '[]');
+        
+        if (!modelMap.has(modelId)) {
+          modelMap.set(modelId, {
+            modelURN: modelId,
+            modelName: modelName,
+            keys: new Set()
+          });
+        }
+        
+        // Add all keys (Set automatically deduplicates)
+        elementKeys.forEach(key => modelMap.get(modelId).keys.add(key));
+      });
+      
+      // Convert sets to arrays and filter out models with no keys
+      const elementsByModel = Array.from(modelMap.values())
+        .map(model => ({
+          modelURN: model.modelURN,
+          modelName: model.modelName,
+          keys: Array.from(model.keys)
+        }))
+        .filter(model => model.keys.length > 0); // Only include models with keys
+      
+      // Check if we have any valid models
+      if (elementsByModel.length === 0) {
+        alert('No elements found in the selected changes');
+        return;
+      }
+      
+      // Calculate total
+      const totalElements = elementsByModel.reduce((sum, model) => sum + model.keys.length, 0);
+      
+      // Create title based on current filter
+      let timeRangeText = '';
+      if (currentTimeRange === '7days') {
+        timeRangeText = '7 Days';
+      } else if (currentTimeRange === '30days') {
+        timeRangeText = '30 Days';
+      } else {
+        timeRangeText = 'All Time';
+      }
+      
+      const title = \`History Details: \${timeRangeText}\`;
+      
+      if (window.viewAssetDetails) {
+        window.viewAssetDetails(elementsByModel, title);
+      } else {
+        alert('Asset details functionality is not available');
+      }
+    });
+    
     // Event delegation for dynamic content
     document.addEventListener('click', (e) => {
       if (e.target.classList.contains('element-count-btn')) {
@@ -971,31 +1088,38 @@ function generateHistoryHTML(allHistory, facilityURN) {
         const elementKeys = JSON.parse(row.dataset.elementKeys || '[]');
         const modelName = row.dataset.modelName;
         const modelId = row.dataset.modelId;
+        const operation = row.dataset.operation;
+        const timestamp = row.dataset.timestamp;
         
         if (elementKeys.length === 0) {
           return;
         }
         
-        // Store element data for copy all functionality
-        currentElementData = {
+        // Format timestamp for title
+        const date = new Date(parseInt(timestamp));
+        const dateStr = date.toLocaleString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+          hour: 'numeric',
+          minute: '2-digit',
+          hour12: true
+        });
+        
+        // Open Asset Details page
+        const elementsByModel = [{
           modelURN: modelId,
           modelName: modelName,
           keys: elementKeys
-        };
+        }];
         
-        // Update modal header with model info
-        modalModelInfo.innerHTML = \`
-          <div class="modal-model-name">\${modelName}</div>
-          <div class="modal-model-urn">\${modelId}</div>
-        \`;
+        const title = \`Change Details: \${dateStr}\`;
         
-        // Format keys as JSON array and display in textarea
-        const keysArrayText = JSON.stringify(elementKeys, null, 2);
-        const rows = Math.min(elementKeys.length + 2, 20);
-        
-        elementKeysList.innerHTML = \`<textarea readonly class="element-keys-textarea" rows="\${rows}">\${keysArrayText}</textarea>\`;
-        
-        modal.classList.add('active');
+        if (window.viewAssetDetails) {
+          window.viewAssetDetails(elementsByModel, title);
+        } else {
+          alert('Asset details functionality is not available');
+        }
       }
     });
     
@@ -1094,6 +1218,9 @@ async function viewModelsHistory(facilityURN, models, button = null) {
     
     historyWindow.document.write(htmlContent);
     historyWindow.document.close();
+    
+    // Expose viewAssetDetails to the child window
+    historyWindow.viewAssetDetails = viewAssetDetails;
   } catch (error) {
     console.error('Error viewing model history:', error);
     alert('Failed to load model history. See console for details.');

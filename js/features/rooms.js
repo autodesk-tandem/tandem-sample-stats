@@ -1,5 +1,6 @@
 import { formatUnitName } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 
 /**
  * Toggle rooms detail view
@@ -53,6 +54,14 @@ export async function displayRooms(container, rooms, sortBy = null, sortDirectio
             ${sortDirection === 'asc' ? 'A→Z / ↑' : 'Z→A / ↓'}
           </button>
         </div>
+        <button id="rooms-asset-details-btn"
+                class="inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                title="View detailed information">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          Details
+        </button>
         <button id="toggle-rooms-btn"
                 class="p-2 hover:bg-dark-bg/50 rounded transition"
                 title="${isDetailVisible ? 'Show less' : 'Show more'}">
@@ -205,6 +214,33 @@ export async function displayRooms(container, rooms, sortBy = null, sortDirectio
         const newDirection = sortDirection === 'asc' ? 'desc' : 'asc';
         displayRooms(container, rooms, sortBy, newDirection);
       }
+    });
+  }
+  
+  // Add Asset Details button event listener
+  const assetDetailsBtn = document.getElementById('rooms-asset-details-btn');
+  if (assetDetailsBtn) {
+    assetDetailsBtn.addEventListener('click', () => {
+      // Group rooms by model for Asset Details view
+      const elementsByModel = [];
+      const modelMap = new Map();
+      
+      rooms.forEach(room => {
+        if (!modelMap.has(room.modelId)) {
+          modelMap.set(room.modelId, {
+            modelURN: room.modelId,
+            modelName: room.modelName || 'Unknown Model',
+            keys: []
+          });
+        }
+        modelMap.get(room.modelId).keys.push(room.key);
+      });
+      
+      // Convert map to array
+      modelMap.forEach(model => elementsByModel.push(model));
+      
+      // Open Details page
+      viewAssetDetails(elementsByModel, `Room & Space Details`);
     });
   }
 }

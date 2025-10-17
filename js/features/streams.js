@@ -2,6 +2,7 @@ import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { viewAssetDetails } from './assetDetails.js';
 import { QC } from '../../tandem/constants.js';
 import { decodeXref, toShortKey } from '../../tandem/keys.js';
 
@@ -414,7 +415,7 @@ export async function displayStreams(container, streams, facilityURN) {
     return;
   }
 
-  // Build header with toggle button (always visible)
+  // Build header with Asset Details button and toggle button
   let headerHtml = `
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
@@ -423,16 +424,26 @@ export async function displayStreams(container, streams, facilityURN) {
           <div>Stream${streams.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
-      <button id="toggle-streams-btn"
-              class="p-2 hover:bg-dark-bg/50 rounded transition"
-              title="Show more">
-        <svg id="toggle-streams-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-        </svg>
-        <svg id="toggle-streams-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-        </svg>
-      </button>
+      <div class="flex items-center space-x-3">
+        <button id="streams-asset-details-btn"
+                class="inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                title="View detailed information">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          Details
+        </button>
+        <button id="toggle-streams-btn"
+                class="p-2 hover:bg-dark-bg/50 rounded transition"
+                title="Show more">
+          <svg id="toggle-streams-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+          <svg id="toggle-streams-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   `;
   
@@ -597,6 +608,29 @@ export async function displayStreams(container, streams, facilityURN) {
   const toggleBtn = document.getElementById('toggle-streams-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleStreamsDetail);
+  }
+  
+  // Add Asset Details button event listener
+  const assetDetailsBtn = document.getElementById('streams-asset-details-btn');
+  if (assetDetailsBtn) {
+    assetDetailsBtn.addEventListener('click', () => {
+      // Get default model URN (streams are always in default model)
+      const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+      const defaultModelName = '** Default Model **';
+      
+      // Collect all stream keys
+      const streamKeys = streams.map(s => s[QC.Key]);
+      
+      // Create element data structure for Asset Details
+      const elementsByModel = [{
+        modelURN: defaultModelURN,
+        modelName: defaultModelName,
+        keys: streamKeys
+      }];
+      
+      // Open Details page
+      viewAssetDetails(elementsByModel, `Stream Details`);
+    });
   }
   
   // Bind view chart button event listeners

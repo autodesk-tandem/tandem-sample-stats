@@ -33,6 +33,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Asset Details</title>
+  <script src="https://unpkg.com/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
   <style>
     * {
       margin: 0;
@@ -56,11 +57,40 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       margin-bottom: 20px;
       border: 1px solid #404040;
     }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 10px;
+    }
     h1 {
-      margin: 0 0 10px 0;
+      margin: 0;
       color: #0696D7;
       font-size: 24px;
       font-weight: 600;
+    }
+    .export-btn {
+      background: #0696D7;
+      color: white;
+      border: none;
+      padding: 0 16px;
+      border-radius: 4px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      height: 36px;
+      min-width: 160px;
+    }
+    .export-btn:hover {
+      background: #0580b8;
+    }
+    .export-btn:disabled {
+      background: #404040;
+      cursor: not-allowed;
     }
     .info {
       font-size: 12px;
@@ -69,7 +99,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
     .stats {
       display: flex;
       gap: 30px;
-      margin-top: 15px;
+      margin-top: 20px;
     }
     .stat-item {
       display: flex;
@@ -123,11 +153,14 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       background: #0696D7;
       color: white;
       border: none;
-      padding: 6px 12px;
+      padding: 8px 16px;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
       transition: background 0.2s;
+      height: 36px;
+      min-width: 110px;
     }
     .view-keys-btn:hover {
       background: #0580b8;
@@ -188,14 +221,17 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       color: #808080;
     }
     .element-toggle {
-      padding: 4px 12px;
+      padding: 8px 16px;
       background: #0696D7;
       color: white;
       border: none;
       border-radius: 4px;
-      font-size: 12px;
+      font-size: 13px;
+      font-weight: 500;
       cursor: pointer;
       transition: background 0.2s;
+      height: 36px;
+      min-width: 110px;
     }
     .element-toggle:hover {
       background: #057ab5;
@@ -387,8 +423,13 @@ function generateAssetDetailsHTML(elementsByModel, title) {
 <body>
   <div class="container">
     <div class="header">
-      <h1>Asset Details</h1>
-      <div class="info">${title}</div>
+      <div class="header-top">
+        <h1>${title}</h1>
+        <button id="export-btn" class="export-btn">
+          <span>📊</span>
+          <span>Export to Excel</span>
+        </button>
+      </div>
       <div class="stats">
         <div class="stat-item">
           <span class="stat-label">Total Models</span>
@@ -761,8 +802,14 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         let totalElements = 0;
         const modelsData = [];
         
-        // Fetch names for all models
+        // Fetch names for all models (skip models with no keys)
         for (const modelGroup of DATA) {
+          // Skip if no keys provided
+          if (!modelGroup.keys || modelGroup.keys.length === 0) {
+            console.warn('Skipping model with no keys:', modelGroup.modelName);
+            continue;
+          }
+          
           const elements = await fetchElementNames(modelGroup.modelURN, modelGroup.keys);
           totalElements += elements.length;
           
@@ -773,8 +820,8 @@ function generateAssetDetailsHTML(elementsByModel, title) {
           });
         }
         
-        // Update stats
-        document.getElementById('stat-models').textContent = DATA.length;
+        // Update stats (only count models with elements)
+        document.getElementById('stat-models').textContent = modelsData.length;
         document.getElementById('stat-elements').textContent = totalElements;
         
         // Render elements
@@ -898,6 +945,239 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         closeKeysModal();
       }
     });
+    
+    // Export to Excel functionality
+    async function exportToExcel() {
+      const exportBtn = document.getElementById('export-btn');
+      const originalText = exportBtn.innerHTML;
+      
+      try {
+        exportBtn.disabled = true;
+        exportBtn.innerHTML = '<span>⏳</span><span>Exporting...</span>';
+        
+        // Create workbook
+        const workbook = XLSX.utils.book_new();
+        
+        // Sheet 1: Summary - one row per element
+        const summaryData = [
+          ['Model Name', 'Element Name', 'Category', 'Classification', 'Element Key']
+        ];
+        
+        // Fetch element names in batches per model (much more efficient)
+        for (const modelData of DATA) {
+          // Skip if no keys provided
+          if (!modelData.keys || modelData.keys.length === 0) {
+            continue;
+          }
+          
+          // Fetch all elements for this model at once
+          const elements = await fetchElementNames(modelData.modelURN, modelData.keys);
+          
+          // Create a map for quick lookup
+          const elementMap = new Map();
+          elements.forEach(el => {
+            elementMap.set(el['k'], el);
+          });
+          
+          // Add rows in the original key order
+          for (const key of modelData.keys) {
+            const el = elementMap.get(key);
+            if (el) {
+              const name = el['n:!n']?.[0] || el['n:n']?.[0] || 'Unnamed';
+              const categoryId = el['n:c']?.[0];
+              const categoryName = categoryId ? getCategoryName(categoryId) : 'Unknown';
+              const classification = el['n:!v']?.[0] || el['n:v']?.[0] || '';
+              
+              summaryData.push([
+                modelData.modelName,
+                name,
+                categoryName,
+                classification,
+                key
+              ]);
+            }
+          }
+        }
+        
+        const summarySheet = XLSX.utils.aoa_to_sheet(summaryData);
+        
+        // Set column widths
+        summarySheet['!cols'] = [
+          { wch: 30 }, // Model Name
+          { wch: 30 }, // Element Name
+          { wch: 20 }, // Category
+          { wch: 20 }, // Classification
+          { wch: 35 }  // Element Key
+        ];
+        
+        // Style header row (row 1)
+        const summaryHeaderCols = ['A', 'B', 'C', 'D', 'E'];
+        summaryHeaderCols.forEach(col => {
+          const cellRef = col + '1';
+          if (summarySheet[cellRef]) {
+            summarySheet[cellRef].s = {
+              font: { bold: true, color: { rgb: "000000" } },
+              fill: { fgColor: { rgb: "D3D3D3" } },
+              alignment: { vertical: "center", horizontal: "left" }
+            };
+          }
+        });
+        
+        XLSX.utils.book_append_sheet(workbook, summarySheet, 'Summary');
+        
+        // Track sheet names to avoid duplicates
+        const usedSheetNames = new Set(['Summary']);
+        
+        // Sheets 2+: Detailed properties per model
+        for (const modelData of DATA) {
+          // Skip if no keys provided
+          if (!modelData.keys || modelData.keys.length === 0) {
+            continue;
+          }
+          
+          const detailData = [
+            ['Element Key', 'Element Name', 'Property ID', 'Category', 'Property Name', 'Value']
+          ];
+          
+          // Fetch all element details for this model
+          const elements = await fetchElementDetails(modelData.modelURN, modelData.keys);
+          
+          for (let i = 0; i < elements.length; i++) {
+            const element = elements[i];
+            const elementKey = element['k'];
+            const elementName = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed';
+            const properties = organizeProperties(element, modelData.modelURN);
+            
+            for (const prop of properties) {
+              detailData.push([
+                elementKey,
+                elementName,
+                prop.id,
+                prop.category,
+                prop.name,
+                prop.value
+              ]);
+            }
+            
+            // Add blank row between elements (except after last element)
+            if (i < elements.length - 1) {
+              detailData.push(['', '', '', '', '', '']);
+            }
+          }
+          
+          if (detailData.length > 1) {
+            const detailSheet = XLSX.utils.aoa_to_sheet(detailData);
+            
+            // Set column widths
+            detailSheet['!cols'] = [
+              { wch: 35 }, // Element Key
+              { wch: 30 }, // Element Name
+              { wch: 15 }, // Property ID
+              { wch: 20 }, // Category
+              { wch: 30 }, // Property Name
+              { wch: 40 }  // Value
+            ];
+            
+            // Style header row (row 1)
+            const detailHeaderCols = ['A', 'B', 'C', 'D', 'E', 'F'];
+            detailHeaderCols.forEach(col => {
+              const cellRef = col + '1';
+              if (detailSheet[cellRef]) {
+                detailSheet[cellRef].s = {
+                  font: { bold: true, color: { rgb: "000000" } },
+                  fill: { fgColor: { rgb: "D3D3D3" } },
+                  alignment: { vertical: "center", horizontal: "left" }
+                };
+              }
+            });
+            
+            // Style blank separator rows (gray hatch pattern)
+            for (let rowNum = 2; rowNum <= detailData.length; rowNum++) {
+              // Check if this is a blank row (all cells empty)
+              const rowData = detailData[rowNum - 1];
+              if (rowData && rowData.every(cell => cell === '')) {
+                detailHeaderCols.forEach(col => {
+                  const cellRef = col + rowNum;
+                  // Ensure cell exists in sheet
+                  if (!detailSheet[cellRef]) {
+                    detailSheet[cellRef] = { t: 's', v: '', w: '' };
+                  }
+                  // Apply gray hatch pattern (darker)
+                  detailSheet[cellRef].s = {
+                    fill: { 
+                      patternType: "gray125",
+                      fgColor: { rgb: "BFBFBF" },
+                      bgColor: { rgb: "FFFFFF" }
+                    },
+                    border: {
+                      top: { style: "thin", color: { rgb: "D0D0D0" } },
+                      bottom: { style: "thin", color: { rgb: "D0D0D0" } },
+                      left: { style: "thin", color: { rgb: "D0D0D0" } },
+                      right: { style: "thin", color: { rgb: "D0D0D0" } }
+                    }
+                  };
+                });
+              }
+            }
+            
+            // Sanitize sheet name (max 31 chars, no special chars)
+            let sheetName = modelData.modelName || 'Model';
+            console.log('Original model name:', sheetName);
+            // Replace each invalid character (Excel doesn't allow: : / \\ ? * [ ])
+            sheetName = sheetName.split(':').join('_');
+            sheetName = sheetName.split('/').join('_');
+            sheetName = sheetName.split(String.fromCharCode(92)).join('_'); // backslash
+            sheetName = sheetName.split('?').join('_');
+            sheetName = sheetName.split('*').join('_');
+            sheetName = sheetName.split('[').join('_');
+            sheetName = sheetName.split(']').join('_');
+            console.log('After sanitization:', sheetName);
+            // Trim and truncate
+            sheetName = sheetName.trim().substring(0, 31);
+            // Ensure sheet name is not empty after sanitization
+            if (!sheetName || sheetName === '') {
+              sheetName = 'Model_' + DATA.indexOf(modelData);
+            }
+            
+            // Ensure unique sheet name
+            let uniqueSheetName = sheetName;
+            let counter = 1;
+            while (usedSheetNames.has(uniqueSheetName)) {
+              const suffix = '_' + counter;
+              uniqueSheetName = sheetName.substring(0, 31 - suffix.length) + suffix;
+              counter++;
+            }
+            usedSheetNames.add(uniqueSheetName);
+            
+            console.log('Final sheet name:', uniqueSheetName);
+            
+            XLSX.utils.book_append_sheet(workbook, detailSheet, uniqueSheetName);
+          }
+        }
+        
+        // Download file
+        const filename = 'asset-details-' + new Date().toISOString().slice(0, 10) + '.xlsx';
+        XLSX.writeFile(workbook, filename);
+        
+        // Success feedback
+        exportBtn.innerHTML = '<span>✓</span><span>Exported!</span>';
+        setTimeout(() => {
+          exportBtn.innerHTML = originalText;
+          exportBtn.disabled = false;
+        }, 2000);
+        
+      } catch (error) {
+        console.error('Export error:', error);
+        exportBtn.innerHTML = '<span>✗</span><span>Export Failed</span>';
+        setTimeout(() => {
+          exportBtn.innerHTML = originalText;
+          exportBtn.disabled = false;
+        }, 2000);
+      }
+    }
+    
+    // Set up export button
+    document.getElementById('export-btn').addEventListener('click', exportToExcel);
     
     // Load data when page loads
     loadInitialData();
