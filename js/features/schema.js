@@ -174,12 +174,12 @@ export async function displaySchema(container, models) {
       </div>
       <div class="flex items-center space-x-2">
         <button id="export-schema-btn"
-                class="px-3 py-1.5 bg-tandem-blue text-white text-xs font-medium rounded hover:bg-blue-600 transition inline-flex items-center gap-2"
+                class="inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
                 title="Export to Excel">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
           </svg>
-          <span>Export to Excel</span>
+          Export
         </button>
         <button id="toggle-schema-btn"
                 class="p-2 hover:bg-dark-bg/50 rounded transition"
