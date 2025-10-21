@@ -174,15 +174,23 @@ function populateAccountsDropdown(accounts) {
     accountSelect.appendChild(option);
   });
 
-  // Try to restore last selected account
+  // Try to restore last selected account, or select the first one
   const lastAccount = window.localStorage.getItem('tandem-sample-stats-last-account');
-  if (lastAccount) {
-    accountSelect.value = lastAccount;
-    populateFacilitiesDropdown(accounts, lastAccount);
+  let selectedAccount = null;
+  
+  if (lastAccount && accounts.some(a => a.name === lastAccount)) {
+    // Restore previously selected account if it exists
+    selectedAccount = lastAccount;
+  } else if (sortedAccounts.length > 0) {
+    // Otherwise, select the first account in the list
+    selectedAccount = sortedAccounts[0].name;
   }
   
-  // Remove placeholder if we have accounts and a selection was made
-  if (accounts.length > 0 && accountSelect.value !== '') {
+  if (selectedAccount) {
+    accountSelect.value = selectedAccount;
+    populateFacilitiesDropdown(accounts, selectedAccount);
+    
+    // Remove placeholder after selection
     const placeholder = accountSelect.querySelector('option[value=""]');
     if (placeholder) placeholder.remove();
   }
