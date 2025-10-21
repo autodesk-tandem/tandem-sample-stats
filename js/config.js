@@ -25,8 +25,25 @@ const stgEnvironment = {
  * @returns {object} Environment configuration
  */
 export function getEnv() {
-  // Use production by default
-  return prodEnvironment;
+  // Auto-detect redirect URL based on current location
+  const isGitHubPages = window.location.hostname.includes('github.io');
+  const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+  
+  let loginRedirect;
+  if (isGitHubPages) {
+    loginRedirect = window.location.origin + window.location.pathname;
+  } else if (isLocalhost) {
+    loginRedirect = `http://localhost:${window.location.port || 8000}`;
+  } else {
+    // Default to current origin for other deployments
+    loginRedirect = window.location.origin;
+  }
+  
+  // Return production environment with dynamic redirect
+  return {
+    ...prodEnvironment,
+    loginRedirect: loginRedirect
+  };
   
   // Uncomment to use staging
   // return stgEnvironment;
