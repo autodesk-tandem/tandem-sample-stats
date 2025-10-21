@@ -2,7 +2,7 @@
 # These owners will be requested for review when someone opens a pull request
 
 # Default owners for everything in the repo
-* @JimAwe
+* @JimAwe @liskaj
 
 # You can add more specific rules if needed, for example:
 # /js/features/ @JimAwe @another-developer
