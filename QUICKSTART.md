@@ -20,13 +20,13 @@ Choose one of these options:
 
 **Option A: Python 3**
 ```bash
-cd tandem-stats
+cd tandem-sample-stats
 python3 -m http.server 8000
 ```
 
 **Option B: Node.js**
 ```bash
-cd tandem-stats
+cd tandem-sample-stats
 npx http-server -p 8000
 ```
 

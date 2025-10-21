@@ -172,7 +172,7 @@ for (const [modelURN, items] of xrefsByModel.entries()) {
 
 1. **Copy this entire `tandem/` directory to your project:**
    ```bash
-   cp -r tandem-stats/tandem/ my-project/tandem/
+   cp -r tandem-sample-stats/tandem/ my-project/tandem/
    ```
 
 2. **Import what you need:**

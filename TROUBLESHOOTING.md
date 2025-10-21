@@ -143,9 +143,9 @@ To see even more debug information:
    - Screenshots if helpful
 
 2. **Verify these are correct**:
-   - Client ID: `GiedMKsyhXTTG34RZR9KSEGbAgjxSIJm45sJASP9EjOQSAX8`
-   - Redirect URI in Forge app: `http://localhost:8000`
-   - Server URL you're accessing: `http://localhost:8000`
+   - Client ID: Check `js/config.js` - the demo ID should work for local development
+   - Redirect URI in APS app: `http://localhost:8000` (or your GitHub Pages URL if deployed)
+   - Server URL you're accessing: `http://localhost:8000` (must match redirect URI)
    - APIs enabled: Data Management API + Tandem API
 
 3. **Check Forge App Status**:

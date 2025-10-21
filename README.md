@@ -1,4 +1,4 @@
-# Tandem Stats
+# Tandem Sample - Stats
 
 A modern, browser-based application for viewing statistics and information about your Autodesk Tandem facilities.
 
@@ -42,6 +42,22 @@ Having the reference implementation available allowed Claude to discover these p
 - **Modern UI**: Clean, responsive interface built with Tailwind CSS
 - **Statistics Dashboard**: View key metrics about your facilities (expandable)
 
+## Security Note: Why the Client ID is Committed
+
+This application uses **PKCE (Proof Key for Code Exchange)**, which is the recommended OAuth flow for Single Page Applications (SPAs). With PKCE:
+
+- ✅ **The Client ID is NOT sensitive** - It's a public identifier, similar to an app's bundle ID
+- ✅ **No client secret exists** - PKCE uses dynamically generated code verifiers instead
+- ✅ **Safe to commit to public repos** - This is standard practice for browser-based OAuth apps
+- ✅ **Safe to deploy to GitHub Pages** - The security model is designed for public client applications
+
+The security of PKCE comes from:
+1. The dynamically generated code verifier/challenge (created per-session)
+2. The authorization code that can only be used once
+3. The redirect URI validation by Autodesk's OAuth server
+
+**For your own deployment:** You can create your own APS Client ID and commit it to your repository. Just ensure your redirect URIs are properly configured in your APS app settings.
+
 ## Prerequisites
 
 - A valid Autodesk APS (Platform Services) application with Client ID
@@ -51,20 +67,11 @@ Having the reference implementation available allowed Claude to discover these p
 
 ## Setup
 
-1. **Configure your APS Client ID**
-   
-   Edit `js/config.js` and add your APS Client ID:
-   ```javascript
-   apsKey: "YOUR_APS_CLIENT_ID_HERE"
-   ```
+### Option A: Use the Demo (Quickest)
 
-2. **Configure OAuth Redirect URI**
-   
-   Make sure your APS app has the correct redirect URI configured:
-   - For local development: `http://localhost:8000`
-   - Update `loginRedirect` in `js/config.js` if using a different port
+The included Client ID works out-of-the-box for local development:
 
-3. **Start a local web server**
+1. **Start a local web server**
 
    Using Python 3:
    ```bash
@@ -76,9 +83,26 @@ Having the reference implementation available allowed Claude to discover these p
    npx http-server -p 8000
    ```
 
-4. **Open the application**
+2. **Open the application**
    
    Navigate to `http://localhost:8000` in your web browser
+
+### Option B: Use Your Own APS Client ID
+
+For production deployment or customization:
+
+1. **Create an APS App** at [aps.autodesk.com](https://aps.autodesk.com/myapps)
+   - Callback URL: Your deployment URL (e.g., `https://yourusername.github.io/tandem-sample-stats/`)
+   - APIs: Data Management API + Tandem API
+
+2. **Update `js/config.js`**
+   
+   ```javascript
+   apsKey: "YOUR_APS_CLIENT_ID_HERE",
+   loginRedirect: "https://yourusername.github.io/tandem-sample-stats/"
+   ```
+
+3. **Deploy** (see GitHub Pages deployment below)
 
 ## Usage
 
@@ -90,7 +114,7 @@ Having the reference implementation available allowed Claude to discover these p
 ## Project Structure
 
 ```
-tandem-stats/
+tandem-sample-stats/
 ├── index.html                    # Main HTML page
 ├── AI_DEVELOPMENT_GUIDE.md       # 📚 Comprehensive guide for AI-assisted development
 ├── tandem/                       # 🔧 Reusable utilities (copy to new projects!)
@@ -128,6 +152,31 @@ The application supports two environments:
 - **Staging**: Uses `https://tandem-stg.autodesk.com/api/v1`
 
 To switch environments, edit `js/config.js` and change the return value in `getEnv()`.
+
+## Deployment to GitHub Pages
+
+This application can be deployed to GitHub Pages with zero configuration:
+
+1. **Push to GitHub**
+   ```bash
+   git push origin main
+   ```
+
+2. **Enable GitHub Pages**
+   - Go to your repository settings
+   - Navigate to "Pages" section
+   - Source: Deploy from branch `main` / root folder
+   - Save
+
+3. **Update your APS App**
+   - Add the GitHub Pages URL as a callback: `https://yourusername.github.io/tandem-sample-stats/`
+   - Update `loginRedirect` in `js/config.js` to match
+
+4. **Access your deployed app**
+   - URL: `https://yourusername.github.io/tandem-sample-stats/`
+   - It will work immediately - no build step required!
+
+**Why it works:** This is a pure static site with no build process. All dependencies are loaded via CDN.
 
 ## Development
 

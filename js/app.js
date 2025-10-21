@@ -175,7 +175,7 @@ function populateAccountsDropdown(accounts) {
   });
 
   // Try to restore last selected account
-  const lastAccount = window.localStorage.getItem('tandem-stats-last-account');
+  const lastAccount = window.localStorage.getItem('tandem-sample-stats-last-account');
   if (lastAccount) {
     accountSelect.value = lastAccount;
     populateFacilitiesDropdown(accounts, lastAccount);
@@ -212,7 +212,7 @@ function populateFacilitiesDropdown(accounts, accountName) {
   });
 
   // Try to restore last selected facility, or select the first one
-  const lastFacility = window.localStorage.getItem('tandem-stats-last-facility');
+  const lastFacility = window.localStorage.getItem('tandem-sample-stats-last-facility');
   let selectedFacilityURN = null;
   
   if (lastFacility && account.facilities.some(f => f.urn === lastFacility)) {
@@ -436,7 +436,7 @@ async function initialize() {
   accountSelect.addEventListener('change', (e) => {
     const accountName = e.target.value;
     if (accountName) {
-      window.localStorage.setItem('tandem-stats-last-account', accountName);
+      window.localStorage.setItem('tandem-sample-stats-last-account', accountName);
       populateFacilitiesDropdown(accounts, accountName);
       // Remove placeholder after selection
       const placeholder = accountSelect.querySelector('option[value=""]');
@@ -447,7 +447,7 @@ async function initialize() {
   facilitySelect.addEventListener('change', (e) => {
     const facilityURN = e.target.value;
     if (facilityURN) {
-      window.localStorage.setItem('tandem-stats-last-facility', facilityURN);
+      window.localStorage.setItem('tandem-sample-stats-last-facility', facilityURN);
       loadFacility(facilityURN);
       // Remove placeholder after selection
       const placeholder = facilitySelect.querySelector('option[value=""]');

@@ -603,7 +603,7 @@ const [modelKeys, elementKeys] = fromXrefKeyArray(xrefsB64);
 ## File Organization
 
 ```
-tandem-stats/
+tandem-sample-stats/
 ├── index.html                  # Main HTML entry point
 ├── tandem/                     # Reusable utilities (COPY THIS TO NEW PROJECTS)
 │   ├── constants.js            # Column families, names, element flags
@@ -662,14 +662,14 @@ tandem-stats/
 
 1. **Copy the utilities:**
    ```bash
-   cp -r tandem-stats/tandem/ my-new-project/tandem/
+   cp -r tandem-sample-stats/tandem/ my-new-project/tandem/
    ```
 
 2. **Copy Auth & API:**
    ```bash
-   cp tandem-stats/js/auth.js my-new-project/js/
-   cp tandem-stats/js/api.js my-new-project/js/
-   cp tandem-stats/js/config.js my-new-project/js/
+   cp tandem-sample-stats/js/auth.js my-new-project/js/
+   cp tandem-sample-stats/js/api.js my-new-project/js/
+   cp tandem-sample-stats/js/config.js my-new-project/js/
    ```
 
 3. **Update config.js:**
