@@ -1,6 +1,16 @@
 import { getDataTypeName } from '../utils.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { 
+  sanitizeSheetName, 
+  makeUniqueSheetName,
+  styleHeaderRow,
+  getColumnLetters,
+  createExportButtonManager,
+  downloadWorkbook,
+  createDateFilename,
+  ExcelStyles
+} from '../utils/excelUtils.js';
 
 /**
  * Toggle schema detail view
@@ -153,7 +163,7 @@ export async function displaySchema(container, models) {
     totalAttributes += schemaCache[modelURN].attributes.length;
   }
 
-  // Build header with toggle button
+  // Build header with toggle and export buttons
   let headerHtml = `
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
@@ -162,16 +172,26 @@ export async function displaySchema(container, models) {
           <div>Attribute${totalAttributes !== 1 ? 's' : ''} across ${models.length} model${models.length !== 1 ? 's' : ''}</div>
         </div>
       </div>
-      <button id="toggle-schema-btn"
-              class="p-2 hover:bg-dark-bg/50 rounded transition"
-              title="Show more">
-        <svg id="toggle-schema-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
-        </svg>
-        <svg id="toggle-schema-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
-        </svg>
-      </button>
+      <div class="flex items-center space-x-2">
+        <button id="export-schema-btn"
+                class="px-3 py-1.5 bg-tandem-blue text-white text-xs font-medium rounded hover:bg-blue-600 transition inline-flex items-center gap-2"
+                title="Export to Excel">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          <span>Export to Excel</span>
+        </button>
+        <button id="toggle-schema-btn"
+                class="p-2 hover:bg-dark-bg/50 rounded transition"
+                title="Show more">
+          <svg id="toggle-schema-icon-down" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
+          </svg>
+          <svg id="toggle-schema-icon-up" class="w-5 h-5 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 15l7-7 7 7"></path>
+          </svg>
+        </button>
+      </div>
     </div>
   `;
   
@@ -216,6 +236,12 @@ export async function displaySchema(container, models) {
     toggleBtn.addEventListener('click', toggleSchemaDetail);
   }
 
+  // Attach export button event listener
+  const exportBtn = document.getElementById('export-schema-btn');
+  if (exportBtn) {
+    exportBtn.addEventListener('click', () => exportSchemaToExcel(models, schemaCache));
+  }
+
   // Render initial tables (unsorted)
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
@@ -224,6 +250,87 @@ export async function displaySchema(container, models) {
     if (schema && schema.attributes && schema.attributes.length > 0) {
       renderSchemaTable(model.modelId, schema.attributes);
     }
+  }
+}
+
+/**
+ * Export schema to Excel with one sheet per model
+ * @param {Array} models - Array of model objects
+ * @param {Object} schemaCache - Schema cache object
+ */
+async function exportSchemaToExcel(models, schemaCache) {
+  const exportBtn = document.getElementById('export-schema-btn');
+  const originalHtml = exportBtn.innerHTML;
+  const buttonManager = createExportButtonManager(exportBtn, originalHtml);
+
+  try {
+    buttonManager.setLoading();
+
+    // Create a new workbook
+    const wb = XLSX.utils.book_new();
+    const usedSheetNames = new Set();
+
+    // Create a sheet for each model
+    for (const model of models) {
+      const schema = schemaCache[model.modelId];
+      
+      if (!schema || !schema.attributes || schema.attributes.length === 0) {
+        continue;
+      }
+
+      // Prepare sheet data
+      const sheetData = [
+        ['ID', 'Category', 'Name', 'Data Type'] // Header row
+      ];
+
+      // Add all attributes
+      schema.attributes.forEach(attr => {
+        sheetData.push([
+          attr.id || '',
+          attr.category || '',
+          attr.name || '',
+          getDataTypeName(attr.dataType)
+        ]);
+      });
+
+      // Create worksheet
+      const ws = XLSX.utils.aoa_to_sheet(sheetData);
+
+      // Style the header row
+      const columns = getColumnLetters(4); // 4 columns: ID, Category, Name, Data Type
+      styleHeaderRow(ws, 1, columns);
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 35 }, // ID
+        { wch: 20 }, // Category
+        { wch: 30 }, // Name
+        { wch: 15 }  // Data Type
+      ];
+
+      // Sanitize and make unique sheet name
+      const baseSheetName = sanitizeSheetName(model.label, `Model_${models.indexOf(model) + 1}`);
+      const sheetName = makeUniqueSheetName(baseSheetName, usedSheetNames);
+      usedSheetNames.add(sheetName);
+
+      // Add worksheet to workbook
+      XLSX.utils.book_append_sheet(wb, ws, sheetName);
+    }
+
+    // Check if we have any sheets
+    if (wb.SheetNames.length === 0) {
+      throw new Error('No schema data to export');
+    }
+
+    // Generate filename and download
+    const filename = createDateFilename('schema-export');
+    downloadWorkbook(wb, filename);
+
+    buttonManager.setSuccess();
+  } catch (error) {
+    console.error('Error exporting schema to Excel:', error);
+    buttonManager.setError();
+    alert('Failed to export schema to Excel. See console for details.');
   }
 }
 
