@@ -309,9 +309,9 @@ async function exportSchemaToExcel(models, schemaCache) {
       ];
 
       // Sanitize and make unique sheet name
-      // Handle special case of "(Default)" model label
+      // Handle special case of default model (empty label)
       let labelToUse = model.label;
-      if (labelToUse === '(Default)' || labelToUse === 'Default') {
+      if (!labelToUse || labelToUse === '(Default)' || labelToUse === 'Default') {
         labelToUse = 'Default_Model';
       }
       const baseSheetName = sanitizeSheetName(labelToUse, `Model_${models.indexOf(model) + 1}`);
