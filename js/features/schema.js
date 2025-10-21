@@ -309,7 +309,12 @@ async function exportSchemaToExcel(models, schemaCache) {
       ];
 
       // Sanitize and make unique sheet name
-      const baseSheetName = sanitizeSheetName(model.label, `Model_${models.indexOf(model) + 1}`);
+      // Handle special case of "(Default)" model label
+      let labelToUse = model.label;
+      if (labelToUse === '(Default)' || labelToUse === 'Default') {
+        labelToUse = 'Default_Model';
+      }
+      const baseSheetName = sanitizeSheetName(labelToUse, `Model_${models.indexOf(model) + 1}`);
       const sheetName = makeUniqueSheetName(baseSheetName, usedSheetNames);
       usedSheetNames.add(sheetName);
 
