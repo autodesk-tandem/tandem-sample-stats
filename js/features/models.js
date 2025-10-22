@@ -390,21 +390,25 @@ function generateHistoryHTML(allHistory, facilityURN) {
       margin-bottom: 20px;
     }
     .model-header {
-      background: #333333;
+      background: linear-gradient(to right, rgba(67, 56, 202, 0.3), rgba(67, 56, 202, 0.3));
       padding: 12px 20px;
       border-bottom: 1px solid #404040;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
     }
     .model-name {
       font-size: 16px;
       font-weight: 600;
-      color: #0696D7;
+      color: #e0e0e0;
+    }
+    .model-urn {
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      color: #a0a0a0;
+      margin-top: 4px;
     }
     .model-change-count {
       font-size: 12px;
       color: #a0a0a0;
+      margin-top: 4px;
     }
     table {
       width: 100%;
@@ -853,8 +857,9 @@ function generateHistoryHTML(allHistory, facilityURN) {
         tablesHtml += \`
           <div class="model-section">
             <div class="model-header">
-              <span class="model-name">\${item.modelName}</span>
-              <span class="model-change-count">\${item.history.length} change\${item.history.length !== 1 ? 's' : ''}</span>
+              <div class="model-name">\${item.modelName}</div>
+              <div class="model-urn">\${item.modelId}</div>
+              <div class="model-change-count">\${item.history.length} change\${item.history.length !== 1 ? 's' : ''}</div>
             </div>
             <table>
               <thead>

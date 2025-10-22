@@ -15,7 +15,7 @@ const toggleTaggedAssetsDetail = createToggleFunction({
 });
 
 /**
- * Render sortable tagged assets table
+ * Render sortable tagged assets table grouped by model
  * @param {Array} propertyDetails - Array of property detail objects
  * @param {string} sortColumn - Column to sort by
  * @param {string} sortDirection - 'asc' or 'desc'
@@ -25,91 +25,130 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
   const tableContainer = document.getElementById('taggedAssets-table');
   if (!tableContainer) return;
 
-  // Sort property details
-  let sortedProperties = [...propertyDetails];
-  sortedProperties.sort((a, b) => {
-    let aVal, bVal;
-    
-    if (sortColumn === 'count') {
-      aVal = a.count;
-      bVal = b.count;
-      // Numeric sort
-      if (sortDirection === 'asc') {
-        return aVal - bVal;
-      } else {
-        return bVal - aVal;
-      }
-    } else {
-      // String sort for category, name, id
-      aVal = (a[sortColumn] || '').toString().toLowerCase();
-      bVal = (b[sortColumn] || '').toString().toLowerCase();
-      
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
+  // Group properties by model
+  const propertiesByModel = {};
+  propertyDetails.forEach(prop => {
+    if (!propertiesByModel[prop.modelId]) {
+      propertiesByModel[prop.modelId] = {
+        modelName: prop.modelName,
+        modelId: prop.modelId,
+        properties: []
+      };
     }
+    propertiesByModel[prop.modelId].properties.push(prop);
   });
 
-  // Build table HTML
-  let tableHtml = `
-    <table class="min-w-full text-xs">
-      <thead class="bg-dark-bg/50">
-        <tr>
-          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
-              data-column="category" data-direction="${sortColumn === 'category' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
-            <div class="flex items-center gap-1">
-              <span>Category</span>
-              ${sortColumn === 'category' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </div>
-          </th>
-          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
-              data-column="name" data-direction="${sortColumn === 'name' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
-            <div class="flex items-center gap-1">
-              <span>Name</span>
-              ${sortColumn === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </div>
-          </th>
-          <th class="px-3 py-2 text-left font-semibold text-dark-text font-mono cursor-pointer hover:bg-dark-bg/50 select-none" 
-              data-column="id" data-direction="${sortColumn === 'id' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
-            <div class="flex items-center gap-1">
-              <span>ID</span>
-              ${sortColumn === 'id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </div>
-          </th>
-          <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
-              data-column="count" data-direction="${sortColumn === 'count' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc'}">
-            <div class="flex items-center justify-end gap-1">
-              <span>Count</span>
-              ${sortColumn === 'count' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
-            </div>
-          </th>
-        </tr>
-      </thead>
-      <tbody class="divide-y divide-dark-border">
-  `;
+  // Sort properties within each model group
+  for (const modelId in propertiesByModel) {
+    const modelGroup = propertiesByModel[modelId];
+    modelGroup.properties.sort((a, b) => {
+      let aVal, bVal;
+      
+      if (sortColumn === 'count') {
+        aVal = a.count;
+        bVal = b.count;
+        // Numeric sort
+        if (sortDirection === 'asc') {
+          return aVal - bVal;
+        } else {
+          return bVal - aVal;
+        }
+      } else {
+        // String sort for category, name, id
+        aVal = (a[sortColumn] || '').toString().toLowerCase();
+        bVal = (b[sortColumn] || '').toString().toLowerCase();
+        
+        if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+        if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+        return 0;
+      }
+    });
+  }
+
+  // Build grouped table HTML
+  let tableHtml = '<div class="space-y-2">';
   
-  sortedProperties.forEach(prop => {
+  for (const modelId in propertiesByModel) {
+    const modelGroup = propertiesByModel[modelId];
+    
     tableHtml += `
-      <tr class="hover:bg-dark-bg/30" data-property-id="${prop.id}">
-        <td class="px-3 py-2 text-dark-text">${prop.category}</td>
-        <td class="px-3 py-2 text-dark-text">${prop.name}</td>
-        <td class="px-3 py-2 text-dark-text-secondary font-mono">${prop.id}</td>
-        <td class="px-3 py-2 text-right text-dark-text font-semibold">
-          <button class="tagged-asset-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
-                  data-property-id="${prop.id}"
-                  data-property-name="${prop.category}.${prop.name}"
-                  title="Click to view ${prop.count} element${prop.count !== 1 ? 's' : ''}">
-            ${prop.count.toLocaleString()}
-          </button>
-        </td>
-      </tr>
+      <div class="border border-dark-border rounded overflow-hidden">
+        <!-- Model Header -->
+        <div class="bg-gradient-to-r from-indigo-900/30 to-indigo-800/30 px-4 py-3 border-b border-dark-border">
+          <div class="font-semibold text-dark-text">${modelGroup.modelName}</div>
+          <div class="text-xs font-mono text-dark-text-secondary mt-1">${modelGroup.modelId}</div>
+          <div class="text-xs text-dark-text-secondary mt-1">${modelGroup.properties.length} propert${modelGroup.properties.length !== 1 ? 'ies' : 'y'}</div>
+        </div>
+        
+        <!-- Properties table -->
+        <table class="min-w-full text-xs table-fixed">
+          <colgroup>
+            <col style="width: 25%">
+            <col style="width: 35%">
+            <col style="width: 20%">
+            <col style="width: 20%">
+          </colgroup>
+          <thead class="bg-dark-bg/50">
+            <tr>
+              <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
+                  data-column="category" data-direction="${sortColumn === 'category' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+                <div class="flex items-center gap-1">
+                  <span>Category</span>
+                  ${sortColumn === 'category' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
+                  data-column="name" data-direction="${sortColumn === 'name' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+                <div class="flex items-center gap-1">
+                  <span>Name</span>
+                  ${sortColumn === 'name' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              <th class="px-3 py-2 text-left font-semibold text-dark-text font-mono cursor-pointer hover:bg-dark-bg/50 select-none" 
+                  data-column="id" data-direction="${sortColumn === 'id' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+                <div class="flex items-center gap-1">
+                  <span>ID</span>
+                  ${sortColumn === 'id' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
+                  data-column="count" data-direction="${sortColumn === 'count' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc'}">
+                <div class="flex items-center justify-end gap-1">
+                  <span>Count</span>
+                  ${sortColumn === 'count' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-dark-border">
     `;
-  });
+    
+    modelGroup.properties.forEach(prop => {
+      tableHtml += `
+        <tr class="hover:bg-dark-bg/30 bg-dark-card" data-property-id="${prop.id}">
+          <td class="px-3 py-2 text-dark-text">${prop.category}</td>
+          <td class="px-3 py-2 text-dark-text">${prop.name}</td>
+          <td class="px-3 py-2 text-dark-text-secondary font-mono">${prop.id}</td>
+          <td class="px-3 py-2 text-right text-dark-text font-semibold">
+            <button class="tagged-asset-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
+                    data-property-id="${prop.id}"
+                    data-property-name="${prop.category}.${prop.name}"
+                    title="Click to view ${prop.count} element${prop.count !== 1 ? 's' : ''}">
+              ${prop.count.toLocaleString()}
+            </button>
+          </td>
+        </tr>
+      `;
+    });
+    
+    tableHtml += `
+          </tbody>
+        </table>
+      </div>
+    `;
+  }
   
-  tableHtml += `
-      </tbody>
-    </table>
-  `;
+  tableHtml += '</div>';
 
   tableContainer.innerHTML = tableHtml;
 
@@ -241,14 +280,20 @@ export async function displayTaggedAssets(container, facilityURN, models) {
       propertyDetails = propertyKeys.map(propId => {
         let category = '';
         let name = '';
+        let modelId = '';
+        let modelName = '';
         
         // Look up in schema cache across all models
-        for (const modelId in schemaCache) {
-          const schema = schemaCache[modelId];
+        for (const cachedModelId in schemaCache) {
+          const schema = schemaCache[cachedModelId];
           const attr = schema.lookup.get(propId);
           if (attr) {
             category = attr.category || '';
             name = attr.name || '';
+            modelId = cachedModelId;
+            // Find model name from models array
+            const model = models.find(m => m.modelId === cachedModelId);
+            modelName = model ? model.label : 'Unknown Model';
             break;
           }
         }
@@ -257,7 +302,9 @@ export async function displayTaggedAssets(container, facilityURN, models) {
           id: propId,
           category: category || 'Unknown',
           name: name || 'Unknown',
-          count: details.propertyUsage[propId]
+          count: details.propertyUsage[propId],
+          modelId: modelId || 'Unknown',
+          modelName: modelName || 'Unknown Model'
         };
       });
       

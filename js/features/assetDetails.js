@@ -130,7 +130,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       margin-bottom: 20px;
     }
     .model-header {
-      background: #333333;
+      background: linear-gradient(to right, rgba(67, 56, 202, 0.3), rgba(67, 56, 202, 0.3));
       padding: 12px 20px;
       border-bottom: 1px solid #404040;
       display: flex;
@@ -143,11 +143,18 @@ function generateAssetDetailsHTML(elementsByModel, title) {
     .model-name {
       font-size: 16px;
       font-weight: 600;
-      color: #0696D7;
+      color: #e0e0e0;
+    }
+    .model-urn {
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      color: #a0a0a0;
+      margin-top: 4px;
     }
     .model-count {
       font-size: 12px;
       color: #a0a0a0;
+      margin-top: 4px;
     }
     .view-keys-btn {
       background: #0696D7;
@@ -925,6 +932,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
           html += '<div class="model-header">';
           html += '<div class="model-header-left">';
           html += '<div class="model-name">' + escapeHtml(modelData.modelName) + '</div>';
+          html += '<div class="model-urn">' + escapeHtml(modelData.modelURN) + '</div>';
           html += '<div class="model-count">' + modelData.elements.length + ' element' + (modelData.elements.length !== 1 ? 's' : '') + '</div>';
           html += '</div>';
           html += '<button class="view-keys-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-model-name="' + escapeHtml(modelData.modelName) + '">View Keys</button>';
