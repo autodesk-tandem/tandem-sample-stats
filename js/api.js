@@ -204,6 +204,103 @@ export async function getElementCount(modelURN) {
 }
 
 /**
+ * Get element count breakdown by category for a model
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<{total: number, categories: Array<{id: number, name: string, count: number}>}>}
+ */
+export async function getElementCountByCategory(modelURN) {
+  try {
+    // Fetch elements with CategoryId
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.CategoryId],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Count by category
+    const categoryCounts = {};
+    elements.forEach(element => {
+      const categoryId = element[QC.CategoryId]?.[0];
+      if (categoryId !== undefined && categoryId !== null) {
+        categoryCounts[categoryId] = (categoryCounts[categoryId] || 0) + 1;
+      } else {
+        // Elements without a category
+        categoryCounts['unknown'] = (categoryCounts['unknown'] || 0) + 1;
+      }
+    });
+    
+    // Convert to array and sort by count descending
+    const categories = Object.entries(categoryCounts).map(([id, count]) => ({
+      id: id === 'unknown' ? null : parseInt(id),
+      count: count
+    })).sort((a, b) => b.count - a.count);
+    
+    return {
+      total: elements.length,
+      categories: categories
+    };
+  } catch (error) {
+    console.error('Error fetching element count by category:', error);
+    return { total: 0, categories: [] };
+  }
+}
+
+/**
+ * Get element keys for a specific category in a model
+ * @param {string} modelURN - Model URN
+ * @param {number|null} categoryId - Category ID (null for unknown category)
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByCategory(modelURN, categoryId) {
+  try {
+    // Fetch elements with CategoryId
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.CategoryId],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter by category and extract keys
+    const keys = elements
+      .filter(element => {
+        const elemCategoryId = element[QC.CategoryId]?.[0];
+        if (categoryId === null) {
+          // Match elements without a category
+          return elemCategoryId === undefined || elemCategoryId === null;
+        } else {
+          return elemCategoryId === categoryId;
+        }
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by category:', error);
+    return [];
+  }
+}
+
+/**
  * Get facility thumbnail as a blob URL
  * @param {string} facilityURN - Facility URN
  * @returns {Promise<string|null>} Blob URL for the thumbnail image, or null if not available
