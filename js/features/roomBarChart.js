@@ -28,6 +28,9 @@ export function viewRoomBarChart(rooms) {
   const blob = new Blob([html], { type: 'text/html' });
   const url = URL.createObjectURL(blob);
   window.open(url, '_blank');
+  
+  // Clean up the blob URL after a delay to prevent memory leaks
+  setTimeout(() => URL.revokeObjectURL(url), 100);
 }
 
 /**

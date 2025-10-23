@@ -300,6 +300,9 @@ export async function getElementsByCategory(modelURN, categoryId) {
   }
 }
 
+// Track blob URLs for cleanup
+const thumbnailBlobURLs = new Set();
+
 /**
  * Get facility thumbnail as a blob URL
  * @param {string} facilityURN - Facility URN
@@ -316,11 +319,23 @@ export async function getFacilityThumbnail(facilityURN) {
     
     const blob = await response.blob();
     // Convert blob to blob URL for display
-    return URL.createObjectURL(blob);
+    const blobURL = URL.createObjectURL(blob);
+    thumbnailBlobURLs.add(blobURL);
+    return blobURL;
   } catch (error) {
     console.error('Error fetching facility thumbnail:', error);
     return null;
   }
+}
+
+/**
+ * Clean up all thumbnail blob URLs to prevent memory leaks
+ * Should be called when switching facilities or on page unload
+ */
+export function cleanupThumbnailURLs() {
+  thumbnailBlobURLs.forEach(url => URL.revokeObjectURL(url));
+  thumbnailBlobURLs.clear();
+  console.log('Cleaned up thumbnail blob URLs');
 }
 
 /**

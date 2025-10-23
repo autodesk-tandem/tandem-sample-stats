@@ -5,6 +5,7 @@ import {
   getFacilitiesForUser, 
   getFacilityInfo,
   getFacilityThumbnail,
+  cleanupThumbnailURLs,
   getModels,
   getStreams,
   getSystems,
@@ -22,6 +23,7 @@ import { displaySystems } from './features/systems.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
+import { displaySearch } from './features/search.js';
 import { SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
@@ -37,6 +39,7 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
+const searchContainer = document.getElementById('searchContainer');
 const systemsList = document.getElementById('systemsList');
 const levelsList = document.getElementById('levelsList');
 const roomsList = document.getElementById('roomsList');
@@ -330,6 +333,7 @@ async function loadFacility(facilityURN) {
         // Clear all data sections
         modelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         streamsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        searchContainer.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         taggedAssetsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         levelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         roomsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
@@ -384,6 +388,9 @@ async function loadStats(facilityURN) {
     // Clear schema cache from previous facility
     clearSchemaCache();
     
+    // Note: Don't cleanup thumbnail URLs here - they're still being displayed!
+    // Cleanup happens only on page unload via beforeunload event
+    
     // Get models
     const models = await getModels(facilityURN);
     
@@ -406,6 +413,9 @@ async function loadStats(facilityURN) {
     
     const streams = hasDefaultModel ? await getStreams(facilityURN) : [];
     await displayStreams(streamsList, streams, facilityURN);
+    
+    // Display search interface
+    await displaySearch(searchContainer, facilityURN, models);
     
     // Get and display systems (only if default model exists)
     const systems = hasDefaultModel ? await getSystems(facilityURN, models) : [];
@@ -484,6 +494,11 @@ async function initialize() {
   
   toggleLoading(false);
 }
+
+// Clean up blob URLs when page is unloaded to prevent memory leaks
+window.addEventListener('beforeunload', () => {
+  cleanupThumbnailURLs();
+});
 
 // Start the application when DOM is ready
 if (document.readyState === 'loading') {

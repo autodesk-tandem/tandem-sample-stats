@@ -599,6 +599,148 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       return allProperties;
     }
     
+    function getCategoryName(categoryId) {
+      if (categoryId === null || categoryId === undefined) {
+        return 'Unknown Category';
+      }
+      const categories = {
+        10: "Regeneration Failure",
+        11: "Walls",
+        14: "Windows",
+        16: "Glass",
+        18: "Frame/Mullion",
+        20: "Sill/Head",
+        22: "Opening",
+        23: "Doors",
+        25: "Panel",
+        27: "Opening",
+        29: "Frame/Mullion",
+        31: "Glass",
+        32: "Floors",
+        35: "Roofs",
+        38: "Ceilings",
+        80: "Furniture",
+        100: "Columns",
+        120: "Stairs",
+        126: "Railings",
+        150: "Generic Annotations",
+        151: "Generic Models",
+        160: "Rooms",
+        170: "Curtain Panels",
+        171: "Curtain Wall Mullions",
+        180: "Ramps",
+        185: "Massing",
+        240: "Levels",
+        260: "Dimensions",
+        280: "Title Blocks",
+        300: "Text Notes",
+        340: "Curtain Systems",
+        400: "Section Marks",
+        500: "Cameras",
+        510: "Viewports",
+        520: "Lights",
+        530: "Reference Planes",
+        573: "Schedules",
+        700: "Materials",
+        710: "Reference Points",
+        800: "Tile pattern grids",
+        1000: "Casework",
+        1040: "Electrical Equipment",
+        1060: "Electrical Fixtures",
+        1100: "Furniture Systems",
+        1120: "Lighting Fixtures",
+        1140: "Mechanical Equipment",
+        1160: "Plumbing Fixtures",
+        1180: "Parking",
+        1220: "Roads",
+        1260: "Site",
+        1300: "Structural Foundations",
+        1320: "Structural Framing",
+        1330: "Structural Columns",
+        1336: "Structural Trusses",
+        1340: "Topography",
+        1350: "Specialty Equipment",
+        1360: "Planting",
+        1370: "Entourage",
+        1390: "Fascias",
+        1391: "Gutters",
+        1392: "Slab Edges",
+        1393: "Roof Soffits",
+        2000: "Detail Items",
+        3000: "Profiles",
+        3100: "Sheets",
+        3200: "Areas",
+        3400: "Mass",
+        3500: "Stacked Walls",
+        3600: "Spaces",
+        5200: "Structural Loads",
+        6000: "Scope Boxes",
+        6060: "Revision Clouds",
+        8000: "Ducts",
+        8010: "Duct Fittings",
+        8013: "Air Terminals",
+        8016: "Duct Accessories",
+        8020: "Flex Ducts",
+        8037: "Electrical Circuits",
+        8039: "Wires",
+        8044: "Pipes",
+        8049: "Pipe Fittings",
+        8050: "Flex Pipes",
+        8055: "Pipe Accessories",
+        8099: "Sprinklers",
+        8126: "Cable Tray Fittings",
+        8128: "Conduit Fittings",
+        8130: "Cable Trays",
+        8132: "Conduits",
+        8193: "MEP Fabrication Ductwork",
+        8203: "MEP Fabrication Hangers",
+        8208: "MEP Fabrication Pipework",
+        8212: "MEP Fabrication Containment",
+        8232: "Mechanical Control Devices",
+        8234: "Plumbing Equipment",
+        9000: "Structural Rebar",
+        9003: "Structural Area Reinforcement",
+        9009: "Structural Path Reinforcement",
+        9016: "Structural Fabric Reinforcement",
+        9030: "Structural Connections",
+        9060: "Structural Rebar Couplers",
+        9630: "Analytical Beams",
+        9633: "Analytical Braces",
+        9636: "Analytical Columns",
+        9639: "Analytical Floors",
+        9640: "Analytical Walls",
+        9641: "Analytical Isolated Foundations",
+        9642: "Analytical Wall Foundations",
+        9643: "Analytical Foundation Slabs",
+        10001: "Point Clouds",
+        [-2000011]: "Walls",
+        [-2000014]: "Floors",
+        [-2000023]: "Doors",
+        [-2000024]: "Windows",
+        [-2000032]: "Roofs",
+        [-2000035]: "Structural Columns",
+        [-2000038]: "Ceilings",
+        [-2000080]: "Structural Framing",
+        [-2000151]: "Air Terminals",
+        [-2000160]: "Rooms",
+        [-2000240]: "Levels",
+        [-2001040]: "Lighting Fixtures",
+        [-2001060]: "Casework",
+        [-2001100]: "Entourage",
+        [-2001140]: "Mechanical Equipment",
+        [-2001150]: "Electrical Equipment",
+        [-2001160]: "Plumbing Fixtures",
+        [-2008000]: "Ducts",
+        [-2008044]: "Duct Fittings",
+        [-2008049]: "Duct Accessories",
+        [-2008051]: "Mechanical Equipment",
+        [-2008127]: "Pipes",
+        [-2008128]: "Pipe Fittings",
+        [-2008130]: "Pipe Accessories"
+      };
+      return categories[categoryId] || "Category " + categoryId;
+    }
+    
     async function toggleElementDetails(modelURN, elementKey, button, detailsDiv) {
       if (detailsDiv.classList.contains('visible')) {
         // Collapse
@@ -631,28 +773,21 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         const element = elements[0];
         const properties = organizeProperties(element, modelURN);
         
-        // Sort properties by ID by default (with override grouping logic)
+        // Sort properties by Category first, then by Property Name (default sort)
         properties.sort((a, b) => {
-          const aClean = a.id.replace(/:/g, '').replace(/!/g, '');
-          const bClean = b.id.replace(/:/g, '').replace(/!/g, '');
+          // First sort by category
+          const categoryComparison = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+          if (categoryComparison !== 0) return categoryComparison;
           
-          const cleanComparison = aClean.toLowerCase().localeCompare(bClean.toLowerCase());
-          if (cleanComparison !== 0) return cleanComparison;
-          
-          // Non-override before override
-          const aHasBang = a.id.includes('!');
-          const bHasBang = b.id.includes('!');
-          
-          if (aHasBang && !bHasBang) return 1;
-          if (!aHasBang && bHasBang) return -1;
-          return 0;
+          // Then sort by property name within the same category
+          return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
         });
         
         // Create sortable table
         let html = '<table class="properties-table">';
         html += '<thead><tr>';
-        html += '<th data-sort="id" class="sorted">ID</th>';
-        html += '<th data-sort="category">Category</th>';
+        html += '<th data-sort="id">ID</th>';
+        html += '<th data-sort="category" class="sorted">Category</th>';
         html += '<th data-sort="name">Property Name</th>';
         html += '<th data-sort="value">Value</th>';
         html += '</tr></thead>';
@@ -681,7 +816,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         
         // Add sorting functionality
         const headers = detailsDiv.querySelectorAll('th[data-sort]');
-        let currentSort = { column: 'id', direction: 'asc' }; // Start with ID sorted ascending
+        let currentSort = { column: 'category', direction: 'asc' }; // Start with Category sorted ascending
         
         headers.forEach(header => {
           header.addEventListener('click', () => {
@@ -737,6 +872,15 @@ function generateAssetDetailsHTML(elementsByModel, title) {
               
               // Normal string comparison for other columns
               const comparison = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+              
+              // If sorting by category and categories are the same, use property name as secondary sort
+              if (sortBy === 'category' && comparison === 0) {
+                const aName = a.getAttribute('data-name') || '';
+                const bName = b.getAttribute('data-name') || '';
+                const nameComparison = aName.toLowerCase().localeCompare(bName.toLowerCase());
+                return currentSort.direction === 'asc' ? nameComparison : -nameComparison;
+              }
+              
               return currentSort.direction === 'asc' ? comparison : -comparison;
             });
             
