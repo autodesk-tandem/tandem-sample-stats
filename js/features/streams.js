@@ -723,18 +723,13 @@ export async function displayStreams(container, streams, facilityURN) {
     detailHtml += `
       <div class="border border-dark-border rounded p-4 hover:border-tandem-blue transition">
         <div class="flex items-center justify-between">
-          <div class="flex items-center space-x-3 flex-grow">
-            <div class="flex-shrink-0 w-10 h-10 bg-gradient-to-br from-green-500 to-green-600 rounded flex items-center justify-center">
-              <span class="text-white font-semibold text-sm">${i + 1}</span>
+          <div class="flex-grow">
+            <div class="flex items-center gap-2 mb-1">
+              <h3 class="font-semibold text-dark-text">${streamName}</h3>
+              ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-500/30 to-green-600/30 text-green-300 rounded">${classification}</span>` : ''}
             </div>
-            <div class="flex-grow">
-              <div class="flex items-center gap-2 mb-1">
-                <h3 class="text-base font-semibold text-dark-text">${streamName}</h3>
-                ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-500/30 to-green-600/30 text-green-300 rounded">${classification}</span>` : ''}
-              </div>
-              ${hostInfo ? `<p class="text-xs text-dark-text-secondary mt-1">Host: ${hostInfo.name} (${hostInfo.type})</p>` : ''}
-              <p class="text-xs text-dark-text-secondary mt-1">Key: <span class="font-mono">${streamKey}</span></p>
-            </div>
+            ${hostInfo ? `<p class="text-xs text-dark-text-secondary mt-1">Host: ${hostInfo.name} (${hostInfo.type})</p>` : ''}
+            <p class="text-xs text-dark-text-secondary mt-1">Key: <span class="font-mono">${streamKey}</span></p>
           </div>
           <button 
             class="view-stream-chart-btn flex-shrink-0 inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"

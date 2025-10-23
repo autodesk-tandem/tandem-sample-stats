@@ -15,6 +15,13 @@ const toggleModelsDetail = createToggleFunction({
 });
 
 /**
+ * Cache for category element keys to avoid redundant API calls
+ * Key: `${modelId}:${categoryId}`
+ * Value: Array of element keys
+ */
+const categoryKeysCache = new Map();
+
+/**
  * Render category breakdown table with sortable headers and clickable counts
  * @param {HTMLElement} container - Container to render into
  * @param {Object} breakdown - Breakdown data with total and categories
@@ -131,37 +138,56 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
       const modelId = button.getAttribute('data-model-id');
       const modelName = button.getAttribute('data-model-name');
       
-      // Show loading state
-      const originalText = button.textContent;
-      button.textContent = '...';
-      button.disabled = true;
+      const parsedCategoryId = categoryId === 'null' ? null : parseInt(categoryId);
+      const cacheKey = `${modelId}:${categoryId}`;
       
-      try {
-        // Fetch element keys for this category
-        const parsedCategoryId = categoryId === 'null' ? null : parseInt(categoryId);
-        const keys = await getElementsByCategory(modelId, parsedCategoryId);
+      // Check cache first
+      let keys = categoryKeysCache.get(cacheKey);
+      
+      if (!keys) {
+        // Show loading state
+        const originalText = button.textContent;
+        button.textContent = '...';
+        button.disabled = true;
         
-        if (keys.length === 0) {
-          alert('No elements found in this category');
+        try {
+          console.log(`[Models] Loading elements for ${categoryName} (first time)`);
+          // Fetch element keys for this category
+          keys = await getElementsByCategory(modelId, parsedCategoryId);
+          
+          // Cache the result
+          categoryKeysCache.set(cacheKey, keys);
+          console.log(`[Models] Cached ${keys.length} element keys for ${categoryName}`);
+          
+          if (keys.length === 0) {
+            alert('No elements found in this category');
+            button.textContent = originalText;
+            button.disabled = false;
+            return;
+          }
+        } catch (error) {
+          console.error('Error fetching category elements:', error);
+          alert('Failed to fetch elements. See console for details.');
+          button.textContent = originalText;
+          button.disabled = false;
           return;
         }
         
-        // Open Asset Details page
-        const elementsByModel = [{
-          modelURN: modelId,
-          modelName: modelName,
-          keys: keys
-        }];
-        
-        viewAssetDetails(elementsByModel, `${categoryName} in ${modelName}`);
-      } catch (error) {
-        console.error('Error fetching category elements:', error);
-        alert('Failed to fetch elements. See console for details.');
-      } finally {
         // Restore button state
         button.textContent = originalText;
         button.disabled = false;
+      } else {
+        console.log(`[Models] Using cached elements for ${categoryName} (${keys.length} keys, no API call)`);
       }
+      
+      // Open Asset Details page
+      const elementsByModel = [{
+        modelURN: modelId,
+        modelName: modelName,
+        keys: keys
+      }];
+      
+      viewAssetDetails(elementsByModel, `${categoryName} in ${modelName}`);
     });
   });
 }
@@ -345,6 +371,9 @@ export async function displayModels(container, models, facilityURN) {
   });
   
   // Set up category breakdown toggle buttons for each model
+  // Cache breakdown data to avoid redundant API calls
+  const breakdownCache = new Map();
+  
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     const toggleBtn = document.getElementById(`toggle-categories-${i}`);
@@ -352,8 +381,6 @@ export async function displayModels(container, models, facilityURN) {
     const icon = document.getElementById(`categories-icon-${i}`);
     
     if (toggleBtn && breakdownDiv) {
-      let isLoaded = false;
-      
       toggleBtn.addEventListener('click', async () => {
         const isHidden = breakdownDiv.classList.contains('hidden');
         
@@ -362,8 +389,9 @@ export async function displayModels(container, models, facilityURN) {
           breakdownDiv.classList.remove('hidden');
           icon?.classList.add('rotate-180');
           
-          // Load data if not already loaded
-          if (!isLoaded) {
+          // Check cache first to avoid redundant API calls
+          if (!breakdownCache.has(model.modelId)) {
+            console.log(`[Models] Loading category breakdown for ${model.label} (first time)`);
             breakdownDiv.innerHTML = '<div class="text-sm text-dark-text-secondary animate-pulse">Loading breakdown...</div>';
             
             try {
@@ -371,15 +399,19 @@ export async function displayModels(container, models, facilityURN) {
               
               if (breakdown.categories.length === 0) {
                 breakdownDiv.innerHTML = '<div class="text-sm text-dark-text-secondary">No elements found.</div>';
+                breakdownCache.set(model.modelId, null); // Cache empty result
               } else {
                 // Render sortable category table
                 renderCategoryTable(breakdownDiv, breakdown, model, facilityURN);
-                isLoaded = true;
+                breakdownCache.set(model.modelId, { breakdown, rendered: true });
+                console.log(`[Models] Cached breakdown for ${model.label} (${breakdown.total} elements, ${breakdown.categories.length} categories)`);
               }
             } catch (error) {
               console.error('Error loading category breakdown:', error);
               breakdownDiv.innerHTML = '<div class="text-sm text-red-400">Failed to load breakdown.</div>';
             }
+          } else {
+            console.log(`[Models] Using cached breakdown for ${model.label} (no API call)`);
           }
         } else {
           // Hide breakdown

@@ -433,7 +433,7 @@ async function loadStats(facilityURN) {
     const documents = await getDocuments(facilityURN);
     await displayDocuments(documentsList, documents);
     
-    await displaySchema(schemaList, models);
+    await displaySchema(schemaList, models, facilityURN);
     
     // Display diagnostics (must be after schema is loaded)
     await displayDiagnostics(diagnosticsList, facilityURN, models);

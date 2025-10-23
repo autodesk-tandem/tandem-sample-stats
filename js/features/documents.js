@@ -86,7 +86,7 @@ export async function displayDocuments(container, documents) {
     const doc = documents[i];
     
     // Format file size if available
-    const fileSizeDisplay = doc.size ? `<span class="text-sm text-dark-text-secondary">Size: ${(doc.size / 1024 / 1024).toFixed(2)} MB</span>` : '';
+    const fileSizeDisplay = doc.size ? `<span class="text-xs text-dark-text-secondary">Size: ${(doc.size / 1024 / 1024).toFixed(2)} MB</span>` : '';
     
     // Format last updated date
     const lastUpdated = doc.lastUpdated ? new Date(doc.lastUpdated).toLocaleString() : 'Unknown';
@@ -111,13 +111,13 @@ export async function displayDocuments(container, documents) {
           <div class="flex-grow min-w-0">
             <div class="flex items-center justify-between mb-2">
               <div class="flex-grow min-w-0">
-                <h3 class="text-sm font-semibold text-dark-text truncate">${doc.name || 'Untitled Document'}</h3>
-                ${doc.label ? `<p class="text-sm text-dark-text-secondary">${doc.label}</p>` : ''}
+                <h3 class="font-semibold text-dark-text truncate">${doc.name || 'Untitled Document'}</h3>
+                ${doc.label ? `<p class="text-xs text-dark-text-secondary">${doc.label}</p>` : ''}
               </div>
               ${doc.signedLink ? `
               <button data-doc-url="${doc.signedLink}" 
                       data-doc-type="${doc.contentType || ''}"
-                      class="doc-open-btn ml-3 flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-tandem-blue text-tandem-blue rounded hover:bg-tandem-blue hover:text-white transition text-sm font-medium cursor-pointer">
+                      class="doc-open-btn ml-3 flex-shrink-0 inline-flex items-center px-3 py-1.5 border border-tandem-blue text-tandem-blue rounded hover:bg-tandem-blue hover:text-white transition text-xs font-medium cursor-pointer">
                 <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"></path>
                 </svg>
@@ -125,7 +125,7 @@ export async function displayDocuments(container, documents) {
               </button>
               ` : ''}
             </div>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
               ${doc.contentType ? `
               <div>
                 <span class="font-medium text-dark-text">Type:</span>
