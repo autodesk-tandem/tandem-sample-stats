@@ -5,6 +5,7 @@ import {
   getFacilitiesForUser, 
   getFacilityInfo,
   getFacilityThumbnail,
+  cleanupThumbnailURLs,
   getModels,
   getStreams,
   getSystems,
@@ -22,6 +23,7 @@ import { displaySystems } from './features/systems.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
+import { displaySearch } from './features/search.js';
 import { SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
@@ -37,6 +39,7 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
+const searchContainer = document.getElementById('searchContainer');
 const systemsList = document.getElementById('systemsList');
 const levelsList = document.getElementById('levelsList');
 const roomsList = document.getElementById('roomsList');
@@ -197,6 +200,41 @@ function populateAccountsDropdown(accounts) {
 }
 
 /**
+ * Get the last used facility for a specific account
+ * @param {string} accountName - Name of the account
+ * @returns {string|null} - Facility URN or null
+ */
+function getLastFacilityForAccount(accountName) {
+  try {
+    const facilitiesJson = window.localStorage.getItem('tandem-sample-stats-last-facilities');
+    if (!facilitiesJson) return null;
+    
+    const facilitiesMap = JSON.parse(facilitiesJson);
+    return facilitiesMap[accountName] || null;
+  } catch (error) {
+    console.error('Error reading last facilities from localStorage:', error);
+    return null;
+  }
+}
+
+/**
+ * Set the last used facility for a specific account
+ * @param {string} accountName - Name of the account
+ * @param {string} facilityURN - Facility URN
+ */
+function setLastFacilityForAccount(accountName, facilityURN) {
+  try {
+    const facilitiesJson = window.localStorage.getItem('tandem-sample-stats-last-facilities');
+    const facilitiesMap = facilitiesJson ? JSON.parse(facilitiesJson) : {};
+    
+    facilitiesMap[accountName] = facilityURN;
+    window.localStorage.setItem('tandem-sample-stats-last-facilities', JSON.stringify(facilitiesMap));
+  } catch (error) {
+    console.error('Error saving last facilities to localStorage:', error);
+  }
+}
+
+/**
  * Populate facilities dropdown based on selected account
  * @param {Array} accounts - Array of account objects
  * @param {string} accountName - Selected account name
@@ -219,8 +257,8 @@ function populateFacilitiesDropdown(accounts, accountName) {
     facilitySelect.appendChild(option);
   });
 
-  // Try to restore last selected facility, or select the first one
-  const lastFacility = window.localStorage.getItem('tandem-sample-stats-last-facility');
+  // Try to restore last selected facility for THIS account, or select the first one
+  const lastFacility = getLastFacilityForAccount(accountName);
   let selectedFacilityURN = null;
   
   if (lastFacility && account.facilities.some(f => f.urn === lastFacility)) {
@@ -268,6 +306,7 @@ async function loadFacility(facilityURN) {
       const timeZone = info.props?.["Identity Data"]?.["timeZone"] || null;
       const templateName = info.template?.name || null;
       const schemaVersion = info.schemaVersion;
+      const region = info.region || null;
       
       facilityInfo.innerHTML = `
         <div class="flex flex-col md:flex-row gap-6">
@@ -317,6 +356,12 @@ async function loadFacility(facilityURN) {
               <span class="font-medium text-dark-text text-xs">Schema Version:</span>
               <span class="text-dark-text-secondary ml-2 text-xs">${schemaVersion !== undefined ? schemaVersion : 'Unknown'}</span>
             </div>
+            ${region ? `
+            <div>
+              <span class="font-medium text-dark-text text-xs">Primary Storage Region:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${region}</span>
+            </div>
+            ` : ''}
             <div>
               <span class="font-medium text-dark-text text-xs">Facility URN:</span>
               <span class="text-dark-text-secondary ml-2 text-xs font-mono break-all">${facilityURN}</span>
@@ -330,6 +375,7 @@ async function loadFacility(facilityURN) {
         // Clear all data sections
         modelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         streamsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
+        searchContainer.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         taggedAssetsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         levelsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
         roomsList.innerHTML = `<p class="text-yellow-500 text-xs">⚠️ Facility data not loaded due to incompatible schema version.</p>`;
@@ -384,6 +430,9 @@ async function loadStats(facilityURN) {
     // Clear schema cache from previous facility
     clearSchemaCache();
     
+    // Note: Don't cleanup thumbnail URLs here - they're still being displayed!
+    // Cleanup happens only on page unload via beforeunload event
+    
     // Get models
     const models = await getModels(facilityURN);
     
@@ -407,6 +456,9 @@ async function loadStats(facilityURN) {
     const streams = hasDefaultModel ? await getStreams(facilityURN) : [];
     await displayStreams(streamsList, streams, facilityURN);
     
+    // Display search interface
+    await displaySearch(searchContainer, facilityURN, models);
+    
     // Get and display systems (only if default model exists)
     const systems = hasDefaultModel ? await getSystems(facilityURN, models) : [];
     await displaySystems(systemsList, systems, facilityURN);
@@ -423,7 +475,7 @@ async function loadStats(facilityURN) {
     const documents = await getDocuments(facilityURN);
     await displayDocuments(documentsList, documents);
     
-    await displaySchema(schemaList, models);
+    await displaySchema(schemaList, models, facilityURN);
     
     // Display diagnostics (must be after schema is loaded)
     await displayDiagnostics(diagnosticsList, facilityURN, models);
@@ -455,7 +507,11 @@ async function initialize() {
   facilitySelect.addEventListener('change', (e) => {
     const facilityURN = e.target.value;
     if (facilityURN) {
-      window.localStorage.setItem('tandem-sample-stats-last-facility', facilityURN);
+      // Save last facility per account
+      const accountName = accountSelect.value;
+      if (accountName) {
+        setLastFacilityForAccount(accountName, facilityURN);
+      }
       loadFacility(facilityURN);
       // Remove placeholder after selection
       const placeholder = facilitySelect.querySelector('option[value=""]');
@@ -484,6 +540,11 @@ async function initialize() {
   
   toggleLoading(false);
 }
+
+// Clean up blob URLs when page is unloaded to prevent memory leaks
+window.addEventListener('beforeunload', () => {
+  cleanupThumbnailURLs();
+});
 
 // Start the application when DOM is ready
 if (document.readyState === 'loading') {

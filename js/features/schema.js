@@ -1,4 +1,4 @@
-import { getDataTypeName } from '../utils.js';
+import { getDataTypeName, isDefaultModel } from '../utils.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { 
@@ -31,26 +31,47 @@ const toggleSchemaDetail = createToggleFunction({
  * @param {string} sortDirection - 'asc' or 'desc'
  * @param {boolean} showAll - Show all attributes or just first 20
  */
-function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection = 'asc', showAll = false) {
+function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDirection = 'asc', showAll = false) {
   const tableContainer = document.getElementById(`schema-table-${modelId}`);
   if (!tableContainer) return;
 
-  // Sort attributes if sortColumn is specified
+  // Sort attributes - always sort by category first, then by the selected column (or name as secondary)
   let sortedAttributes = [...attributes];
-  if (sortColumn) {
-    sortedAttributes.sort((a, b) => {
-      const aVal = (a[sortColumn] || '').toString().toLowerCase();
-      const bVal = (b[sortColumn] || '').toString().toLowerCase();
-      
-      if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
-      if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
-      return 0;
-    });
-  }
+  sortedAttributes.sort((a, b) => {
+    // If sorting by category, use name as secondary sort
+    if (sortColumn === 'category') {
+      const categoryComparison = (a.category || '').toString().toLowerCase().localeCompare((b.category || '').toString().toLowerCase());
+      if (categoryComparison !== 0) {
+        return sortDirection === 'asc' ? categoryComparison : -categoryComparison;
+      }
+      // Secondary sort by name
+      return (a.name || '').toString().toLowerCase().localeCompare((b.name || '').toString().toLowerCase());
+    }
+    
+    // For other columns, still use category as primary sort, then the selected column
+    const categoryComparison = (a.category || '').toString().toLowerCase().localeCompare((b.category || '').toString().toLowerCase());
+    if (categoryComparison !== 0) {
+      return categoryComparison; // Always sort category ascending for grouping
+    }
+    
+    // Within same category, sort by the selected column
+    const aVal = (a[sortColumn] || '').toString().toLowerCase();
+    const bVal = (b[sortColumn] || '').toString().toLowerCase();
+    
+    if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
+    if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
+    return 0;
+  });
 
-  // Build table HTML
+  // Build table HTML with fixed column widths
   let tableHtml = `
-    <table class="min-w-full text-xs">
+    <table class="min-w-full text-xs table-fixed">
+      <colgroup>
+        <col style="width: 20%;">
+        <col style="width: 25%;">
+        <col style="width: 35%;">
+        <col style="width: 20%;">
+      </colgroup>
       <thead class="bg-dark-bg/50">
         <tr>
           <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
@@ -147,8 +168,9 @@ function renderSchemaTable(modelId, attributes, sortColumn = null, sortDirection
  * Display schema for all models
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} models - Array of model objects
+ * @param {string} facilityURN - Facility URN for determining default model
  */
-export async function displaySchema(container, models) {
+export async function displaySchema(container, models, facilityURN) {
   if (!models || models.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No models found.</p>';
     return;
@@ -211,17 +233,29 @@ export async function displaySchema(container, models) {
       continue;
     }
 
+    const isDefault = isDefaultModel(facilityURN, model.modelId);
+    const displayName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
+
     detailHtml += `
-      <div class="border border-dark-border rounded p-4">
-        <h3 class="font-semibold text-dark-text mb-3 flex items-center gap-2">
-          <span class="flex-shrink-0 w-6 h-6 bg-gradient-to-br from-teal-500 to-teal-600 rounded flex items-center justify-center">
-            <span class="text-white font-semibold text-xs">${i + 1}</span>
-          </span>
-          ${model.label}
-          <span class="text-sm font-normal text-dark-text-secondary">(${schema.attributes.length} attributes)</span>
-        </h3>
-        <div class="overflow-x-auto">
-          <div id="schema-table-${model.modelId}"></div>
+      <div class="border border-dark-border rounded overflow-hidden">
+        <!-- Model Header -->
+        <div class="bg-gradient-to-r from-indigo-900/30 to-indigo-800/30 px-4 py-3 border-b border-dark-border">
+          <div class="flex items-start justify-between">
+            <div class="flex-1 min-w-0">
+              <h3 class="font-semibold text-dark-text">${displayName}</h3>
+              <div class="text-xs font-mono text-dark-text-secondary mt-1">${model.modelId}</div>
+            </div>
+            <div class="text-right flex-shrink-0 ml-4">
+              <div class="text-xs text-dark-text-secondary">${schema.attributes.length} attributes</div>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Schema Table -->
+        <div class="p-4">
+          <div class="overflow-x-auto">
+            <div id="schema-table-${model.modelId}"></div>
+          </div>
         </div>
       </div>
     `;
@@ -239,7 +273,7 @@ export async function displaySchema(container, models) {
   // Attach export button event listener
   const exportBtn = document.getElementById('export-schema-btn');
   if (exportBtn) {
-    exportBtn.addEventListener('click', () => exportSchemaToExcel(models, schemaCache));
+    exportBtn.addEventListener('click', () => exportSchemaToExcel(models, schemaCache, facilityURN));
   }
 
   // Render initial tables (unsorted)
@@ -257,8 +291,9 @@ export async function displaySchema(container, models) {
  * Export schema to Excel with one sheet per model
  * @param {Array} models - Array of model objects
  * @param {Object} schemaCache - Schema cache object
+ * @param {string} facilityURN - Facility URN for determining default model
  */
-async function exportSchemaToExcel(models, schemaCache) {
+async function exportSchemaToExcel(models, schemaCache, facilityURN) {
   const exportBtn = document.getElementById('export-schema-btn');
   const originalHtml = exportBtn.innerHTML;
   const buttonManager = createExportButtonManager(exportBtn, originalHtml);
@@ -309,12 +344,10 @@ async function exportSchemaToExcel(models, schemaCache) {
       ];
 
       // Sanitize and make unique sheet name
-      // Handle special case of default model (empty label)
-      let labelToUse = model.label;
-      if (!labelToUse || labelToUse === '(Default)' || labelToUse === 'Default') {
-        labelToUse = 'Default_Model';
-      }
-      const baseSheetName = sanitizeSheetName(labelToUse, `Model_${models.indexOf(model) + 1}`);
+      // Use same naming logic as display
+      const isDefault = isDefaultModel(facilityURN, model.modelId);
+      const displayName = model.label || (isDefault ? 'Default_Model' : 'Untitled_Model');
+      const baseSheetName = sanitizeSheetName(displayName, `Model_${models.indexOf(model) + 1}`);
       const sheetName = makeUniqueSheetName(baseSheetName, usedSheetNames);
       usedSheetNames.add(sheetName);
 

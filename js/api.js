@@ -204,6 +204,329 @@ export async function getElementCount(modelURN) {
 }
 
 /**
+ * Get element count breakdown by category, classification, tandem category, and overrides for a model
+ * Fetches all in a single API call for efficiency
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<{total: number, categories: Array<{id: number|null, count: number}>, tandemCategories: Array<{id: string|null, count: number}>, classifications: Array<{id: string|null, count: number}>, nameOverrides: number, classificationOverrides: number}>}
+ */
+export async function getElementCountByCategoryAndClassification(modelURN) {
+  try {
+    // Fetch elements with CategoryId, TandemCategory, Classification, Name, and OName in ONE call
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.CategoryId, QC.TandemCategory, QC.OTandemCategory, QC.Classification, QC.OClassification, QC.Name, QC.OName],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Count by category
+    const categoryCounts = {};
+    elements.forEach(element => {
+      const categoryId = element[QC.CategoryId]?.[0];
+      if (categoryId !== undefined && categoryId !== null) {
+        categoryCounts[categoryId] = (categoryCounts[categoryId] || 0) + 1;
+      } else {
+        // Elements without a category
+        categoryCounts['unknown'] = (categoryCounts['unknown'] || 0) + 1;
+      }
+    });
+    
+    // Count by tandem category (prefer override, fall back to standard)
+    const tandemCategoryCounts = {};
+    elements.forEach(element => {
+      const tandemCategory = element[QC.OTandemCategory]?.[0] || element[QC.TandemCategory]?.[0];
+      if (tandemCategory !== undefined && tandemCategory !== null && tandemCategory !== '') {
+        tandemCategoryCounts[tandemCategory] = (tandemCategoryCounts[tandemCategory] || 0) + 1;
+      } else {
+        // Elements without a tandem category
+        tandemCategoryCounts['unknown'] = (tandemCategoryCounts['unknown'] || 0) + 1;
+      }
+    });
+    
+    // Count by classification (prefer override, fall back to standard)
+    const classificationCounts = {};
+    elements.forEach(element => {
+      const classification = element[QC.OClassification]?.[0] || element[QC.Classification]?.[0];
+      if (classification !== undefined && classification !== null && classification !== '') {
+        classificationCounts[classification] = (classificationCounts[classification] || 0) + 1;
+      } else {
+        // Elements without a classification
+        classificationCounts['unknown'] = (classificationCounts['unknown'] || 0) + 1;
+      }
+    });
+    
+    // Count elements with overrides
+    let nameOverrideCount = 0;
+    let classificationOverrideCount = 0;
+    
+    elements.forEach(element => {
+      // Count elements that have name override (OName exists and is different from Name)
+      if (element[QC.OName] && element[QC.OName][0]) {
+        nameOverrideCount++;
+      }
+      
+      // Count elements that have classification override (OClassification exists)
+      if (element[QC.OClassification] && element[QC.OClassification][0]) {
+        classificationOverrideCount++;
+      }
+    });
+    
+    // Convert to arrays and sort by count descending
+    const categories = Object.entries(categoryCounts).map(([id, count]) => ({
+      id: id === 'unknown' ? null : parseInt(id),
+      count: count
+    })).sort((a, b) => b.count - a.count);
+    
+    const tandemCategories = Object.entries(tandemCategoryCounts).map(([id, count]) => ({
+      id: id === 'unknown' ? null : id,
+      count: count
+    })).sort((a, b) => b.count - a.count);
+    
+    const classifications = Object.entries(classificationCounts).map(([id, count]) => ({
+      id: id === 'unknown' ? null : id,
+      count: count
+    })).sort((a, b) => b.count - a.count);
+    
+    return {
+      total: elements.length,
+      categories: categories,
+      tandemCategories: tandemCategories,
+      classifications: classifications,
+      nameOverrides: nameOverrideCount,
+      classificationOverrides: classificationOverrideCount
+    };
+  } catch (error) {
+    console.error('Error fetching element count by category and classification:', error);
+    return { total: 0, categories: [], tandemCategories: [], classifications: [], nameOverrides: 0, classificationOverrides: 0 };
+  }
+}
+
+/**
+ * Get element keys for a specific category in a model
+ * @param {string} modelURN - Model URN
+ * @param {number|null} categoryId - Category ID (null for unknown category)
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByCategory(modelURN, categoryId) {
+  try {
+    // Fetch elements with CategoryId
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.CategoryId],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter by category and extract keys
+    const keys = elements
+      .filter(element => {
+        const elemCategoryId = element[QC.CategoryId]?.[0];
+        if (categoryId === null) {
+          // Match elements without a category
+          return elemCategoryId === undefined || elemCategoryId === null;
+        } else {
+          return elemCategoryId === categoryId;
+        }
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by category:', error);
+    return [];
+  }
+}
+
+/**
+ * Get element keys for a specific classification in a model
+ * @param {string} modelURN - Model URN
+ * @param {string|null} classificationId - Classification code (null for unknown classification)
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByClassification(modelURN, classificationId) {
+  try {
+    // Fetch elements with Classification
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.Classification, QC.OClassification],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter by classification and extract keys
+    const keys = elements
+      .filter(element => {
+        const classification = element[QC.OClassification]?.[0] || element[QC.Classification]?.[0];
+        if (classificationId === null) {
+          // Match elements without a classification
+          return !classification || classification === '';
+        } else {
+          return classification === classificationId;
+        }
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by classification:', error);
+    return [];
+  }
+}
+
+/**
+ * Get element keys for a specific tandem category in a model
+ * @param {string} modelURN - Model URN
+ * @param {string|null} tandemCategoryId - Tandem Category code (null for unknown category)
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByTandemCategory(modelURN, tandemCategoryId) {
+  try {
+    // Fetch elements with TandemCategory
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.TandemCategory, QC.OTandemCategory],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter by tandem category and extract keys
+    const keys = elements
+      .filter(element => {
+        const tandemCategory = element[QC.OTandemCategory]?.[0] || element[QC.TandemCategory]?.[0];
+        if (tandemCategoryId === null) {
+          // Match elements without a tandem category
+          return !tandemCategory || tandemCategory === '';
+        } else {
+          return tandemCategory === tandemCategoryId;
+        }
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by tandem category:', error);
+    return [];
+  }
+}
+
+/**
+ * Get element keys for elements with name overrides in a model
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByNameOverride(modelURN) {
+  try {
+    // Fetch elements with Name and OName
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.Name, QC.OName],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter elements that have name override and extract keys
+    const keys = elements
+      .filter(element => {
+        // Has name override if OName exists and has a value
+        return element[QC.OName] && element[QC.OName][0];
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by name override:', error);
+    return [];
+  }
+}
+
+/**
+ * Get element keys for elements with classification overrides in a model
+ * @param {string} modelURN - Model URN
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByClassificationOverride(modelURN) {
+  try {
+    // Fetch elements with Classification and OClassification
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.Classification, QC.OClassification],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter elements that have classification override and extract keys
+    const keys = elements
+      .filter(element => {
+        // Has classification override if OClassification exists and has a value
+        return element[QC.OClassification] && element[QC.OClassification][0];
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by classification override:', error);
+    return [];
+  }
+}
+
+// Track blob URLs for cleanup
+const thumbnailBlobURLs = new Set();
+
+/**
  * Get facility thumbnail as a blob URL
  * @param {string} facilityURN - Facility URN
  * @returns {Promise<string|null>} Blob URL for the thumbnail image, or null if not available
@@ -219,11 +542,23 @@ export async function getFacilityThumbnail(facilityURN) {
     
     const blob = await response.blob();
     // Convert blob to blob URL for display
-    return URL.createObjectURL(blob);
+    const blobURL = URL.createObjectURL(blob);
+    thumbnailBlobURLs.add(blobURL);
+    return blobURL;
   } catch (error) {
     console.error('Error fetching facility thumbnail:', error);
     return null;
   }
+}
+
+/**
+ * Clean up all thumbnail blob URLs to prevent memory leaks
+ * Should be called when switching facilities or on page unload
+ */
+export function cleanupThumbnailURLs() {
+  thumbnailBlobURLs.forEach(url => URL.revokeObjectURL(url));
+  thumbnailBlobURLs.clear();
+  console.log('Cleaned up thumbnail blob URLs');
 }
 
 /**

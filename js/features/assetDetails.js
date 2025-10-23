@@ -1,6 +1,7 @@
 import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
 import { QC, ColumnFamilies } from '../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';
+import { getCategoryName } from '../utils.js';
 
 /**
  * Generate HTML page for asset details
@@ -130,7 +131,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       margin-bottom: 20px;
     }
     .model-header {
-      background: #333333;
+      background: linear-gradient(to right, rgba(67, 56, 202, 0.3), rgba(67, 56, 202, 0.3));
       padding: 12px 20px;
       border-bottom: 1px solid #404040;
       display: flex;
@@ -143,11 +144,18 @@ function generateAssetDetailsHTML(elementsByModel, title) {
     .model-name {
       font-size: 16px;
       font-weight: 600;
-      color: #0696D7;
+      color: #e0e0e0;
+    }
+    .model-urn {
+      font-size: 12px;
+      font-family: 'Courier New', monospace;
+      color: #a0a0a0;
+      margin-top: 4px;
     }
     .model-count {
       font-size: 12px;
       color: #a0a0a0;
+      margin-top: 4px;
     }
     .view-keys-btn {
       background: #0696D7;
@@ -545,7 +553,56 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       return data.filter(item => typeof item === 'object' && item !== null && item['k']);
     }
     
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+    
+    function formatPropertyValue(value) {
+      if (value === null || value === undefined) return '-';
+      if (Array.isArray(value)) {
+        if (value.length === 0) return '-';
+        if (value.length === 1) return escapeHtml(String(value[0]));
+        return escapeHtml(value.join(', '));
+      }
+      return escapeHtml(String(value));
+    }
+    
+    function organizeProperties(element, modelURN) {
+      const allProperties = [];
+      
+      for (const [key, value] of Object.entries(element)) {
+        if (key === 'k' || !key.includes(':')) continue;
+        
+        const [family, prop] = key.split(':');
+        let familyName = 'Source';
+        
+        if (family === 'n') {
+          familyName = 'Standard';
+        } else if (family === 'z') {
+          familyName = 'Custom';
+        }
+        
+        // Get display info from schema
+        const displayInfo = getPropertyDisplayInfo(modelURN, key);
+        
+        allProperties.push({
+          id: key,
+          family: familyName,
+          category: displayInfo.category || familyName,
+          name: displayInfo.name,
+          value: formatPropertyValue(value)
+        });
+      }
+      
+      return allProperties;
+    }
+    
     function getCategoryName(categoryId) {
+      if (categoryId === null || categoryId === undefined) {
+        return 'Unknown Category';
+      }
       const categories = {
         10: "Regeneration Failure",
         11: "Walls",
@@ -684,52 +741,6 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       return categories[categoryId] || "Category " + categoryId;
     }
     
-    function escapeHtml(text) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      return div.innerHTML;
-    }
-    
-    function formatPropertyValue(value) {
-      if (value === null || value === undefined) return '-';
-      if (Array.isArray(value)) {
-        if (value.length === 0) return '-';
-        if (value.length === 1) return escapeHtml(String(value[0]));
-        return escapeHtml(value.join(', '));
-      }
-      return escapeHtml(String(value));
-    }
-    
-    function organizeProperties(element, modelURN) {
-      const allProperties = [];
-      
-      for (const [key, value] of Object.entries(element)) {
-        if (key === 'k' || !key.includes(':')) continue;
-        
-        const [family, prop] = key.split(':');
-        let familyName = 'Source';
-        
-        if (family === 'n') {
-          familyName = 'Standard';
-        } else if (family === 'z') {
-          familyName = 'Custom';
-        }
-        
-        // Get display info from schema
-        const displayInfo = getPropertyDisplayInfo(modelURN, key);
-        
-        allProperties.push({
-          id: key,
-          family: familyName,
-          category: displayInfo.category || familyName,
-          name: displayInfo.name,
-          value: formatPropertyValue(value)
-        });
-      }
-      
-      return allProperties;
-    }
-    
     async function toggleElementDetails(modelURN, elementKey, button, detailsDiv) {
       if (detailsDiv.classList.contains('visible')) {
         // Collapse
@@ -762,28 +773,21 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         const element = elements[0];
         const properties = organizeProperties(element, modelURN);
         
-        // Sort properties by ID by default (with override grouping logic)
+        // Sort properties by Category first, then by Property Name (default sort)
         properties.sort((a, b) => {
-          const aClean = a.id.replace(/:/g, '').replace(/!/g, '');
-          const bClean = b.id.replace(/:/g, '').replace(/!/g, '');
+          // First sort by category
+          const categoryComparison = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+          if (categoryComparison !== 0) return categoryComparison;
           
-          const cleanComparison = aClean.toLowerCase().localeCompare(bClean.toLowerCase());
-          if (cleanComparison !== 0) return cleanComparison;
-          
-          // Non-override before override
-          const aHasBang = a.id.includes('!');
-          const bHasBang = b.id.includes('!');
-          
-          if (aHasBang && !bHasBang) return 1;
-          if (!aHasBang && bHasBang) return -1;
-          return 0;
+          // Then sort by property name within the same category
+          return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
         });
         
         // Create sortable table
         let html = '<table class="properties-table">';
         html += '<thead><tr>';
-        html += '<th data-sort="id" class="sorted">ID</th>';
-        html += '<th data-sort="category">Category</th>';
+        html += '<th data-sort="id">ID</th>';
+        html += '<th data-sort="category" class="sorted">Category</th>';
         html += '<th data-sort="name">Property Name</th>';
         html += '<th data-sort="value">Value</th>';
         html += '</tr></thead>';
@@ -812,7 +816,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
         
         // Add sorting functionality
         const headers = detailsDiv.querySelectorAll('th[data-sort]');
-        let currentSort = { column: 'id', direction: 'asc' }; // Start with ID sorted ascending
+        let currentSort = { column: 'category', direction: 'asc' }; // Start with Category sorted ascending
         
         headers.forEach(header => {
           header.addEventListener('click', () => {
@@ -868,6 +872,15 @@ function generateAssetDetailsHTML(elementsByModel, title) {
               
               // Normal string comparison for other columns
               const comparison = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+              
+              // If sorting by category and categories are the same, use property name as secondary sort
+              if (sortBy === 'category' && comparison === 0) {
+                const aName = a.getAttribute('data-name') || '';
+                const bName = b.getAttribute('data-name') || '';
+                const nameComparison = aName.toLowerCase().localeCompare(bName.toLowerCase());
+                return currentSort.direction === 'asc' ? nameComparison : -nameComparison;
+              }
+              
               return currentSort.direction === 'asc' ? comparison : -comparison;
             });
             
@@ -925,6 +938,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
           html += '<div class="model-header">';
           html += '<div class="model-header-left">';
           html += '<div class="model-name">' + escapeHtml(modelData.modelName) + '</div>';
+          html += '<div class="model-urn">' + escapeHtml(modelData.modelURN) + '</div>';
           html += '<div class="model-count">' + modelData.elements.length + ' element' + (modelData.elements.length !== 1 ? 's' : '') + '</div>';
           html += '</div>';
           html += '<button class="view-keys-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-model-name="' + escapeHtml(modelData.modelName) + '">View Keys</button>';

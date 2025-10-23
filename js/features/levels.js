@@ -132,7 +132,7 @@ export async function displayLevels(container, levels, sortColumn = null, sortDi
     detailHtml += `
       <div class="border border-dark-border rounded overflow-hidden">
         <!-- Model Header -->
-        <div class="bg-gradient-to-r from-purple-900/30 to-purple-800/30 px-4 py-3 border-b border-dark-border">
+        <div class="bg-gradient-to-r from-indigo-900/30 to-indigo-800/30 px-4 py-3 border-b border-dark-border">
           <div class="font-semibold text-dark-text">${modelGroup.modelName}</div>
           <div class="text-xs font-mono text-dark-text-secondary mt-1">${modelGroup.modelId}</div>
           <div class="text-xs text-dark-text-secondary mt-1">${modelGroup.levels.length} level${modelGroup.levels.length !== 1 ? 's' : ''}</div>
