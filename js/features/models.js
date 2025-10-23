@@ -1,4 +1,4 @@
-import { getElementCount, getElementCountByCategory, getElementsByCategory, getHistory, getModelProperties } from '../api.js';
+import { getElementCount, getElementCountByCategoryAndClassification, getElementsByCategory, getElementsByClassification, getHistory, getModelProperties } from '../api.js';
 import { isDefaultModel, getCategoryName } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { viewAssetDetails } from './assetDetails.js';
@@ -22,22 +22,30 @@ const toggleModelsDetail = createToggleFunction({
 const categoryKeysCache = new Map();
 
 /**
- * Render category breakdown table with sortable headers and clickable counts
+ * Render breakdown table (category or classification) with sortable headers and clickable counts
  * @param {HTMLElement} container - Container to render into
- * @param {Object} breakdown - Breakdown data with total and categories
+ * @param {Object} breakdown - Breakdown data with total and items array
+ * @param {Array} items - Array of {id, count} objects (categories or classifications)
  * @param {Object} model - Model object
  * @param {string} facilityURN - Facility URN
- * @param {string} sortColumn - Column to sort by ('category', 'count', 'percentage')
+ * @param {string} viewType - 'category' or 'classification'
+ * @param {string} sortColumn - Column to sort by ('type', 'count', 'percentage')
  * @param {string} sortDirection - Sort direction ('asc' or 'desc')
  */
-function renderCategoryTable(container, breakdown, model, facilityURN, sortColumn = 'count', sortDirection = 'desc') {
-  // Sort categories
-  const sortedCategories = [...breakdown.categories].sort((a, b) => {
+function renderBreakdownTable(container, breakdown, items, model, facilityURN, viewType = 'category', sortColumn = 'count', sortDirection = 'desc') {
+  // Sort items
+  const sortedItems = [...items].sort((a, b) => {
     let aVal, bVal;
     
-    if (sortColumn === 'category') {
-      aVal = getCategoryName(a.id).toLowerCase();
-      bVal = getCategoryName(b.id).toLowerCase();
+    if (sortColumn === 'type') {
+      // Get display name based on view type
+      if (viewType === 'category') {
+        aVal = getCategoryName(a.id).toLowerCase();
+        bVal = getCategoryName(b.id).toLowerCase();
+      } else {
+        aVal = (a.id || 'Unknown').toString().toLowerCase();
+        bVal = (b.id || 'Unknown').toString().toLowerCase();
+      }
     } else if (sortColumn === 'count') {
       aVal = a.count;
       bVal = b.count;
@@ -58,16 +66,17 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
   });
   
   // Build table HTML
+  const typeLabel = viewType === 'category' ? 'Category' : 'Classification';
   let tableHtml = `
     <div class="overflow-x-auto">
       <table class="min-w-full text-xs">
         <thead class="bg-dark-bg/50">
           <tr>
             <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
-                data-column="category" data-direction="${sortColumn === 'category' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+                data-column="type" data-direction="${sortColumn === 'type' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
               <div class="flex items-center gap-1">
-                <span>Category</span>
-                ${sortColumn === 'category' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                <span>${typeLabel}</span>
+                ${sortColumn === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
               </div>
             </th>
             <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
@@ -89,21 +98,25 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
         <tbody class="divide-y divide-dark-border">
   `;
   
-  sortedCategories.forEach(cat => {
-    const categoryName = getCategoryName(cat.id);
-    const percentage = breakdown.total > 0 ? ((cat.count / breakdown.total) * 100).toFixed(1) : 0;
+  sortedItems.forEach(item => {
+    // Get display name based on view type
+    const itemName = viewType === 'category' 
+      ? getCategoryName(item.id) 
+      : (item.id || 'Unknown Classification');
+    const percentage = breakdown.total > 0 ? ((item.count / breakdown.total) * 100).toFixed(1) : 0;
     
     tableHtml += `
       <tr class="hover:bg-dark-bg/30">
-        <td class="px-3 py-2 text-dark-text">${categoryName}</td>
+        <td class="px-3 py-2 text-dark-text">${itemName}</td>
         <td class="px-3 py-2 text-right text-dark-text font-semibold">
-          <button class="category-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
-                  data-category-id="${cat.id}"
-                  data-category-name="${categoryName}"
+          <button class="breakdown-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
+                  data-item-id="${item.id}"
+                  data-item-name="${itemName}"
                   data-model-id="${model.modelId}"
                   data-model-name="${model.label || 'Untitled Model'}"
-                  title="Click to view ${cat.count} element${cat.count !== 1 ? 's' : ''}">
-            ${cat.count.toLocaleString()}
+                  data-view-type="${viewType}"
+                  title="Click to view ${item.count} element${item.count !== 1 ? 's' : ''}">
+            ${item.count.toLocaleString()}
           </button>
         </td>
         <td class="px-3 py-2 text-right text-dark-text-secondary">${percentage}%</td>
@@ -125,21 +138,23 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      renderCategoryTable(container, breakdown, model, facilityURN, column, direction);
+      renderBreakdownTable(container, breakdown, items, model, facilityURN, viewType, column, direction);
     });
   });
   
   // Add click handlers for count buttons (view details)
-  const countButtons = container.querySelectorAll('.category-count-btn');
+  const countButtons = container.querySelectorAll('.breakdown-count-btn');
   countButtons.forEach(button => {
     button.addEventListener('click', async () => {
-      const categoryId = button.getAttribute('data-category-id');
-      const categoryName = button.getAttribute('data-category-name');
+      const itemId = button.getAttribute('data-item-id');
+      const itemName = button.getAttribute('data-item-name');
       const modelId = button.getAttribute('data-model-id');
       const modelName = button.getAttribute('data-model-name');
+      const currentViewType = button.getAttribute('data-view-type');
       
-      const parsedCategoryId = categoryId === 'null' ? null : parseInt(categoryId);
-      const cacheKey = `${modelId}:${categoryId}`;
+      // Parse item ID based on view type
+      const parsedItemId = itemId === 'null' ? null : (currentViewType === 'category' ? parseInt(itemId) : itemId);
+      const cacheKey = `${modelId}:${currentViewType}:${itemId}`;
       
       // Check cache first
       let keys = categoryKeysCache.get(cacheKey);
@@ -151,22 +166,26 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
         button.disabled = true;
         
         try {
-          console.log(`[Models] Loading elements for ${categoryName} (first time)`);
-          // Fetch element keys for this category
-          keys = await getElementsByCategory(modelId, parsedCategoryId);
+          console.log(`[Models] Loading elements for ${itemName} (${currentViewType}) - first time`);
+          // Fetch element keys based on view type
+          if (currentViewType === 'category') {
+            keys = await getElementsByCategory(modelId, parsedItemId);
+          } else {
+            keys = await getElementsByClassification(modelId, parsedItemId);
+          }
           
           // Cache the result
           categoryKeysCache.set(cacheKey, keys);
-          console.log(`[Models] Cached ${keys.length} element keys for ${categoryName}`);
+          console.log(`[Models] Cached ${keys.length} element keys for ${itemName}`);
           
           if (keys.length === 0) {
-            alert('No elements found in this category');
+            alert(`No elements found for this ${currentViewType}`);
             button.textContent = originalText;
             button.disabled = false;
             return;
           }
         } catch (error) {
-          console.error('Error fetching category elements:', error);
+          console.error(`Error fetching ${currentViewType} elements:`, error);
           alert('Failed to fetch elements. See console for details.');
           button.textContent = originalText;
           button.disabled = false;
@@ -177,7 +196,7 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
         button.textContent = originalText;
         button.disabled = false;
       } else {
-        console.log(`[Models] Using cached elements for ${categoryName} (${keys.length} keys, no API call)`);
+        console.log(`[Models] Using cached elements for ${itemName} (${currentViewType}) - ${keys.length} keys, no API call`);
       }
       
       // Open Asset Details page
@@ -187,7 +206,7 @@ function renderCategoryTable(container, breakdown, model, facilityURN, sortColum
         keys: keys
       }];
       
-      viewAssetDetails(elementsByModel, `${categoryName} in ${modelName}`);
+      viewAssetDetails(elementsByModel, `${itemName} in ${modelName}`);
     });
   });
 }
@@ -304,15 +323,33 @@ export async function displayModels(container, models, facilityURN) {
             ` : ''}
           ${model.version || model.createdAt || model.lastModified ? '</div>' : ''}
           
-          <!-- Category Breakdown -->
+          <!-- Element Breakdown (Category/Classification) -->
           <div class="${model.version || model.createdAt || model.lastModified ? 'border-t border-dark-border pt-3' : ''}">
-            <button id="toggle-categories-${i}" class="flex items-center gap-2 text-sm font-medium text-dark-text hover:text-tandem-blue transition">
-              <svg class="w-4 h-4 transition-transform" id="categories-icon-${i}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <button id="toggle-breakdown-${i}" class="flex items-center gap-2 text-sm font-medium text-dark-text hover:text-tandem-blue transition">
+              <svg class="w-4 h-4 transition-transform" id="breakdown-icon-${i}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"></path>
               </svg>
-              <span>Element Breakdown by Category</span>
+              <span>Element Breakdown</span>
             </button>
-            <div id="categories-breakdown-${i}" class="hidden mt-3"></div>
+            <div id="breakdown-container-${i}" class="hidden mt-3">
+              <!-- Radio buttons for view selection -->
+              <div class="flex gap-4 mb-3 text-sm">
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="breakdown-view-${i}" value="category" 
+                         class="breakdown-view-radio text-tandem-blue focus:ring-tandem-blue" 
+                         data-model-index="${i}" checked>
+                  <span class="text-dark-text">Category</span>
+                </label>
+                <label class="flex items-center gap-2 cursor-pointer">
+                  <input type="radio" name="breakdown-view-${i}" value="classification" 
+                         class="breakdown-view-radio text-tandem-blue focus:ring-tandem-blue" 
+                         data-model-index="${i}">
+                  <span class="text-dark-text">Classification</span>
+                </label>
+              </div>
+              <!-- Table will be rendered here -->
+              <div id="breakdown-table-${i}"></div>
+            </div>
           </div>
         </div>
       </div>
@@ -370,54 +407,93 @@ export async function displayModels(container, models, facilityURN) {
     }
   });
   
-  // Set up category breakdown toggle buttons for each model
+  // Set up element breakdown toggle buttons for each model
   // Cache breakdown data to avoid redundant API calls
   const breakdownCache = new Map();
+  // Track current view type for each model (default to 'category')
+  const currentViewTypes = new Map();
   
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const toggleBtn = document.getElementById(`toggle-categories-${i}`);
-    const breakdownDiv = document.getElementById(`categories-breakdown-${i}`);
-    const icon = document.getElementById(`categories-icon-${i}`);
+    const toggleBtn = document.getElementById(`toggle-breakdown-${i}`);
+    const breakdownContainer = document.getElementById(`breakdown-container-${i}`);
+    const breakdownTable = document.getElementById(`breakdown-table-${i}`);
+    const icon = document.getElementById(`breakdown-icon-${i}`);
     
-    if (toggleBtn && breakdownDiv) {
+    // Initialize with 'category' view
+    currentViewTypes.set(i, 'category');
+    
+    if (toggleBtn && breakdownContainer && breakdownTable) {
+      // Toggle button handler
       toggleBtn.addEventListener('click', async () => {
-        const isHidden = breakdownDiv.classList.contains('hidden');
+        const isHidden = breakdownContainer.classList.contains('hidden');
         
         if (isHidden) {
           // Show breakdown
-          breakdownDiv.classList.remove('hidden');
+          breakdownContainer.classList.remove('hidden');
           icon?.classList.add('rotate-180');
           
           // Check cache first to avoid redundant API calls
           if (!breakdownCache.has(model.modelId)) {
-            console.log(`[Models] Loading category breakdown for ${model.label} (first time)`);
-            breakdownDiv.innerHTML = '<div class="text-sm text-dark-text-secondary animate-pulse">Loading breakdown...</div>';
+            console.log(`[Models] Loading breakdown (category + classification) for ${model.label} (first time)`);
+            breakdownTable.innerHTML = '<div class="text-sm text-dark-text-secondary animate-pulse">Loading breakdown...</div>';
             
             try {
-              const breakdown = await getElementCountByCategory(model.modelId);
+              // Fetch BOTH category and classification in ONE API call
+              const breakdown = await getElementCountByCategoryAndClassification(model.modelId);
               
-              if (breakdown.categories.length === 0) {
-                breakdownDiv.innerHTML = '<div class="text-sm text-dark-text-secondary">No elements found.</div>';
+              if (breakdown.total === 0) {
+                breakdownTable.innerHTML = '<div class="text-sm text-dark-text-secondary">No elements found.</div>';
                 breakdownCache.set(model.modelId, null); // Cache empty result
               } else {
-                // Render sortable category table
-                renderCategoryTable(breakdownDiv, breakdown, model, facilityURN);
-                breakdownCache.set(model.modelId, { breakdown, rendered: true });
-                console.log(`[Models] Cached breakdown for ${model.label} (${breakdown.total} elements, ${breakdown.categories.length} categories)`);
+                // Cache the full breakdown data
+                breakdownCache.set(model.modelId, breakdown);
+                console.log(`[Models] Cached breakdown for ${model.label} (${breakdown.total} elements, ${breakdown.categories.length} categories, ${breakdown.classifications.length} classifications)`);
+                
+                // Render the initial view (category by default)
+                const viewType = currentViewTypes.get(i);
+                const items = viewType === 'category' ? breakdown.categories : breakdown.classifications;
+                renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
               }
             } catch (error) {
-              console.error('Error loading category breakdown:', error);
-              breakdownDiv.innerHTML = '<div class="text-sm text-red-400">Failed to load breakdown.</div>';
+              console.error('Error loading breakdown:', error);
+              breakdownTable.innerHTML = '<div class="text-sm text-red-400">Failed to load breakdown.</div>';
             }
           } else {
             console.log(`[Models] Using cached breakdown for ${model.label} (no API call)`);
+            
+            // Re-render from cache
+            const breakdown = breakdownCache.get(model.modelId);
+            if (breakdown) {
+              const viewType = currentViewTypes.get(i);
+              const items = viewType === 'category' ? breakdown.categories : breakdown.classifications;
+              renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
+            }
           }
         } else {
           // Hide breakdown
-          breakdownDiv.classList.add('hidden');
+          breakdownContainer.classList.add('hidden');
           icon?.classList.remove('rotate-180');
         }
+      });
+      
+      // Radio button change handlers
+      const radioButtons = breakdownContainer.querySelectorAll('.breakdown-view-radio');
+      radioButtons.forEach(radio => {
+        radio.addEventListener('change', () => {
+          if (radio.checked) {
+            const viewType = radio.value; // 'category' or 'classification'
+            currentViewTypes.set(i, viewType);
+            
+            // Re-render table with new view type
+            const breakdown = breakdownCache.get(model.modelId);
+            if (breakdown) {
+              const items = viewType === 'category' ? breakdown.categories : breakdown.classifications;
+              renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
+              console.log(`[Models] Switched to ${viewType} view for ${model.label} (using cached data)`);
+            }
+          }
+        });
       });
     }
   }

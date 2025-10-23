@@ -200,6 +200,41 @@ function populateAccountsDropdown(accounts) {
 }
 
 /**
+ * Get the last used facility for a specific account
+ * @param {string} accountName - Name of the account
+ * @returns {string|null} - Facility URN or null
+ */
+function getLastFacilityForAccount(accountName) {
+  try {
+    const facilitiesJson = window.localStorage.getItem('tandem-sample-stats-last-facilities');
+    if (!facilitiesJson) return null;
+    
+    const facilitiesMap = JSON.parse(facilitiesJson);
+    return facilitiesMap[accountName] || null;
+  } catch (error) {
+    console.error('Error reading last facilities from localStorage:', error);
+    return null;
+  }
+}
+
+/**
+ * Set the last used facility for a specific account
+ * @param {string} accountName - Name of the account
+ * @param {string} facilityURN - Facility URN
+ */
+function setLastFacilityForAccount(accountName, facilityURN) {
+  try {
+    const facilitiesJson = window.localStorage.getItem('tandem-sample-stats-last-facilities');
+    const facilitiesMap = facilitiesJson ? JSON.parse(facilitiesJson) : {};
+    
+    facilitiesMap[accountName] = facilityURN;
+    window.localStorage.setItem('tandem-sample-stats-last-facilities', JSON.stringify(facilitiesMap));
+  } catch (error) {
+    console.error('Error saving last facilities to localStorage:', error);
+  }
+}
+
+/**
  * Populate facilities dropdown based on selected account
  * @param {Array} accounts - Array of account objects
  * @param {string} accountName - Selected account name
@@ -222,8 +257,8 @@ function populateFacilitiesDropdown(accounts, accountName) {
     facilitySelect.appendChild(option);
   });
 
-  // Try to restore last selected facility, or select the first one
-  const lastFacility = window.localStorage.getItem('tandem-sample-stats-last-facility');
+  // Try to restore last selected facility for THIS account, or select the first one
+  const lastFacility = getLastFacilityForAccount(accountName);
   let selectedFacilityURN = null;
   
   if (lastFacility && account.facilities.some(f => f.urn === lastFacility)) {
@@ -465,7 +500,11 @@ async function initialize() {
   facilitySelect.addEventListener('change', (e) => {
     const facilityURN = e.target.value;
     if (facilityURN) {
-      window.localStorage.setItem('tandem-sample-stats-last-facility', facilityURN);
+      // Save last facility per account
+      const accountName = accountSelect.value;
+      if (accountName) {
+        setLastFacilityForAccount(accountName, facilityURN);
+      }
       loadFacility(facilityURN);
       // Remove placeholder after selection
       const placeholder = facilitySelect.querySelector('option[value=""]');

@@ -204,15 +204,16 @@ export async function getElementCount(modelURN) {
 }
 
 /**
- * Get element count breakdown by category for a model
+ * Get element count breakdown by category AND classification for a model
+ * Fetches both in a single API call for efficiency
  * @param {string} modelURN - Model URN
- * @returns {Promise<{total: number, categories: Array<{id: number, name: string, count: number}>}>}
+ * @returns {Promise<{total: number, categories: Array<{id: number|null, count: number}>, classifications: Array<{id: string|null, count: number}>}>}
  */
-export async function getElementCountByCategory(modelURN) {
+export async function getElementCountByCategoryAndClassification(modelURN) {
   try {
-    // Fetch elements with CategoryId
+    // Fetch elements with CategoryId AND Classification in ONE call
     const payload = JSON.stringify({
-      qualifiedColumns: [QC.CategoryId],
+      qualifiedColumns: [QC.CategoryId, QC.Classification, QC.OClassification],
       includeHistory: false
     });
     
@@ -239,19 +240,37 @@ export async function getElementCountByCategory(modelURN) {
       }
     });
     
-    // Convert to array and sort by count descending
+    // Count by classification (prefer override, fall back to standard)
+    const classificationCounts = {};
+    elements.forEach(element => {
+      const classification = element[QC.OClassification]?.[0] || element[QC.Classification]?.[0];
+      if (classification !== undefined && classification !== null && classification !== '') {
+        classificationCounts[classification] = (classificationCounts[classification] || 0) + 1;
+      } else {
+        // Elements without a classification
+        classificationCounts['unknown'] = (classificationCounts['unknown'] || 0) + 1;
+      }
+    });
+    
+    // Convert to arrays and sort by count descending
     const categories = Object.entries(categoryCounts).map(([id, count]) => ({
       id: id === 'unknown' ? null : parseInt(id),
       count: count
     })).sort((a, b) => b.count - a.count);
     
+    const classifications = Object.entries(classificationCounts).map(([id, count]) => ({
+      id: id === 'unknown' ? null : id,
+      count: count
+    })).sort((a, b) => b.count - a.count);
+    
     return {
       total: elements.length,
-      categories: categories
+      categories: categories,
+      classifications: classifications
     };
   } catch (error) {
-    console.error('Error fetching element count by category:', error);
-    return { total: 0, categories: [] };
+    console.error('Error fetching element count by category and classification:', error);
+    return { total: 0, categories: [], classifications: [] };
   }
 }
 
@@ -296,6 +315,51 @@ export async function getElementsByCategory(modelURN, categoryId) {
     return keys;
   } catch (error) {
     console.error('Error fetching elements by category:', error);
+    return [];
+  }
+}
+
+/**
+ * Get element keys for a specific classification in a model
+ * @param {string} modelURN - Model URN
+ * @param {string|null} classificationId - Classification code (null for unknown classification)
+ * @returns {Promise<Array<string>>} Array of element keys
+ */
+export async function getElementsByClassification(modelURN, classificationId) {
+  try {
+    // Fetch elements with Classification
+    const payload = JSON.stringify({
+      qualifiedColumns: [QC.Classification, QC.OClassification],
+      includeHistory: false
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch elements: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    // Filter out version string
+    const elements = data.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+    
+    // Filter by classification and extract keys
+    const keys = elements
+      .filter(element => {
+        const classification = element[QC.OClassification]?.[0] || element[QC.Classification]?.[0];
+        if (classificationId === null) {
+          // Match elements without a classification
+          return !classification || classification === '';
+        } else {
+          return classification === classificationId;
+        }
+      })
+      .map(element => element[QC.Key]);
+    
+    return keys;
+  } catch (error) {
+    console.error('Error fetching elements by classification:', error);
     return [];
   }
 }
