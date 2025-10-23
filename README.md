@@ -187,6 +187,17 @@ This project uses:
 
 No build process or package manager is required.
 
+## Dependencies
+
+All dependencies are loaded via CDN (no npm or build process required):
+
+- **[Tailwind CSS](https://tailwindcss.com/)** (MIT) - CSS framework
+- **[XLSX-js-style](https://github.com/gitbrent/xlsx-js-style)** (Apache-2.0) - Excel export functionality
+- **[Chart.js](https://www.chartjs.org/)** (MIT) - Data visualization
+- **[chartjs-adapter-date-fns](https://github.com/chartjs/chartjs-adapter-date-fns)** (MIT) - Date/time adapter for Chart.js
+
+For full license text and attribution, see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+
 ## Browser Compatibility
 
 - Chrome/Edge (latest)
@@ -195,7 +206,11 @@ No build process or package manager is required.
 
 ## License
 
-MIT
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+Copyright (c) 2025 Autodesk, Inc.
+
+Third-party dependencies are licensed under their respective licenses - see [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) for details.
 
 ## Acknowledgments
 
