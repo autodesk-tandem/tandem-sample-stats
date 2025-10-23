@@ -690,19 +690,11 @@ async function searchElementsByProperty(modelURN, qualifiedColumn, searchOptions
       
       // Handle array values
       if (Array.isArray(value)) {
-        const matches = value.some(v => matcher(v));
-        if (matches) {
-          console.log(`Match found: ${element[QC.Key]} has value:`, value);
-        }
-        return matches;
+        return value.some(v => matcher(v));
       }
       
       // Handle single values
-      const matches = matcher(value);
-      if (matches) {
-        console.log(`Match found: ${element[QC.Key]} has value:`, value);
-      }
-      return matches;
+      return matcher(value);
     });
 
     console.log(`Found ${matchingElements.length} matching elements`);

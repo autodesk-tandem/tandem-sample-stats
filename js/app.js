@@ -306,6 +306,7 @@ async function loadFacility(facilityURN) {
       const timeZone = info.props?.["Identity Data"]?.["timeZone"] || null;
       const templateName = info.template?.name || null;
       const schemaVersion = info.schemaVersion;
+      const region = info.region || null;
       
       facilityInfo.innerHTML = `
         <div class="flex flex-col md:flex-row gap-6">
@@ -355,6 +356,12 @@ async function loadFacility(facilityURN) {
               <span class="font-medium text-dark-text text-xs">Schema Version:</span>
               <span class="text-dark-text-secondary ml-2 text-xs">${schemaVersion !== undefined ? schemaVersion : 'Unknown'}</span>
             </div>
+            ${region ? `
+            <div>
+              <span class="font-medium text-dark-text text-xs">Primary Storage Region:</span>
+              <span class="text-dark-text-secondary ml-2 text-xs">${region}</span>
+            </div>
+            ` : ''}
             <div>
               <span class="font-medium text-dark-text text-xs">Facility URN:</span>
               <span class="text-dark-text-secondary ml-2 text-xs font-mono break-all">${facilityURN}</span>

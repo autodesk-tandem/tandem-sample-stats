@@ -52,6 +52,66 @@
         ::-webkit-scrollbar-thumb:hover {
             background: #505050;
         }
+        
+        /* Segmented button group for radio buttons */
+        .radio-button-group {
+            display: inline-flex;
+            border-radius: 4px;
+            overflow: hidden;
+            border: 1px solid #404040;
+            background: #1a1a1a;
+        }
+        
+        .radio-button-group label {
+            position: relative;
+            margin: 0;
+            padding: 0;
+        }
+        
+        .radio-button-group input[type="radio"] {
+            position: absolute;
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .radio-button-group label span {
+            display: block;
+            padding: 0.375rem 0.75rem;
+            font-size: 0.75rem;
+            font-weight: 500;
+            color: #a0a0a0;
+            background: transparent;
+            border-right: 1px solid #404040;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            white-space: nowrap;
+            line-height: 1.2;
+        }
+        
+        .radio-button-group label:last-child span {
+            border-right: none;
+        }
+        
+        .radio-button-group label:hover span {
+            background: #2a2a2a;
+            color: #e0e0e0;
+        }
+        
+        .radio-button-group input[type="radio"]:checked + span {
+            background: #0696D7;
+            color: #ffffff;
+        }
+        
+        .radio-button-group label:first-child span {
+            border-top-left-radius: 3px;
+            border-bottom-left-radius: 3px;
+        }
+        
+        .radio-button-group label:last-child span {
+            border-top-right-radius: 3px;
+            border-bottom-right-radius: 3px;
+        }
     </style>
 </head>
 <body class="bg-dark-bg min-h-screen">

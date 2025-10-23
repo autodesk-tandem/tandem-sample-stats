@@ -1,4 +1,4 @@
-import { getElementCount, getElementCountByCategoryAndClassification, getElementsByCategory, getElementsByClassification, getHistory, getModelProperties } from '../api.js';
+import { getElementCount, getElementCountByCategoryAndClassification, getElementsByCategory, getElementsByTandemCategory, getElementsByClassification, getElementsByNameOverride, getElementsByClassificationOverride, getHistory, getModelProperties } from '../api.js';
 import { isDefaultModel, getCategoryName } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { viewAssetDetails } from './assetDetails.js';
@@ -22,17 +22,137 @@ const toggleModelsDetail = createToggleFunction({
 const categoryKeysCache = new Map();
 
 /**
- * Render breakdown table (category or classification) with sortable headers and clickable counts
+ * Render breakdown table (category, tandem category, classification, or overrides) with sortable headers and clickable counts
  * @param {HTMLElement} container - Container to render into
  * @param {Object} breakdown - Breakdown data with total and items array
- * @param {Array} items - Array of {id, count} objects (categories or classifications)
+ * @param {Array} items - Array of {id, count} objects (categories or classifications) - not used for override views
  * @param {Object} model - Model object
  * @param {string} facilityURN - Facility URN
- * @param {string} viewType - 'category' or 'classification'
+ * @param {string} viewType - 'category', 'tandemCategory', 'classification', or 'overrides'
  * @param {string} sortColumn - Column to sort by ('type', 'count', 'percentage')
  * @param {string} sortDirection - Sort direction ('asc' or 'desc')
  */
 function renderBreakdownTable(container, breakdown, items, model, facilityURN, viewType = 'category', sortColumn = 'count', sortDirection = 'desc') {
+  // Handle overrides view (show both types in one table)
+  if (viewType === 'overrides') {
+    const overrideItems = [
+      { type: 'Name Override', count: breakdown.nameOverrides, viewType: 'nameOverride' },
+      { type: 'Classification Override', count: breakdown.classificationOverrides, viewType: 'classificationOverride' }
+    ];
+    
+    let html = `
+      <div class="overflow-x-auto">
+        <table class="min-w-full text-xs">
+          <thead class="bg-dark-bg/50">
+            <tr>
+              <th class="px-3 py-2 text-left font-semibold text-dark-text">Type</th>
+              <th class="px-3 py-2 text-right font-semibold text-dark-text">Count</th>
+              <th class="px-3 py-2 text-right font-semibold text-dark-text">%</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-dark-border">
+    `;
+    
+    overrideItems.forEach(item => {
+      const percentage = breakdown.total > 0 ? ((item.count / breakdown.total) * 100).toFixed(1) : 0;
+      
+      html += `
+        <tr class="hover:bg-dark-bg/30">
+          <td class="px-3 py-2 text-dark-text">Elements with ${item.type}</td>
+          <td class="px-3 py-2 text-right text-dark-text font-semibold">
+            <button class="breakdown-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
+                    data-item-id="override"
+                    data-item-name="Elements with ${item.type}"
+                    data-model-id="${model.modelId}"
+                    data-model-name="${model.label || 'Untitled Model'}"
+                    data-view-type="${item.viewType}"
+                    title="Click to view ${item.count} element${item.count !== 1 ? 's' : ''}">
+              ${item.count.toLocaleString()}
+            </button>
+          </td>
+          <td class="px-3 py-2 text-right text-dark-text-secondary">${percentage}%</td>
+        </tr>
+      `;
+    });
+    
+    html += `
+          </tbody>
+        </table>
+      </div>
+    `;
+    
+    container.innerHTML = html;
+    
+    // Add click handlers for all count buttons
+    const countButtons = container.querySelectorAll('.breakdown-count-btn');
+    countButtons.forEach(button => {
+      button.addEventListener('click', async () => {
+        const modelId = button.getAttribute('data-model-id');
+        const modelName = button.getAttribute('data-model-name');
+        const itemName = button.getAttribute('data-item-name');
+        const currentViewType = button.getAttribute('data-view-type');
+        
+        const cacheKey = `${modelId}:${currentViewType}:override`;
+        
+        // Check cache first
+        let keys = categoryKeysCache.get(cacheKey);
+        
+        if (!keys) {
+          // Show loading state
+          const originalText = button.textContent;
+          button.textContent = '...';
+          button.disabled = true;
+          
+          try {
+            const label = currentViewType === 'nameOverride' ? 'Name Override' : 'Classification Override';
+            console.log(`[Models] Loading elements with ${label} (first time)`);
+            // Fetch element keys based on override type
+            if (currentViewType === 'nameOverride') {
+              keys = await getElementsByNameOverride(modelId);
+            } else {
+              keys = await getElementsByClassificationOverride(modelId);
+            }
+            
+            // Cache the result
+            categoryKeysCache.set(cacheKey, keys);
+            console.log(`[Models] Cached ${keys.length} element keys for ${label}`);
+            
+            if (keys.length === 0) {
+              alert('No elements found with this override');
+              button.textContent = originalText;
+              button.disabled = false;
+              return;
+            }
+          } catch (error) {
+            console.error(`Error fetching elements with override:`, error);
+            alert('Failed to fetch elements. See console for details.');
+            button.textContent = originalText;
+            button.disabled = false;
+            return;
+          }
+          
+          // Restore button state
+          button.textContent = originalText;
+          button.disabled = false;
+        } else {
+          console.log(`[Models] Using cached elements for override (${keys.length} keys, no API call)`);
+        }
+        
+        // Open Asset Details page
+        const elementsByModel = [{
+          modelURN: modelId,
+          modelName: modelName,
+          keys: keys
+        }];
+        
+        viewAssetDetails(elementsByModel, itemName);
+      });
+    });
+    
+    return;
+  }
+  
+  // Handle category/classification views (existing code)
   // Sort items
   const sortedItems = [...items].sort((a, b) => {
     let aVal, bVal;
@@ -42,7 +162,7 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
       if (viewType === 'category') {
         aVal = getCategoryName(a.id).toLowerCase();
         bVal = getCategoryName(b.id).toLowerCase();
-      } else {
+      } else if (viewType === 'tandemCategory' || viewType === 'classification') {
         aVal = (a.id || 'Unknown').toString().toLowerCase();
         bVal = (b.id || 'Unknown').toString().toLowerCase();
       }
@@ -66,7 +186,13 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
   });
   
   // Build table HTML
-  const typeLabel = viewType === 'category' ? 'Category' : 'Classification';
+  let typeLabel = 'Category';
+  if (viewType === 'tandemCategory') {
+    typeLabel = 'Tandem Category';
+  } else if (viewType === 'classification') {
+    typeLabel = 'Classification';
+  }
+  
   let tableHtml = `
     <div class="overflow-x-auto">
       <table class="min-w-full text-xs">
@@ -100,9 +226,14 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
   
   sortedItems.forEach(item => {
     // Get display name based on view type
-    const itemName = viewType === 'category' 
-      ? getCategoryName(item.id) 
-      : (item.id || 'Unknown Classification');
+    let itemName;
+    if (viewType === 'category') {
+      itemName = getCategoryName(item.id);
+    } else if (viewType === 'tandemCategory') {
+      itemName = item.id || 'Unknown Tandem Category';
+    } else {
+      itemName = item.id || 'Unknown Classification';
+    }
     const percentage = breakdown.total > 0 ? ((item.count / breakdown.total) * 100).toFixed(1) : 0;
     
     tableHtml += `
@@ -170,6 +301,8 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
           // Fetch element keys based on view type
           if (currentViewType === 'category') {
             keys = await getElementsByCategory(modelId, parsedItemId);
+          } else if (currentViewType === 'tandemCategory') {
+            keys = await getElementsByTandemCategory(modelId, parsedItemId);
           } else {
             keys = await getElementsByClassification(modelId, parsedItemId);
           }
@@ -332,20 +465,34 @@ export async function displayModels(container, models, facilityURN) {
               <span>Element Breakdown</span>
             </button>
             <div id="breakdown-container-${i}" class="hidden mt-3">
-              <!-- Radio buttons for view selection -->
-              <div class="flex gap-4 mb-3 text-sm">
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="breakdown-view-${i}" value="category" 
-                         class="breakdown-view-radio text-tandem-blue focus:ring-tandem-blue" 
-                         data-model-index="${i}" checked>
-                  <span class="text-dark-text">Category</span>
-                </label>
-                <label class="flex items-center gap-2 cursor-pointer">
-                  <input type="radio" name="breakdown-view-${i}" value="classification" 
-                         class="breakdown-view-radio text-tandem-blue focus:ring-tandem-blue" 
-                         data-model-index="${i}">
-                  <span class="text-dark-text">Classification</span>
-                </label>
+              <!-- Radio buttons for view selection (segmented control) -->
+              <div class="mb-3">
+                <div class="radio-button-group">
+                  <label>
+                    <input type="radio" name="breakdown-view-${i}" value="category" 
+                           class="breakdown-view-radio" 
+                           data-model-index="${i}" checked>
+                    <span>Revit Category</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="breakdown-view-${i}" value="tandemCategory" 
+                           class="breakdown-view-radio" 
+                           data-model-index="${i}">
+                    <span>Tandem Category</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="breakdown-view-${i}" value="classification" 
+                           class="breakdown-view-radio" 
+                           data-model-index="${i}">
+                    <span>Classification</span>
+                  </label>
+                  <label>
+                    <input type="radio" name="breakdown-view-${i}" value="overrides" 
+                           class="breakdown-view-radio" 
+                           data-model-index="${i}">
+                    <span>Overrides</span>
+                  </label>
+                </div>
               </div>
               <!-- Table will be rendered here -->
               <div id="breakdown-table-${i}"></div>
@@ -448,11 +595,19 @@ export async function displayModels(container, models, facilityURN) {
               } else {
                 // Cache the full breakdown data
                 breakdownCache.set(model.modelId, breakdown);
-                console.log(`[Models] Cached breakdown for ${model.label} (${breakdown.total} elements, ${breakdown.categories.length} categories, ${breakdown.classifications.length} classifications)`);
+                console.log(`[Models] Cached breakdown for ${model.label} (${breakdown.total} elements, ${breakdown.categories.length} revit categories, ${breakdown.tandemCategories.length} tandem categories, ${breakdown.classifications.length} classifications, ${breakdown.nameOverrides} name overrides, ${breakdown.classificationOverrides} classification overrides)`);
                 
                 // Render the initial view (category by default)
                 const viewType = currentViewTypes.get(i);
-                const items = viewType === 'category' ? breakdown.categories : breakdown.classifications;
+                let items = [];
+                if (viewType === 'category') {
+                  items = breakdown.categories;
+                } else if (viewType === 'tandemCategory') {
+                  items = breakdown.tandemCategories;
+                } else if (viewType === 'classification') {
+                  items = breakdown.classifications;
+                }
+                // For override views, items will be empty array (not used)
                 renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
               }
             } catch (error) {
@@ -466,7 +621,15 @@ export async function displayModels(container, models, facilityURN) {
             const breakdown = breakdownCache.get(model.modelId);
             if (breakdown) {
               const viewType = currentViewTypes.get(i);
-              const items = viewType === 'category' ? breakdown.categories : breakdown.classifications;
+              let items = [];
+              if (viewType === 'category') {
+                items = breakdown.categories;
+              } else if (viewType === 'tandemCategory') {
+                items = breakdown.tandemCategories;
+              } else if (viewType === 'classification') {
+                items = breakdown.classifications;
+              }
+              // For override views, items will be empty array (not used)
               renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
             }
           }
@@ -482,13 +645,21 @@ export async function displayModels(container, models, facilityURN) {
       radioButtons.forEach(radio => {
         radio.addEventListener('change', () => {
           if (radio.checked) {
-            const viewType = radio.value; // 'category' or 'classification'
+            const viewType = radio.value; // 'category', 'tandemCategory', 'classification', or 'overrides'
             currentViewTypes.set(i, viewType);
             
             // Re-render table with new view type
             const breakdown = breakdownCache.get(model.modelId);
             if (breakdown) {
-              const items = viewType === 'category' ? breakdown.categories : breakdown.classifications;
+              let items = [];
+              if (viewType === 'category') {
+                items = breakdown.categories;
+              } else if (viewType === 'tandemCategory') {
+                items = breakdown.tandemCategories;
+              } else if (viewType === 'classification') {
+                items = breakdown.classifications;
+              }
+              // For override views, items will be empty array (not used)
               renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
               console.log(`[Models] Switched to ${viewType} view for ${model.label} (using cached data)`);
             }
