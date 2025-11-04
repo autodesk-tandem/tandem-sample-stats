@@ -6,6 +6,7 @@ import { viewAssetDetails } from '../features/assetDetails.js';
 
 let currentElementsByModel = [];
 let currentModalTitle = '';
+let currentFacilityURN = '';
 
 /**
  * Initialize the modal event listeners
@@ -57,8 +58,9 @@ export function initElementListModal() {
  * Show the modal with a list of element keys, optionally grouped by model
  * @param {Array<string>|Array<{modelURN: string, modelName: string, keys: Array<string>}>} elementKeysOrGroups - Array of element keys or array of model groups
  * @param {string} title - Modal title (optional)
+ * @param {string} facilityURN - Facility URN for link generation (optional)
  */
-export function showElementListModal(elementKeysOrGroups, title = 'Element Keys') {
+export function showElementListModal(elementKeysOrGroups, title = 'Element Keys', facilityURN = '') {
   if (!elementKeysOrGroups || elementKeysOrGroups.length === 0) {
     return;
   }
@@ -75,8 +77,9 @@ export function showElementListModal(elementKeysOrGroups, title = 'Element Keys'
   // Detect if we have grouped data or plain array
   const isGrouped = elementKeysOrGroups[0] && typeof elementKeysOrGroups[0] === 'object' && 'modelURN' in elementKeysOrGroups[0];
 
-  // Store title for asset details
+  // Store title and facilityURN for asset details
   currentModalTitle = title;
+  currentFacilityURN = facilityURN;
   
   // Update title
   modalTitle.textContent = title;
@@ -138,6 +141,7 @@ export function closeElementListModal() {
   }
   currentElementsByModel = [];
   currentModalTitle = '';
+  currentFacilityURN = '';
 }
 
 /**
@@ -148,7 +152,7 @@ function openAssetDetails() {
     return;
   }
   
-  viewAssetDetails(currentElementsByModel, currentModalTitle);
+  viewAssetDetails(currentElementsByModel, currentModalTitle, currentFacilityURN);
 }
 
 /**

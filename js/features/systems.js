@@ -175,7 +175,7 @@ export async function displaySystems(container, systems, facilityURN) {
         
         if (system && system.elementsByModel && system.elementsByModel.length > 0) {
           // Pass the grouped element data directly to viewAssetDetails
-          viewAssetDetails(system.elementsByModel, `${system.name} System Details`);
+          viewAssetDetails(system.elementsByModel, `${system.name} System Details`, facilityURN);
         }
       });
     });

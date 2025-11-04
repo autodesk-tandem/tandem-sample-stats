@@ -145,7 +145,7 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
           keys: keys
         }];
         
-        viewAssetDetails(elementsByModel, itemName);
+        viewAssetDetails(elementsByModel, itemName, facilityURN);
       });
     });
     
@@ -339,7 +339,7 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
         keys: keys
       }];
       
-      viewAssetDetails(elementsByModel, `${itemName} in ${modelName}`);
+      viewAssetDetails(elementsByModel, `${itemName} in ${modelName}`, facilityURN);
     });
   });
 }
@@ -1175,6 +1175,7 @@ function generateHistoryHTML(allHistory, facilityURN) {
   <script>
     // All history data embedded from server
     const ALL_HISTORY_DATA = ${allHistoryJSON};
+    const FACILITY_URN = '${facilityURN}';
     let currentTimeRange = '7days';
     
     // Filter and render history based on time range
@@ -1538,7 +1539,7 @@ function generateHistoryHTML(allHistory, facilityURN) {
       const title = \`History Details: \${timeRangeText}\`;
       
       if (window.viewAssetDetails) {
-        window.viewAssetDetails(elementsByModel, title);
+        window.viewAssetDetails(elementsByModel, title, FACILITY_URN);
       } else {
         alert('Asset details functionality is not available');
       }
@@ -1579,7 +1580,7 @@ function generateHistoryHTML(allHistory, facilityURN) {
         const title = \`Change Details: \${dateStr}\`;
         
         if (window.viewAssetDetails) {
-          window.viewAssetDetails(elementsByModel, title);
+          window.viewAssetDetails(elementsByModel, title, FACILITY_URN);
         } else {
           alert('Asset details functionality is not available');
         }

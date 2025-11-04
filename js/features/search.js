@@ -797,7 +797,7 @@ function displaySearchResults(facilityURN, results, propertyName, searchOptions,
       }));
 
       const title = `Search Results: ${propertyName} = ${searchCriteria}`;
-      viewAssetDetails(elementsByModel, title);
+      viewAssetDetails(elementsByModel, title, facilityURN);
     });
   }
 }

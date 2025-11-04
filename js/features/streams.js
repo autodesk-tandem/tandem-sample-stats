@@ -777,7 +777,7 @@ export async function displayStreams(container, streams, facilityURN) {
       }];
       
       // Open Details page
-      viewAssetDetails(elementsByModel, `Stream Details`);
+      viewAssetDetails(elementsByModel, `Stream Details`, facilityURN);
     });
   }
   

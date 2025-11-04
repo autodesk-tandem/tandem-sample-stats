@@ -16,10 +16,11 @@ const toggleLevelsDetail = createToggleFunction({
  * Display levels list with details and sorting
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} levels - Array of level objects
+ * @param {string} facilityURN - Facility URN for link generation
  * @param {string} sortColumn - Sort by 'name' or 'elevation' (default: null for no sorting)
  * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
  */
-export async function displayLevels(container, levels, sortColumn = null, sortDirection = 'asc') {
+export async function displayLevels(container, levels, facilityURN, sortColumn = null, sortDirection = 'asc') {
   if (!levels || levels.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No levels found in this facility.</p>';
     return;
@@ -231,7 +232,7 @@ export async function displayLevels(container, levels, sortColumn = null, sortDi
       modelMap.forEach(model => elementsByModel.push(model));
       
       // Open Details page
-      viewAssetDetails(elementsByModel, `Level Details`);
+      viewAssetDetails(elementsByModel, `Level Details`, facilityURN);
     });
   }
 }
