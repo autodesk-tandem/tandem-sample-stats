@@ -39,6 +39,8 @@ Having the reference implementation available allowed Claude to discover these p
 - **OAuth Authentication**: Secure 3-legged OAuth flow with Autodesk
 - **Account Switcher**: Browse and switch between all your Tandem accounts/teams
 - **Facility Switcher**: Quick access to all facilities you have permissions for
+- **Global Resources View**: View all facilities and groups across all regions with access levels
+- **Access History**: Audit trail of permission changes for facilities and groups
 - **Modern UI**: Clean, responsive interface built with Tailwind CSS
 - **Statistics Dashboard**: View key metrics about your facilities (expandable)
 
@@ -134,12 +136,14 @@ tandem-sample-stats/
 │   └── features/                 # Feature-specific modules
 │       ├── diagnostics.js        # Schema diagnostics
 │       ├── documents.js          # Document listing
+│       ├── facilityHistory.js    # Facility access history
 │       ├── levels.js             # Level listing
 │       ├── models.js             # Model listing
 │       ├── rooms.js              # Room statistics
 │       ├── schema.js             # Schema viewer
 │       ├── streams.js            # Stream monitoring & charts
-│       └── taggedAssets.js       # Tagged assets
+│       ├── taggedAssets.js       # Tagged assets
+│       └── userResources.js      # Global resources view
 ├── README.md                     # User documentation
 └── QUICKSTART.md                 # Quick setup guide
 ```

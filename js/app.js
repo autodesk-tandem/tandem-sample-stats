@@ -24,6 +24,8 @@ import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
 import { displayDiagnostics } from './features/diagnostics.js';
 import { displaySearch } from './features/search.js';
+import { viewUserResources } from './features/userResources.js';
+import { viewFacilityHistory } from './features/facilityHistory.js';
 import { SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
@@ -37,6 +39,8 @@ const welcomeMessage = document.getElementById('welcomeMessage');
 const dashboardContent = document.getElementById('dashboardContent');
 const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
+const viewUserResourcesBtn = document.getElementById('viewUserResourcesBtn');
+const viewFacilityHistoryBtn = document.getElementById('viewFacilityHistoryBtn');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
 const searchContainer = document.getElementById('searchContainer');
@@ -289,6 +293,11 @@ async function loadFacility(facilityURN) {
   }
   
   currentFacilityURN = facilityURN;
+  
+  // Hide the buttons initially while loading
+  viewUserResourcesBtn.classList.add('hidden');
+  viewFacilityHistoryBtn.classList.add('hidden');
+  
   toggleLoading(true);
   
   try {
@@ -370,6 +379,13 @@ async function loadFacility(facilityURN) {
         </div>
       `;
       
+      // Show the buttons
+      viewUserResourcesBtn.classList.remove('hidden');
+      viewFacilityHistoryBtn.classList.remove('hidden');
+      
+      // Set up facility history button handler with current facility info
+      viewFacilityHistoryBtn.onclick = () => viewFacilityHistory(facilityURN, buildingName);
+      
       // Check schema version - API only supports version 2
       if (schemaVersion < SchemaVersion) {
         // Clear all data sections
@@ -415,6 +431,9 @@ async function loadFacility(facilityURN) {
   } catch (error) {
     console.error('Error loading facility:', error);
     facilityInfo.innerHTML = `<p class="text-red-600">Error loading facility information</p>`;
+    // Keep buttons hidden on error
+    viewUserResourcesBtn.classList.add('hidden');
+    viewFacilityHistoryBtn.classList.add('hidden');
   } finally {
     toggleLoading(false);
   }
@@ -492,6 +511,10 @@ async function initialize() {
   // Set up event listeners
   loginBtn.addEventListener('click', login);
   logoutBtn.addEventListener('click', logout);
+  viewUserResourcesBtn.addEventListener('click', viewUserResources);
+  
+  // Facility history button - handler set dynamically when facility loads
+  // (needs facility URN and name)
 
   accountSelect.addEventListener('change', (e) => {
     const accountName = e.target.value;
