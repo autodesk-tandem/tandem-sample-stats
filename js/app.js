@@ -467,10 +467,10 @@ async function loadStats(facilityURN) {
     await displayTaggedAssets(taggedAssetsList, facilityURN, models);
     
     const levels = await getLevels(facilityURN);
-    await displayLevels(levelsList, levels);
+    await displayLevels(levelsList, levels, facilityURN);
     
     const rooms = await getRooms(facilityURN, schemaCache);
-    await displayRooms(roomsList, rooms);
+    await displayRooms(roomsList, rooms, facilityURN);
     
     const documents = await getDocuments(facilityURN);
     await displayDocuments(documentsList, documents);

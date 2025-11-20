@@ -1,18 +1,25 @@
 import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
-import { QC, ColumnFamilies } from '../../tandem/constants.js';
+import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { getCategoryName } from '../utils.js';
+import { makeXrefKey, toFullKey } from '../../tandem/keys.js';
 
 /**
  * Generate HTML page for asset details
  * @param {Array<{modelURN: string, modelName: string, keys: Array<string>}>} elementsByModel - Elements grouped by model
  * @param {string} title - Page title
+ * @param {string} facilityURN - Facility URN for link generation
  * @returns {string} HTML page content
  */
-function generateAssetDetailsHTML(elementsByModel, title) {
+function generateAssetDetailsHTML(elementsByModel, title, facilityURN) {
   // Embed all data as JSON for client-side processing
   const dataJSON = JSON.stringify(elementsByModel).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
   const tokenValue = window.sessionStorage.token || '';
+  const facilityURNValue = facilityURN || '';
+  
+  // Embed functions from tandem/keys.js
+  const makeXrefKeySource = makeXrefKey.toString();
+  const toFullKeySource = toFullKey.toString();
   
   // Get and embed schema cache for property lookups
   // Convert Map to object for JSON serialization
@@ -248,6 +255,32 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       background: #666;
       cursor: wait;
     }
+    .copy-link-btn {
+      background: none;
+      border: none;
+      color: #808080;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      transition: color 0.2s, transform 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    .copy-link-btn:hover {
+      background: #333333;
+      color: #0696D7;
+    }
+    .copy-link-btn:active {
+      transform: scale(0.95);
+    }
+    .copy-link-btn.copied {
+      color: #22c55e;
+    }
     .element-details {
       padding: 16px 20px;
       background: #1a1a1a;
@@ -479,10 +512,31 @@ function generateAssetDetailsHTML(elementsByModel, title) {
     const DATA = ${dataJSON};
     const API_BASE = '${tandemBaseURL}';
     const TOKEN = '${tokenValue}';
+    const FACILITY_URN = '${facilityURNValue}';
     const SCHEMA_CACHE = ${schemaCacheJSON};
+    
+    // Constants from tandem/constants.js
+    const KeyFlags = {
+      Physical: ${KeyFlags.Physical},
+      Logical: ${KeyFlags.Logical}
+    };
+    const kElementFlagsSize = ${kElementFlagsSize};
+    const kElementIdWithFlagsSize = ${kElementIdWithFlagsSize};
     
     // Track which elements have loaded details
     const loadedDetails = new Map();
+    
+    // Helper function for URL-safe base64 (required by makeXrefKey and toFullKey)
+    function makeWebsafe(urn) {
+      return urn.replace(/\\+/g, '-')
+        .replace(/\\//g, '_')
+        .replace(/=+$/g, '');
+    }
+    
+    // Reuse functions from tandem/keys.js
+    ${toFullKeySource}
+    
+    ${makeXrefKeySource}
     
     // Helper function to look up property display name from schema
     function getPropertyDisplayInfo(modelURN, qualifiedProp) {
@@ -901,6 +955,50 @@ function generateAssetDetailsHTML(elementsByModel, title) {
       }
     }
     
+    async function copyAssetLink(modelURN, elementKey, button) {
+      try {
+        if (!FACILITY_URN) {
+          console.error('Facility URN not available');
+          button.textContent = '✗';
+          setTimeout(() => {
+            button.textContent = '🔗';
+          }, 2000);
+          return;
+        }
+        
+        // Convert short key to full key (with flags)
+        // Most elements are physical; logical elements like rooms/spaces will still work
+        const fullKey = toFullKey(elementKey, false);
+        
+        // Generate xref from model URN and full element key
+        const xref = makeXrefKey(modelURN, fullKey);
+        
+        // Generate link to the asset in Tandem
+        const link = 'https://tandem.autodesk.com/pages/facilities/' + FACILITY_URN + '?selection=' + xref;
+        
+        // Copy to clipboard
+        await navigator.clipboard.writeText(link);
+        
+        // Visual feedback
+        button.classList.add('copied');
+        const originalContent = button.textContent;
+        button.textContent = '✓';
+        
+        setTimeout(() => {
+          button.textContent = originalContent;
+          button.classList.remove('copied');
+        }, 2000);
+        
+        console.log('Copied link:', link);
+      } catch (error) {
+        console.error('Failed to copy link:', error);
+        button.textContent = '✗';
+        setTimeout(() => {
+          button.textContent = '🔗';
+        }, 2000);
+      }
+    }
+    
     async function loadInitialData() {
       const container = document.getElementById('content-container');
       
@@ -964,6 +1062,7 @@ function generateAssetDetailsHTML(elementsByModel, title) {
             html += '</div>';
             html += '<div class="element-key">' + escapeHtml(key) + '</div>';
             html += '</div>';
+            html += '<button class="copy-link-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Copy link to asset">🔗</button>';
             html += '<button class="element-toggle" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '">Show Details</button>';
             html += '</div>';
             html += '<div class="element-details"></div>';
@@ -985,6 +1084,17 @@ function generateAssetDetailsHTML(elementsByModel, title) {
             const detailsDiv = this.closest('.element-item').querySelector('.element-details');
             
             await toggleElementDetails(modelURN, elementKey, this, detailsDiv);
+          });
+        });
+        
+        // Add event listeners to all copy link buttons
+        const copyLinkButtons = container.querySelectorAll('.copy-link-btn');
+        copyLinkButtons.forEach(button => {
+          button.addEventListener('click', async function() {
+            const modelURN = this.getAttribute('data-model-urn');
+            const elementKey = this.getAttribute('data-element-key');
+            
+            await copyAssetLink(modelURN, elementKey, this);
           });
         });
         
@@ -1286,15 +1396,16 @@ let assetDetailsWindow = null;
  * View asset details in a new tab
  * @param {Array<{modelURN: string, modelName: string, keys: Array<string>}>} elementsByModel - Elements grouped by model
  * @param {string} title - Page title
+ * @param {string} facilityURN - Facility URN for link generation
  */
-export function viewAssetDetails(elementsByModel, title = 'Asset Details') {
+export function viewAssetDetails(elementsByModel, title = 'Asset Details', facilityURN = '') {
   if (!elementsByModel || elementsByModel.length === 0) {
     alert('No elements to display');
     return;
   }
   
   // Generate HTML with all data embedded
-  const htmlContent = generateAssetDetailsHTML(elementsByModel, title);
+  const htmlContent = generateAssetDetailsHTML(elementsByModel, title, facilityURN);
   
   // Open in new window/tab
   assetDetailsWindow = window.open('', '_blank');

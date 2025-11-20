@@ -13,7 +13,7 @@ window.addEventListener('message', (event) => {
       modelName: room.modelName || 'Unknown Model',
       keys: [room.key]
     }];
-    viewAssetDetails(elementsByModel, `Details: ${room.name}`);
+    viewAssetDetails(elementsByModel, `Details: ${room.name}`, event.data.facilityURN || '');
   }
 });
 
@@ -32,10 +32,11 @@ const toggleRoomsDetail = createToggleFunction({
  * Display rooms list with details and sorting
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} rooms - Array of room objects
+ * @param {string} facilityURN - Facility URN for link generation
  * @param {string} sortColumn - Sort by 'name', 'type', 'area', or 'volume' (default: null for no sorting)
  * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
  */
-export async function displayRooms(container, rooms, sortColumn = null, sortDirection = 'asc') {
+export async function displayRooms(container, rooms, facilityURN, sortColumn = null, sortDirection = 'asc') {
   if (!rooms || rooms.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No rooms or spaces found in this facility.</p>';
     return;
@@ -308,7 +309,7 @@ export async function displayRooms(container, rooms, sortColumn = null, sortDire
       modelMap.forEach(model => elementsByModel.push(model));
       
       // Open Details page
-      viewAssetDetails(elementsByModel, `Room & Space Details`);
+      viewAssetDetails(elementsByModel, `Room & Space Details`, facilityURN);
     });
   }
 }

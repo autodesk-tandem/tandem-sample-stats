@@ -189,7 +189,7 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
         }
         
         // Open details page directly
-        viewAssetDetails(elementsByModel, `Asset Details: ${propertyName}`);
+        viewAssetDetails(elementsByModel, `Asset Details: ${propertyName}`, facilityURN);
       } catch (error) {
         console.error('Error fetching elements:', error);
         alert('Failed to fetch element keys. See console for details.');
@@ -343,7 +343,7 @@ export async function displayTaggedAssets(container, facilityURN, models) {
         }
         
         // Open Details page with cached data (no additional API calls!)
-        viewAssetDetails(details.elementsByModel, `Tagged Asset Details`);
+        viewAssetDetails(details.elementsByModel, `Tagged Asset Details`, facilityURN);
       });
     }
   } catch (error) {
