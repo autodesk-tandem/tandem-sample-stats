@@ -102,6 +102,27 @@ export async function getFacilitiesForUser(userId) {
 }
 
 /**
+ * Get all resources (twins and groups) across all regions for a user
+ * @param {string} userId - User ID (use "@me" for current user)
+ * @returns {Promise<object>} Object with twins and groups arrays
+ */
+export async function getUserResources(userId) {
+  try {
+    const requestPath = `${tandemBaseURL}/users/${userId}/resources`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch user resources: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching user resources:', error);
+    return null;
+  }
+}
+
+/**
  * Get facility information
  * @param {string} facilityURN - Facility URN
  * @returns {Promise<object>} Facility information
@@ -1290,6 +1311,80 @@ export async function getHistory(modelURN, options = {}) {
     return history;
   } catch (error) {
     console.error('Error fetching history:', error);
+    return [];
+  }
+}
+
+/**
+ * Get facility/twin history (ACL changes)
+ * @param {string} facilityURN - Facility URN
+ * @param {Object} options - History query options
+ * @param {number} options.min - Minimum timestamp for range query (milliseconds)
+ * @param {number} options.max - Maximum timestamp for range query (milliseconds)
+ * @param {boolean} options.includeChanges - Include detailed change information (default: true)
+ * @returns {Promise<Array>} Array of history entries
+ */
+export async function getTwinHistory(facilityURN, options = {}) {
+  try {
+    const payloadObj = {
+      includeChanges: options.includeChanges !== false
+    };
+    
+    if (options.min !== undefined) {
+      payloadObj.min = options.min;
+    }
+    if (options.max !== undefined) {
+      payloadObj.max = options.max;
+    }
+    
+    const payload = JSON.stringify(payloadObj);
+    const requestPath = `${tandemBaseURL}/twins/${facilityURN}/history`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch twin history: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching twin history:', error);
+    return [];
+  }
+}
+
+/**
+ * Get group history (ACL changes)
+ * @param {string} groupURN - Group URN
+ * @param {Object} options - History query options
+ * @param {number} options.min - Minimum timestamp for range query (milliseconds)
+ * @param {number} options.max - Maximum timestamp for range query (milliseconds)
+ * @param {boolean} options.includeChanges - Include detailed change information (default: true)
+ * @returns {Promise<Array>} Array of history entries
+ */
+export async function getGroupHistory(groupURN, options = {}) {
+  try {
+    const payloadObj = {
+      includeChanges: options.includeChanges !== false
+    };
+    
+    if (options.min !== undefined) {
+      payloadObj.min = options.min;
+    }
+    if (options.max !== undefined) {
+      payloadObj.max = options.max;
+    }
+    
+    const payload = JSON.stringify(payloadObj);
+    const requestPath = `${tandemBaseURL}/groups/${groupURN}/history`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    
+    if (!response.ok) {
+      throw new Error(`Failed to fetch group history: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching group history:', error);
     return [];
   }
 }
