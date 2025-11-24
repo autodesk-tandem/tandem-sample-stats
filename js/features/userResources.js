@@ -253,6 +253,18 @@ export async function viewUserResources() {
 /**
  * Load facility names progressively in the background
  * This prevents blocking the UI while fetching 90+ facility names
+ * 
+ * WHY CAN'T WE SHARE THE CACHE WITH THE MAIN WINDOW?
+ * The User Resources drill-down opens in a new browser window (window.open), which has
+ * a completely separate JavaScript context and memory space. Variables in the main window
+ * and popup window don't share memory by design (browser security model).
+ * 
+ * Could we share via localStorage/sessionStorage/IndexedDB? Technically yes, but:
+ * - Adds significant complexity
+ * - The drill-down is already fast enough with progressive loading
+ * - This is an edge case (most users don't switch between main window and drill-down frequently)
+ * 
+ * Trade-off decision: Keep it simple rather than over-optimize an uncommon use case.
  */
 async function loadFacilityNamesProgressively(newWindow, enrichedTwins, twinsByRegion) {
   console.log(`⏳ Loading facility names for ${enrichedTwins.length} facilities in background...`);
@@ -269,14 +281,15 @@ async function loadFacilityNamesProgressively(newWindow, enrichedTwins, twinsByR
     await Promise.all(
       batch.map(async (twin) => {
         try {
-          const info = await getFacilityInfo(twin.urn);
+          // Pass the region parameter to ensure correct API endpoint is used
+          const info = await getFacilityInfo(twin.urn, twin.region);
           const name = info?.props?.["Identity Data"]?.["Building Name"];
           if (name) {
             twin.facilityName = name;
             loadedCount++;
           }
         } catch (error) {
-          console.warn(`Failed to fetch name for ${twin.urn}:`, error);
+          console.warn(`Failed to fetch name for ${twin.urn} in ${twin.region}:`, error);
         }
       })
     );
