@@ -11,7 +11,8 @@ import {
   getSystems,
   getLevels,
   getRooms,
-  getDocuments
+  getDocuments,
+  getUserResources
 } from './api.js';
 import { loadSchemaForModel, getSchemaCache, clearSchemaCache } from './state/schemaCache.js';
 import { displayModels } from './features/models.js';
@@ -26,7 +27,7 @@ import { displayDiagnostics } from './features/diagnostics.js';
 import { displaySearch } from './features/search.js';
 import { viewUserResources } from './features/userResources.js';
 import { viewFacilityHistory } from './features/facilityHistory.js';
-import { SchemaVersion } from '../tandem/constants.js';
+import { RegionLabelMap, SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
 const loginBtn = document.getElementById('loginBtn');
@@ -55,6 +56,7 @@ const diagnosticsList = document.getElementById('diagnosticsList');
 // State
 let accounts = [];
 let currentFacilityURN = null;
+let currentFacilityRegion = null;
 
 /**
  * Toggle loading overlay
@@ -95,6 +97,35 @@ function updateUIForLoginState(loggedIn, profileImg) {
     dashboardContent.classList.add('hidden');
     accountSelect.classList.add('hidden');
     facilitySelect.classList.add('hidden');
+  }
+}
+
+/**
+ * Build accounts and facilities data structure
+ * @returns {Promise<Array>} Array of account objects with facilities
+ */
+async function buildAccounts() {
+  try {
+    const groups = await getGroups();
+    const accounts = [];
+
+    // For each group, get its facilities
+    for (const group of groups) {
+      accounts.push({
+        id: group.urn,
+        name: group.name || 'Unnamed Account'
+      });
+    }
+
+    // Also get facilities for user (not associated with a group)
+    accounts.push({
+      id: '@me',
+      name: '** SHARED DIRECTLY **'
+    });
+    return accounts;
+  } catch (error) {
+    console.error('Error building accounts and facilities:', error);
+    return [];
   }
 }
 
@@ -158,7 +189,7 @@ async function buildAccountsAndFacilities() {
  * Populate accounts dropdown
  * @param {Array} accounts - Array of account objects
  */
-function populateAccountsDropdown(accounts) {
+async function populateAccountsDropdown(accounts) {
   accountSelect.innerHTML = '<option value="">Select Account...</option>';
   
   // Sort accounts alphabetically by name, but put "** SHARED DIRECTLY **" at the end
@@ -195,7 +226,7 @@ function populateAccountsDropdown(accounts) {
   
   if (selectedAccount) {
     accountSelect.value = selectedAccount;
-    populateFacilitiesDropdown(accounts, selectedAccount);
+    await populateFacilitiesDropdown(accounts, selectedAccount);
     
     // Remove placeholder after selection
     const placeholder = accountSelect.querySelector('option[value=""]');
@@ -243,11 +274,23 @@ function setLastFacilityForAccount(accountName, facilityURN) {
  * @param {Array} accounts - Array of account objects
  * @param {string} accountName - Selected account name
  */
-function populateFacilitiesDropdown(accounts, accountName) {
+async function populateFacilitiesDropdown(accounts, accountName) {
   facilitySelect.innerHTML = '<option value="">Select Facility...</option>';
   
   const account = accounts.find(a => a.name === accountName);
   if (!account) return;
+
+  // If facilities are not loaded, load them now
+  if (!account.facilities) {
+    const facilitiesObj = await getFacilitiesForGroup(account.id);
+    const facilities = facilitiesObj ? Object.entries(facilitiesObj).map(([urn, settings]) => ({
+        urn,
+        name: settings?.props?.["Identity Data"]?.["Building Name"] || 'Unnamed Facility',
+        region: settings?.region || 'us'
+      })) : [];
+
+    account.facilities = facilities;
+  }
   
   // Sort facilities alphabetically by name
   const sortedFacilities = [...account.facilities].sort((a, b) => 
@@ -291,9 +334,12 @@ async function loadFacility(facilityURN) {
   if (currentFacilityURN === facilityURN) {
     return; // Already loaded
   }
-  
   currentFacilityURN = facilityURN;
-  
+  // find region of the facility
+  const userResources = await getUserResources('@me');
+  const region = userResources.twins.find(t => t.urn === facilityURN)?.region || 'us';
+
+  currentFacilityRegion = RegionLabelMap[region] || 'US';
   // Hide the buttons initially while loading
   viewUserResourcesBtn.classList.add('hidden');
   viewFacilityHistoryBtn.classList.add('hidden');
@@ -303,8 +349,8 @@ async function loadFacility(facilityURN) {
   try {
     // Get facility info and thumbnail in parallel
     const [info, thumbnailUrl] = await Promise.all([
-      getFacilityInfo(facilityURN),
-      getFacilityThumbnail(facilityURN)
+      getFacilityInfo(facilityURN, currentFacilityRegion),
+      getFacilityThumbnail(facilityURN, currentFacilityRegion)
     ]);
     
     if (info) {
@@ -384,7 +430,7 @@ async function loadFacility(facilityURN) {
       viewFacilityHistoryBtn.classList.remove('hidden');
       
       // Set up facility history button handler with current facility info
-      viewFacilityHistoryBtn.onclick = () => viewFacilityHistory(facilityURN, buildingName);
+      viewFacilityHistoryBtn.onclick = () => viewFacilityHistory(facilityURN, region, buildingName);
       
       // Check schema version - API only supports version 2
       if (schemaVersion < SchemaVersion) {
@@ -426,7 +472,7 @@ async function loadFacility(facilityURN) {
     }
 
     // Load stats (only if schema version is 2)
-    await loadStats(facilityURN);
+    await loadStats(facilityURN, currentFacilityRegion);
     
   } catch (error) {
     console.error('Error loading facility:', error);
@@ -444,7 +490,7 @@ async function loadFacility(facilityURN) {
  * Load and display facility statistics
  * @param {string} facilityURN - Facility URN
  */
-async function loadStats(facilityURN) {
+async function loadStats(facilityURN, region) {
   try {
     // Clear schema cache from previous facility
     clearSchemaCache();
@@ -453,45 +499,45 @@ async function loadStats(facilityURN) {
     // Cleanup happens only on page unload via beforeunload event
     
     // Get models
-    const models = await getModels(facilityURN);
+    const models = await getModels(facilityURN, region);
     
     // Pre-load and cache schemas for all models FIRST
     // This ensures we only call /schema once per model
     for (const model of models) {
-      await loadSchemaForModel(model.modelId);
+      await loadSchemaForModel(model.modelId, region);
     }
     
     // Get schema cache for passing to downstream functions
     const schemaCache = getSchemaCache();
     
     // Display all sections using feature modules
-    await displayModels(modelsList, models, facilityURN);
+    await displayModels(modelsList, models, facilityURN, region);
     
     // Check if default model exists before fetching streams
     // Streams only exist in the default model
     const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
     const hasDefaultModel = models.some(m => m.modelId === defaultModelURN);
     
-    const streams = hasDefaultModel ? await getStreams(facilityURN) : [];
-    await displayStreams(streamsList, streams, facilityURN);
+    const streams = hasDefaultModel ? await getStreams(facilityURN, region) : [];
+    await displayStreams(streamsList, streams, facilityURN, region);
     
     // Display search interface
-    await displaySearch(searchContainer, facilityURN, models);
+    await displaySearch(searchContainer, facilityURN, region, models);
     
     // Get and display systems (only if default model exists)
-    const systems = hasDefaultModel ? await getSystems(facilityURN, models) : [];
+    const systems = hasDefaultModel ? await getSystems(facilityURN, region, models) : [];
     await displaySystems(systemsList, systems, facilityURN);
     
     // Display tagged assets
-    await displayTaggedAssets(taggedAssetsList, facilityURN, models);
+    await displayTaggedAssets(taggedAssetsList, facilityURN, models, region);
     
-    const levels = await getLevels(facilityURN);
+    const levels = await getLevels(facilityURN, region);
     await displayLevels(levelsList, levels, facilityURN);
     
-    const rooms = await getRooms(facilityURN, schemaCache);
+    const rooms = await getRooms(facilityURN, region, schemaCache);
     await displayRooms(roomsList, rooms, facilityURN);
     
-    const documents = await getDocuments(facilityURN);
+    const documents = await getDocuments(facilityURN, region);
     await displayDocuments(documentsList, documents);
     
     await displaySchema(schemaList, models, facilityURN);
@@ -516,11 +562,11 @@ async function initialize() {
   // Facility history button - handler set dynamically when facility loads
   // (needs facility URN and name)
 
-  accountSelect.addEventListener('change', (e) => {
+  accountSelect.addEventListener('change', async (e) => {
     const accountName = e.target.value;
     if (accountName) {
       window.localStorage.setItem('tandem-sample-stats-last-account', accountName);
-      populateFacilitiesDropdown(accounts, accountName);
+      await populateFacilitiesDropdown(accounts, accountName);
       // Remove placeholder after selection
       const placeholder = accountSelect.querySelector('option[value=""]');
       if (placeholder) placeholder.remove();
@@ -550,10 +596,11 @@ async function initialize() {
     updateUIForLoginState(true, profileImg);
     
     // Load accounts and facilities
-    accounts = await buildAccountsAndFacilities();
+    //accounts = await buildAccountsAndFacilities();
+    accounts = await buildAccounts();
     
     if (accounts && accounts.length > 0) {
-      populateAccountsDropdown(accounts);
+      await populateAccountsDropdown(accounts);
     } else {
       facilityInfo.innerHTML = '<p class="text-red-600">No accounts or facilities found. Please ensure you have access to at least one Tandem facility.</p>';
     }

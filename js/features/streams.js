@@ -496,11 +496,12 @@ function generateChartHTML(streamName, streamKey, streamData, defaultModelURN, p
 /**
  * View stream chart in a new tab
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {string} streamKey - Stream key
  * @param {string} streamName - Stream name
  * @param {HTMLElement} button - Button element that triggered the action
  */
-async function viewStreamChart(facilityURN, streamKey, streamName, button = null) {
+async function viewStreamChart(facilityURN, region, streamKey, streamName, button = null) {
   try {
     // Show loading state on button if provided
     let originalText = null;
@@ -516,7 +517,7 @@ async function viewStreamChart(facilityURN, streamKey, streamName, button = null
     }
     
     // Fetch stream data
-    const streamData = await getStreamValues(facilityURN, streamKey, 30);
+    const streamData = await getStreamValues(facilityURN, region,streamKey, 30);
     
     // Reset button if provided
     if (button && originalText) {
@@ -561,8 +562,9 @@ async function viewStreamChart(facilityURN, streamKey, streamName, button = null
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} streams - Array of stream objects
  * @param {string} facilityURN - Facility URN to fetch last seen values
+ * @param {string} region - Region identifier
  */
-export async function displayStreams(container, streams, facilityURN) {
+export async function displayStreams(container, streams, facilityURN, region) {
   if (!streams || streams.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No streams found in this facility.</p>';
     return;
@@ -609,11 +611,11 @@ export async function displayStreams(container, streams, facilityURN) {
   const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
   
   // Load schema for the default model (cached)
-  await loadSchemaForModel(defaultModelURN);
+  await loadSchemaForModel(defaultModelURN, region);
   
   // Fetch last seen values for all streams
   const streamKeys = streams.map(s => s[QC.Key]);
-  const lastSeenValuesRaw = await getLastSeenStreamValues(facilityURN, streamKeys);
+  const lastSeenValuesRaw = await getLastSeenStreamValues(facilityURN, region, streamKeys);
   
   // Convert long keys to short keys so we can match them with our stream objects
   const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
@@ -650,7 +652,7 @@ export async function displayStreams(container, streams, facilityURN) {
     const shortKeys = items.map(item => item.shortKey);
     
     try {
-      const elements = await getElementsByKeys(modelURN, shortKeys);
+      const elements = await getElementsByKeys(modelURN, region, shortKeys);
       
       // Map elements back to xrefs using short key matching
       for (let i = 0; i < items.length; i++) {
@@ -787,7 +789,7 @@ export async function displayStreams(container, streams, facilityURN) {
     button.addEventListener('click', () => {
       const streamKey = button.dataset.streamKey;
       const streamName = button.dataset.streamName;
-      viewStreamChart(facilityURN, streamKey, streamName, button);
+      viewStreamChart(facilityURN, region, streamKey, streamName, button);
     });
   });
 }

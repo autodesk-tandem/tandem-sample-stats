@@ -108,9 +108,9 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
             console.log(`[Models] Loading elements with ${label} (first time)`);
             // Fetch element keys based on override type
             if (currentViewType === 'nameOverride') {
-              keys = await getElementsByNameOverride(modelId);
+              keys = await getElementsByNameOverride(modelId, region);
             } else {
-              keys = await getElementsByClassificationOverride(modelId);
+              keys = await getElementsByClassificationOverride(modelId, region);
             }
             
             // Cache the result
@@ -300,11 +300,11 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
           console.log(`[Models] Loading elements for ${itemName} (${currentViewType}) - first time`);
           // Fetch element keys based on view type
           if (currentViewType === 'category') {
-            keys = await getElementsByCategory(modelId, parsedItemId);
+            keys = await getElementsByCategory(modelId, region, parsedItemId);
           } else if (currentViewType === 'tandemCategory') {
-            keys = await getElementsByTandemCategory(modelId, parsedItemId);
+            keys = await getElementsByTandemCategory(modelId, region, parsedItemId);
           } else {
-            keys = await getElementsByClassification(modelId, parsedItemId);
+            keys = await getElementsByClassification(modelId, region, parsedItemId);
           }
           
           // Cache the result
@@ -349,8 +349,9 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} models - Array of model objects
  * @param {string} facilityURN - Facility URN for determining default model
+ * @param {string} region - Region identifier
  */
-export async function displayModels(container, models, facilityURN) {
+export async function displayModels(container, models, facilityURN, region) {
   if (!models || models.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No models found in this facility.</p>';
     return;
@@ -518,7 +519,7 @@ export async function displayModels(container, models, facilityURN) {
   const viewHistoryBtn = document.getElementById('view-history-btn');
   if (viewHistoryBtn) {
     viewHistoryBtn.addEventListener('click', () => {
-      viewModelsHistory(facilityURN, models, viewHistoryBtn);
+      viewModelsHistory(facilityURN, region, models, viewHistoryBtn);
     });
   }
 
@@ -526,7 +527,7 @@ export async function displayModels(container, models, facilityURN) {
   const countPromises = [];
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const promise = getElementCount(model.modelId).then(count => {
+    const promise = getElementCount(model.modelId, region).then(count => {
       // Update detail view
       const detailCountElement = document.getElementById(`detail-element-count-${i}`);
       if (detailCountElement) {
@@ -587,7 +588,7 @@ export async function displayModels(container, models, facilityURN) {
             
             try {
               // Fetch BOTH category and classification in ONE API call
-              const breakdown = await getElementCountByCategoryAndClassification(model.modelId);
+              const breakdown = await getElementCountByCategoryAndClassification(model.modelId, region);
               
               if (breakdown.total === 0) {
                 breakdownTable.innerHTML = '<div class="text-sm text-dark-text-secondary">No elements found.</div>';
@@ -679,7 +680,7 @@ export async function displayModels(container, models, facilityURN) {
       continue;
     }
     
-    getModelProperties(model.modelId).then(props => {
+    getModelProperties(model.modelId, region).then(props => {
       // Extract data from dataSource object
       const data = props?.dataSource;
       
@@ -1600,10 +1601,11 @@ let historyWindow = null;
 /**
  * View history for all models in a new tab
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Array} models - Array of model objects
  * @param {HTMLElement} button - Button element that triggered the action
  */
-async function viewModelsHistory(facilityURN, models, button = null) {
+async function viewModelsHistory(facilityURN, region, models, button = null) {
   try {
     // Show loading state on button
     let originalText = null;
@@ -1624,7 +1626,7 @@ async function viewModelsHistory(facilityURN, models, button = null) {
     
     const historyPromises = models.map(async (model) => {
       try {
-        const history = await getHistory(model.modelId, {
+        const history = await getHistory(model.modelId, region, {
           min: tandemEpoch,
           max: now,
           includeChanges: true
