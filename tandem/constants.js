@@ -184,7 +184,7 @@ export const SystemClassNames = [
     "Storm",                        //25
 ];
 
-// History related constants
+// history related constants
 export const HC = {
    ClientID: 'c',
    CorrelationID: 'i',

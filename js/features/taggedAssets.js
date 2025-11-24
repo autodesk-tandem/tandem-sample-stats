@@ -158,7 +158,7 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      renderTaggedAssetsTable(propertyDetails, column, direction, facilityURN);
+      renderTaggedAssetsTable(propertyDetails, column, direction, facilityURN, region);
     });
   });
 
@@ -181,7 +181,7 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
       
       try {
         // Fetch element keys grouped by model
-        const elementsByModel = await getElementsByProperty(facilityURN, propertyId);
+        const elementsByModel = await getElementsByProperty(facilityURN, region, propertyId);
         
         if (elementsByModel.length === 0) {
           alert('No elements found with this property');
@@ -207,8 +207,9 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
  * @param {HTMLElement} container - DOM element to render into
  * @param {string} facilityURN - Facility URN
  * @param {Array} models - Array of model objects
+ * @param {string} region - Region identifier
  */
-export async function displayTaggedAssets(container, facilityURN, models) {
+export async function displayTaggedAssets(container, facilityURN, models, region) {
   if (!models || models.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No models found in this facility.</p>';
     return;
@@ -228,7 +229,7 @@ export async function displayTaggedAssets(container, facilityURN, models) {
 
   try {
     // Fetch tagged assets details AND collect element keys in one pass
-    const details = await getTaggedAssetsDetails(facilityURN, true);
+    const details = await getTaggedAssetsDetails(facilityURN, region, true);
     const schemaCache = getSchemaCache();
     
     // Build header with Asset Details button and toggle button
@@ -323,7 +324,7 @@ export async function displayTaggedAssets(container, facilityURN, models) {
     
     // Render the sortable table (default sort by count descending)
     if (propertyKeys.length > 0) {
-      renderTaggedAssetsTable(propertyDetails, 'count', 'desc', facilityURN);
+      renderTaggedAssetsTable(propertyDetails, 'count', 'desc', facilityURN, region);
     }
     
     // Attach toggle event listener

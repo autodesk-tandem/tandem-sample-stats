@@ -20,9 +20,10 @@ const toggleSearchDetail = createToggleFunction({
  * Display search interface
  * @param {HTMLElement} container - Container element
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Array} models - Array of model objects
  */
-export async function displaySearch(container, facilityURN, models) {
+export async function displaySearch(container, facilityURN, region, models) {
   if (!facilityURN || !models || models.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary text-xs">No models available for search.</p>';
     return;
@@ -468,7 +469,7 @@ export async function displaySearch(container, facilityURN, models) {
       };
     }
 
-    await executeSearch(facilityURN, models, propertyName, searchOptions, resultsDiv, resultsContent);
+    await executeSearch(facilityURN, region, models, propertyName, searchOptions, resultsDiv, resultsContent);
   });
 
   clearBtn.addEventListener('click', () => {
@@ -490,13 +491,14 @@ export async function displaySearch(container, facilityURN, models) {
 /**
  * Execute the property search
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Array} models - Array of model objects
  * @param {string} propertyName - Property name in "Category.PropertyName" format
  * @param {Object} searchOptions - Search options object with dataType, value, and type-specific options
  * @param {HTMLElement} resultsDiv - Results container div
  * @param {HTMLElement} resultsContent - Results content div
  */
-async function executeSearch(facilityURN, models, propertyName, searchOptions, resultsDiv, resultsContent) {
+async function executeSearch(facilityURN, region, models, propertyName, searchOptions, resultsDiv, resultsContent) {
   // Show loading state
   resultsContent.innerHTML = `
     <div class="flex items-center space-x-2 text-tandem-blue text-xs">
@@ -556,7 +558,7 @@ async function executeSearch(facilityURN, models, propertyName, searchOptions, r
       console.log(`Searching model ${model.label || model.modelId} for property ${qualifiedColumn}`, searchOptions);
       
       // Fetch elements with this property
-      const elements = await searchElementsByProperty(model.modelId, qualifiedColumn, searchOptions);
+      const elements = await searchElementsByProperty(model.modelId, region, qualifiedColumn, searchOptions);
       
       if (elements.length > 0) {
         allResults.push({
@@ -582,18 +584,19 @@ async function executeSearch(facilityURN, models, propertyName, searchOptions, r
 /**
  * Search for elements by property value
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @param {string} qualifiedColumn - Qualified column (e.g., "z:LQ")
  * @param {Object} searchOptions - Search options object with dataType, value, and type-specific options
  * @returns {Promise<Array>} Array of matching element objects
  */
-async function searchElementsByProperty(modelURN, qualifiedColumn, searchOptions) {
+async function searchElementsByProperty(modelURN, region, qualifiedColumn, searchOptions) {
   try {
     const payload = JSON.stringify({
       qualifiedColumns: [qualifiedColumn],
       includeHistory: false
     });
 
-    const response = await fetch(`${tandemBaseURL}/modeldata/${modelURN}/scan`, makeRequestOptionsPOST(payload));
+    const response = await fetch(`${tandemBaseURL}/modeldata/${modelURN}/scan`, makeRequestOptionsPOST(payload, region));
 
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);

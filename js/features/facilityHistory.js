@@ -4,9 +4,10 @@ import { HC } from '../../tandem/constants.js';
 /**
  * View facility ACL history in a new window
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {string} facilityName - Facility name for display
  */
-export async function viewFacilityHistory(facilityURN, facilityName = 'Facility') {
+export async function viewFacilityHistory(facilityURN, region, facilityName = 'Facility') {
   // Open new window
   const newWindow = window.open('', '_blank');
   if (!newWindow) {
@@ -98,7 +99,7 @@ export async function viewFacilityHistory(facilityURN, facilityName = 'Facility'
     const now = Date.now();
     const startDate = new Date('2020-01-01T00:00:00Z').getTime();
     
-    const history = await getTwinHistory(facilityURN, {
+    const history = await getTwinHistory(facilityURN, region, {
       min: startDate,
       max: now,
       includeChanges: true

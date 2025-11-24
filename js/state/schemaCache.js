@@ -8,7 +8,7 @@ const schemaCache = {};
  * @param {string} modelURN - Model URN
  * @returns {Promise<Object>} Schema object with attributes array and lookup map
  */
-export async function loadSchemaForModel(modelURN) {
+export async function loadSchemaForModel(modelURN, region) {
   if (schemaCache[modelURN]) {
     return schemaCache[modelURN];
   }
