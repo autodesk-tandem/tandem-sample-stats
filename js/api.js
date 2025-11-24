@@ -1,5 +1,5 @@
 import { getEnv } from './config.js';
-import { ColumnFamilies, ElementFlags, QC, SystemClassNames } from './../tandem/constants.js';
+import { ColumnFamilies, ElementFlags, QC, Region, SystemClassNames } from './../tandem/constants.js';
 import { toFullKey, toSystemId } from './../tandem/keys.js';
 import { isDefaultModel } from './utils.js';
 
@@ -8,12 +8,16 @@ export const tandemBaseURL = env.tandemDbBaseURL;
 
 /**
  * Create request options for GET requests
+ * @param {string} [region] - Optional region header
  * @returns {object} Request options
  */
-export function makeRequestOptionsGET() {
+export function makeRequestOptionsGET(region) {
   const headers = new Headers();
-  headers.append("Authorization", "Bearer " + window.sessionStorage.token);
+  headers.append('Authorization', `Bearer ${window.sessionStorage.token}`);
 
+  if (region) {
+    headers.append('Region', region);
+  }
   return {
     method: 'GET',
     headers: headers,
@@ -24,13 +28,17 @@ export function makeRequestOptionsGET() {
 /**
  * Create request options for POST requests
  * @param {string} bodyPayload - JSON string payload
+ * @param {string} [region] - Optional region header
  * @returns {object} Request options
  */
-export function makeRequestOptionsPOST(bodyPayload) {
+export function makeRequestOptionsPOST(bodyPayload, region) {
   const headers = new Headers();
   headers.append("Authorization", "Bearer " + window.sessionStorage.token);
   headers.append("Content-Type", "application/json");
 
+  if (region) {
+    headers.append('Region', region);
+  }
   return {
     method: 'POST',
     headers: headers,
@@ -66,14 +74,19 @@ export async function getGroups() {
  */
 export async function getFacilitiesForGroup(groupURN) {
   try {
-    const requestPath = `${tandemBaseURL}/groups/${groupURN}/twins`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const promises = Object.keys(Region).map(async (region) => {
+      const requestPath = groupURN === '@me' ? `${tandemBaseURL}/users/@me/twins` : `${tandemBaseURL}/groups/${groupURN}/twins`;
+      const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
-    if (!response.ok) {
-      throw new Error(`Failed to fetch facilities: ${response.statusText}`);
-    }
-    
-    return await response.json();
+      if (!response.ok) {
+        throw new Error(`Failed to fetch facilities: ${response.statusText}`);
+      }
+      return await response.json();
+    });
+    const allTwins = await Promise.all(promises);
+    const results = Object.assign({}, ...allTwins);
+
+    return results;
   } catch (error) {
     console.error('Error fetching facilities for group:', error);
     return null;
@@ -83,12 +96,13 @@ export async function getFacilitiesForGroup(groupURN) {
 /**
  * Get facilities shared directly with the user
  * @param {string} userId - User ID (use "@me" for current user)
+ * @param {string} region - Region identifier
  * @returns {Promise<object>} Facilities object
  */
-export async function getFacilitiesForUser(userId) {
+export async function getFacilitiesForUser(userId, region) {
   try {
     const requestPath = `${tandemBaseURL}/users/${userId}/twins`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch user facilities: ${response.statusText}`);
@@ -125,12 +139,13 @@ export async function getUserResources(userId) {
 /**
  * Get facility information
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @returns {Promise<object>} Facility information
  */
-export async function getFacilityInfo(facilityURN) {
+export async function getFacilityInfo(facilityURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/twins/${facilityURN}`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch facility info: ${response.statusText}`);
@@ -146,11 +161,12 @@ export async function getFacilityInfo(facilityURN) {
 /**
  * Get list of models for a facility
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Array>} List of models
  */
-export async function getModels(facilityURN) {
+export async function getModels(facilityURN, region) {
   try {
-    const facilityInfo = await getFacilityInfo(facilityURN);
+    const facilityInfo = await getFacilityInfo(facilityURN, region);
     return facilityInfo ? facilityInfo.links : null;
   } catch (error) {
     console.error('Error fetching models:', error);
@@ -162,11 +178,12 @@ export async function getModels(facilityURN) {
  * Get documents for a facility
  * Documents are included in the facility info response
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Array>} List of documents
  */
-export async function getDocuments(facilityURN) {
+export async function getDocuments(facilityURN, region) {
   try {
-    const facilityInfo = await getFacilityInfo(facilityURN);
+    const facilityInfo = await getFacilityInfo(facilityURN, region);
     return facilityInfo ? facilityInfo.docs || [] : [];
   } catch (error) {
     console.error('Error fetching documents:', error);
@@ -177,12 +194,13 @@ export async function getDocuments(facilityURN) {
 /**
  * Get detailed information about a specific model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<object>} Model details
  */
-export async function getModelDetails(modelURN) {
+export async function getModelDetails(modelURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch model details: ${response.statusText}`);
@@ -198,9 +216,10 @@ export async function getModelDetails(modelURN) {
 /**
  * Get element count for a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<number>} Number of elements in the model
  */
-export async function getElementCount(modelURN) {
+export async function getElementCount(modelURN, region) {
   try {
     // Scan with minimal data to count elements
     const payload = JSON.stringify({
@@ -209,7 +228,7 @@ export async function getElementCount(modelURN) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -228,9 +247,10 @@ export async function getElementCount(modelURN) {
  * Get element count breakdown by category, classification, tandem category, and overrides for a model
  * Fetches all in a single API call for efficiency
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<{total: number, categories: Array<{id: number|null, count: number}>, tandemCategories: Array<{id: string|null, count: number}>, classifications: Array<{id: string|null, count: number}>, nameOverrides: number, classificationOverrides: number}>}
  */
-export async function getElementCountByCategoryAndClassification(modelURN) {
+export async function getElementCountByCategoryAndClassification(modelURN, region) {
   try {
     // Fetch elements with CategoryId, TandemCategory, Classification, Name, and OName in ONE call
     const payload = JSON.stringify({
@@ -239,7 +259,7 @@ export async function getElementCountByCategoryAndClassification(modelURN) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -334,10 +354,11 @@ export async function getElementCountByCategoryAndClassification(modelURN) {
 /**
  * Get element keys for a specific category in a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @param {number|null} categoryId - Category ID (null for unknown category)
  * @returns {Promise<Array<string>>} Array of element keys
  */
-export async function getElementsByCategory(modelURN, categoryId) {
+export async function getElementsByCategory(modelURN, region, categoryId) {
   try {
     // Fetch elements with CategoryId
     const payload = JSON.stringify({
@@ -346,7 +367,7 @@ export async function getElementsByCategory(modelURN, categoryId) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -379,10 +400,11 @@ export async function getElementsByCategory(modelURN, categoryId) {
 /**
  * Get element keys for a specific classification in a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @param {string|null} classificationId - Classification code (null for unknown classification)
  * @returns {Promise<Array<string>>} Array of element keys
  */
-export async function getElementsByClassification(modelURN, classificationId) {
+export async function getElementsByClassification(modelURN, region, classificationId) {
   try {
     // Fetch elements with Classification
     const payload = JSON.stringify({
@@ -391,7 +413,7 @@ export async function getElementsByClassification(modelURN, classificationId) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -424,10 +446,11 @@ export async function getElementsByClassification(modelURN, classificationId) {
 /**
  * Get element keys for a specific tandem category in a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @param {string|null} tandemCategoryId - Tandem Category code (null for unknown category)
  * @returns {Promise<Array<string>>} Array of element keys
  */
-export async function getElementsByTandemCategory(modelURN, tandemCategoryId) {
+export async function getElementsByTandemCategory(modelURN, region, tandemCategoryId) {
   try {
     // Fetch elements with TandemCategory
     const payload = JSON.stringify({
@@ -436,7 +459,7 @@ export async function getElementsByTandemCategory(modelURN, tandemCategoryId) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -469,9 +492,10 @@ export async function getElementsByTandemCategory(modelURN, tandemCategoryId) {
 /**
  * Get element keys for elements with name overrides in a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Array<string>>} Array of element keys
  */
-export async function getElementsByNameOverride(modelURN) {
+export async function getElementsByNameOverride(modelURN, region) {
   try {
     // Fetch elements with Name and OName
     const payload = JSON.stringify({
@@ -480,7 +504,7 @@ export async function getElementsByNameOverride(modelURN) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -508,9 +532,10 @@ export async function getElementsByNameOverride(modelURN) {
 /**
  * Get element keys for elements with classification overrides in a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Array<string>>} Array of element keys
  */
-export async function getElementsByClassificationOverride(modelURN) {
+export async function getElementsByClassificationOverride(modelURN, region) {
   try {
     // Fetch elements with Classification and OClassification
     const payload = JSON.stringify({
@@ -519,7 +544,7 @@ export async function getElementsByClassificationOverride(modelURN) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -550,12 +575,13 @@ const thumbnailBlobURLs = new Set();
 /**
  * Get facility thumbnail as a blob URL
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @returns {Promise<string|null>} Blob URL for the thumbnail image, or null if not available
  */
-export async function getFacilityThumbnail(facilityURN) {
+export async function getFacilityThumbnail(facilityURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/twins/${facilityURN}/thumbnail`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       return null; // No thumbnail available
@@ -596,9 +622,10 @@ export function getDefaultModelURN(facilityURN) {
  * Get streams from the default model
  * Streams only exist in the default model
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Array>} Array of stream objects
  */
-export async function getStreams(facilityURN) {
+export async function getStreams(facilityURN, region) {
   try {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
@@ -612,7 +639,7 @@ export async function getStreams(facilityURN) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       // 403 Forbidden typically means no default model exists yet
@@ -641,10 +668,11 @@ export async function getStreams(facilityURN) {
 /**
  * Get element details by keys
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @param {Array<string>} keys - Array of element keys
  * @returns {Promise<Array>} Array of element objects
  */
-export async function getElementsByKeys(modelURN, keys) {
+export async function getElementsByKeys(modelURN, region, keys) {
   try {
     const payload = JSON.stringify({
       keys: keys,
@@ -653,7 +681,7 @@ export async function getElementsByKeys(modelURN, keys) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch elements: ${response.statusText}`);
@@ -674,10 +702,11 @@ export async function getElementsByKeys(modelURN, keys) {
 /**
  * Get last seen values for streams
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Array<string>} streamKeys - Array of stream keys
  * @returns {Promise<Object>} Object with stream keys as keys and their last seen values
  */
-export async function getLastSeenStreamValues(facilityURN, streamKeys) {
+export async function getLastSeenStreamValues(facilityURN, region, streamKeys) {
   try {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
@@ -686,7 +715,7 @@ export async function getLastSeenStreamValues(facilityURN, streamKeys) {
     });
     
     const requestPath = `${tandemBaseURL}/timeseries/models/${defaultModelURN}/streams`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch last seen stream values: ${response.statusText}`);
@@ -703,11 +732,12 @@ export async function getLastSeenStreamValues(facilityURN, streamKeys) {
 /**
  * Get stream values for a given time range
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {string} streamKey - Stream key
  * @param {number} daysBack - Number of days back to fetch (default 30)
  * @returns {Promise<Object>} Object with stream values
  */
-export async function getStreamValues(facilityURN, streamKey, daysBack = 30) {
+export async function getStreamValues(facilityURN, region, streamKey, daysBack = 30) {
   try {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
@@ -718,7 +748,7 @@ export async function getStreamValues(facilityURN, streamKey, daysBack = 30) {
     const timestampStart = dateMinus.getTime();
     
     const requestPath = `${tandemBaseURL}/timeseries/models/${defaultModelURN}/streams/${streamKey}?start=${timestampStart}&end=${timestampEnd}`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch stream values: ${response.statusText}`);
@@ -736,12 +766,13 @@ export async function getStreamValues(facilityURN, streamKey, daysBack = 30) {
  * Get schema for a model
  * Schema contains attribute definitions with id (qualified property), category, name, dataType, etc.
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Object>} Schema object with attributes array
  */
-export async function getSchema(modelURN) {
+export async function getSchema(modelURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/schema`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch schema: ${response.statusText}`);
@@ -759,11 +790,12 @@ export async function getSchema(modelURN) {
  * Get levels from all models in a facility
  * Levels have CategoryId === 240
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Array>} Array of level objects with modelId, key, name, and elevation
  */
-export async function getLevels(facilityURN) {
+export async function getLevels(facilityURN, region) {
   try {
-    const models = await getModels(facilityURN);
+    const models = await getModels(facilityURN, region);
     const allLevels = [];
     
     for (const model of models) {
@@ -773,7 +805,7 @@ export async function getLevels(facilityURN) {
       });
       
       const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
       
       if (!response.ok) {
         console.error(`Failed to fetch elements for model ${model.modelId}`);
@@ -808,12 +840,13 @@ export async function getLevels(facilityURN) {
  * Get rooms from all models in a facility
  * Rooms have CategoryId === 160, Spaces have CategoryId === 3600
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Object} schemaCache - Optional pre-loaded schema cache to avoid duplicate API calls
  * @returns {Promise<Array>} Array of room objects with modelId, key, name, type, number, area, and volume
  */
-export async function getRooms(facilityURN, schemaCache = null) {
+export async function getRooms(facilityURN, region, schemaCache = null) {
   try {
-    const models = await getModels(facilityURN);
+    const models = await getModels(facilityURN, region);
     const allRooms = [];
     
     for (const model of models) {
@@ -852,7 +885,7 @@ export async function getRooms(facilityURN, schemaCache = null) {
       });
       
       const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
       
       if (!response.ok) {
         console.error(`Failed to fetch elements for model ${model.modelId}`);
@@ -905,10 +938,11 @@ export async function getRooms(facilityURN, schemaCache = null) {
  * Get systems from the default model
  * Systems are elements with ElementFlags.Systems flag
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Array} models - Array of model objects
  * @returns {Promise<Array>} Array of system objects with name, key, systemId, and subsystems
  */
-export async function getSystems(facilityURN, models) {
+export async function getSystems(facilityURN, region, models) {
   try {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
@@ -922,7 +956,7 @@ export async function getSystems(facilityURN, models) {
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       // 403 Forbidden typically means no default model exists yet
@@ -997,7 +1031,7 @@ export async function getSystems(facilityURN, models) {
         includeHistory: false
       });
       const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
 
       if (!response.ok) {
         console.error(`Failed to fetch elements for model ${model.modelId}`);
@@ -1104,12 +1138,13 @@ export async function getTaggedAssetsCount(facilityURN) {
 /**
  * Get detailed information about tagged assets and their user-defined properties
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {boolean} includeKeys - If true, also collect element keys grouped by model
  * @returns {Promise<Object>} Object with totalCount, propertyUsage, and optionally elementsByModel
  */
-export async function getTaggedAssetsDetails(facilityURN, includeKeys = false) {
+export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = false) {
   try {
-    const models = await getModels(facilityURN);
+    const models = await getModels(facilityURN, region);
     let totalTaggedAssets = 0;
     const propertyUsage = {}; // Map of qualifiedProp -> count
     const elementsByModel = []; // Array of {modelURN, modelName, keys}
@@ -1123,7 +1158,7 @@ export async function getTaggedAssetsDetails(facilityURN, includeKeys = false) {
       });
       
       const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
       
       if (!response.ok) {
         console.error(`Failed to fetch tagged assets for model ${model.modelId}`);
@@ -1189,12 +1224,13 @@ export async function getTaggedAssetsDetails(facilityURN, includeKeys = false) {
 /**
  * Get element keys for elements that have a specific property, grouped by model
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {string} qualifiedProp - Qualified property (e.g., 'z:LQ')
  * @returns {Promise<Array<{modelURN: string, modelName: string, keys: Array<string>}>>} Array of models with their element keys
  */
-export async function getElementsByProperty(facilityURN, qualifiedProp) {
+export async function getElementsByProperty(facilityURN, region, qualifiedProp) {
   try {
-    const models = await getModels(facilityURN);
+    const models = await getModels(facilityURN, region);
     const resultsByModel = [];
     
     // Extract family from qualified property (e.g., 'z' from 'z:LQ')
@@ -1210,7 +1246,7 @@ export async function getElementsByProperty(facilityURN, qualifiedProp) {
       });
       
       const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
       
       if (!response.ok) {
         console.error(`Failed to fetch elements for model ${model.modelId}`);
@@ -1268,6 +1304,7 @@ function systemClassToList(flags) {
 /**
  * Get change history for a model
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @param {Object} options - History query options
  * @param {Array<number>} options.timestamps - Specific timestamps to query (milliseconds)
  * @param {number} options.min - Minimum timestamp for range query (milliseconds)
@@ -1276,7 +1313,7 @@ function systemClassToList(flags) {
  * @param {boolean} options.includeChanges - Include detailed change information (default: true)
  * @returns {Promise<Array>} Array of history entries
  */
-export async function getHistory(modelURN, options = {}) {
+export async function getHistory(modelURN, region, options = {}) {
   try {
     // Build payload object, only including defined properties
     const payloadObj = {
@@ -1301,7 +1338,7 @@ export async function getHistory(modelURN, options = {}) {
     const payload = JSON.stringify(payloadObj);
     
     const requestPath = `${tandemBaseURL}/modeldata/${modelURN}/history`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch history: ${response.statusText}`);
@@ -1318,13 +1355,14 @@ export async function getHistory(modelURN, options = {}) {
 /**
  * Get facility/twin history (ACL changes)
  * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
  * @param {Object} options - History query options
  * @param {number} options.min - Minimum timestamp for range query (milliseconds)
  * @param {number} options.max - Maximum timestamp for range query (milliseconds)
  * @param {boolean} options.includeChanges - Include detailed change information (default: true)
  * @returns {Promise<Array>} Array of history entries
  */
-export async function getTwinHistory(facilityURN, options = {}) {
+export async function getTwinHistory(facilityURN, region, options = {}) {
   try {
     const payloadObj = {
       includeChanges: options.includeChanges !== false
@@ -1339,7 +1377,7 @@ export async function getTwinHistory(facilityURN, options = {}) {
     
     const payload = JSON.stringify(payloadObj);
     const requestPath = `${tandemBaseURL}/twins/${facilityURN}/history`;
-    const response = await fetch(requestPath, makeRequestOptionsPOST(payload));
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch twin history: ${response.statusText}`);
@@ -1392,12 +1430,13 @@ export async function getGroupHistory(groupURN, options = {}) {
 /**
  * Get model properties (phase, last updated, etc.)
  * @param {string} modelURN - Model URN
+ * @param {string} region - Region identifier
  * @returns {Promise<Object|null>} Model properties object or null if error
  */
-export async function getModelProperties(modelURN) {
+export async function getModelProperties(modelURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/models/${modelURN}/props`;
-    const response = await fetch(requestPath, makeRequestOptionsGET());
+    const response = await fetch(requestPath, makeRequestOptionsGET(region, region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch model properties: ${response.statusText}`);
