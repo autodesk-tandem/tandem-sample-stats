@@ -32,7 +32,7 @@ const categoryKeysCache = new Map();
  * @param {string} sortColumn - Column to sort by ('type', 'count', 'percentage')
  * @param {string} sortDirection - Sort direction ('asc' or 'desc')
  */
-function renderBreakdownTable(container, breakdown, items, model, facilityURN, viewType = 'category', sortColumn = 'count', sortDirection = 'desc') {
+function renderBreakdownTable(container, breakdown, items, model, facilityURN, region, viewType = 'category', sortColumn = 'count', sortDirection = 'desc') {
   // Handle overrides view (show both types in one table)
   if (viewType === 'overrides') {
     const overrideItems = [
@@ -145,7 +145,7 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
           keys: keys
         }];
         
-        viewAssetDetails(elementsByModel, itemName, facilityURN);
+        viewAssetDetails(elementsByModel, itemName, facilityURN, region);
       });
     });
     
@@ -269,7 +269,7 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      renderBreakdownTable(container, breakdown, items, model, facilityURN, viewType, column, direction);
+      renderBreakdownTable(container, breakdown, items, model, facilityURN, region, viewType, column, direction);
     });
   });
   
@@ -339,7 +339,7 @@ function renderBreakdownTable(container, breakdown, items, model, facilityURN, v
         keys: keys
       }];
       
-      viewAssetDetails(elementsByModel, `${itemName} in ${modelName}`, facilityURN);
+      viewAssetDetails(elementsByModel, `${itemName} in ${modelName}`, facilityURN, region);
     });
   });
 }
@@ -609,7 +609,7 @@ export async function displayModels(container, models, facilityURN, region) {
                   items = breakdown.classifications;
                 }
                 // For override views, items will be empty array (not used)
-                renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
+                renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, region, viewType);
               }
             } catch (error) {
               console.error('Error loading breakdown:', error);
@@ -631,7 +631,7 @@ export async function displayModels(container, models, facilityURN, region) {
                 items = breakdown.classifications;
               }
               // For override views, items will be empty array (not used)
-              renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
+              renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, region, viewType);
             }
           }
         } else {
@@ -661,7 +661,7 @@ export async function displayModels(container, models, facilityURN, region) {
                 items = breakdown.classifications;
               }
               // For override views, items will be empty array (not used)
-              renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, viewType);
+              renderBreakdownTable(breakdownTable, breakdown, items, model, facilityURN, region, viewType);
               console.log(`[Models] Switched to ${viewType} view for ${model.label} (using cached data)`);
             }
           }
@@ -742,7 +742,7 @@ export async function displayModels(container, models, facilityURN, region) {
  * @param {string} facilityURN - Facility URN
  * @returns {string} HTML page content
  */
-function generateHistoryHTML(allHistory, facilityURN) {
+function generateHistoryHTML(allHistory, facilityURN, region) {
   // Embed all history data as JSON for client-side filtering
   const allHistoryJSON = JSON.stringify(allHistory).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
   
@@ -1177,6 +1177,7 @@ function generateHistoryHTML(allHistory, facilityURN) {
     // All history data embedded from server
     const ALL_HISTORY_DATA = ${allHistoryJSON};
     const FACILITY_URN = '${facilityURN}';
+    const REGION = '${region}';
     let currentTimeRange = '7days';
     
     // Filter and render history based on time range
@@ -1540,7 +1541,7 @@ function generateHistoryHTML(allHistory, facilityURN) {
       const title = \`History Details: \${timeRangeText}\`;
       
       if (window.viewAssetDetails) {
-        window.viewAssetDetails(elementsByModel, title, FACILITY_URN);
+        window.viewAssetDetails(elementsByModel, title, FACILITY_URN, REGION);
       } else {
         alert('Asset details functionality is not available');
       }
@@ -1581,7 +1582,7 @@ function generateHistoryHTML(allHistory, facilityURN) {
         const title = \`Change Details: \${dateStr}\`;
         
         if (window.viewAssetDetails) {
-          window.viewAssetDetails(elementsByModel, title, FACILITY_URN);
+          window.viewAssetDetails(elementsByModel, title, FACILITY_URN, REGION);
         } else {
           alert('Asset details functionality is not available');
         }
@@ -1672,7 +1673,7 @@ async function viewModelsHistory(facilityURN, region, models, button = null) {
     }
     
     // Generate HTML with all history data embedded
-    const htmlContent = generateHistoryHTML(allHistory, facilityURN);
+    const htmlContent = generateHistoryHTML(allHistory, facilityURN, region);
     
     // Open in new window/tab
     historyWindow = window.open('', '_blank');

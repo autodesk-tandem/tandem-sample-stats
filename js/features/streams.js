@@ -778,8 +778,8 @@ export async function displayStreams(container, streams, facilityURN, region) {
         keys: streamKeys
       }];
       
-      // Open Details page
-      viewAssetDetails(elementsByModel, `Stream Details`, facilityURN);
+      // Open Details page (showLinks=false because streams don't have physical elements)
+      viewAssetDetails(elementsByModel, `Stream Details`, facilityURN, region, false);
     });
   }
   

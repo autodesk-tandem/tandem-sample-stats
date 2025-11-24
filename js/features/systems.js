@@ -23,7 +23,7 @@ const toggleSystemsDetail = createToggleFunction({
  * @param {Array} systems - Array of system objects
  * @param {string} facilityURN - Facility URN for context
  */
-export async function displaySystems(container, systems, facilityURN) {
+export async function displaySystems(container, systems, facilityURN, region) {
   try {
     if (!systems || systems.length === 0) {
       container.innerHTML = `
@@ -175,7 +175,7 @@ export async function displaySystems(container, systems, facilityURN) {
         
         if (system && system.elementsByModel && system.elementsByModel.length > 0) {
           // Pass the grouped element data directly to viewAssetDetails
-          viewAssetDetails(system.elementsByModel, `${system.name} System Details`, facilityURN);
+          viewAssetDetails(system.elementsByModel, `${system.name} System Details`, facilityURN, region);
         }
       });
     });

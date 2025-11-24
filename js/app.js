@@ -365,27 +365,22 @@ function setLastFacilityForAccount(accountName, facilityURN) {
 /**
  * Populate facilities dropdown based on selected account
  * 
- * SMART REGION TARGETING OPTIMIZATION:
- * Instead of blindly querying all 3 regions (US, EMEA, AUS), we use the cached
- * user resources to determine exactly which regions contain facilities for this account.
+ * Uses the existing getFacilitiesForGroup() API function which handles multi-region
+ * fetching reliably for both SHARED DIRECTLY (@me) and group accounts.
  * 
- * OLD approach (before optimization):
- * - Always query all 3 regions: US, EMEA, AUS
- * - 3 API calls per account, even if account only has facilities in 1 region
- * - Wastes 2/3 of API calls for accounts with single-region facilities
- * 
- * NEW approach (optimized):
- * - Check cache to see which regions have facilities: e.g., only US
- * - Query only those regions: 1 API call
- * - Saves 1-2 API calls per account depending on regional distribution
+ * APPROACH:
+ * - Queries all 3 regions (US, EMEA, AUS) in parallel and merges results
+ * - 3 API calls per account when facilities are first loaded
+ * - Works reliably for both @me and group accounts
  * 
  * CACHING:
  * After first load, account.facilities is cached so subsequent selections are instant.
+ * This means the 3 API calls only happen once per account per session.
  * 
- * WHY WE CAN'T AVOID REGION-SPECIFIC CALLS:
- * The API endpoints /groups/{urn}/twins and /users/@me/twins require a Region header
- * and only return facilities in that specific region. There's no single endpoint that
- * returns all facilities with names across all regions. This is an API limitation.
+ * NOTE: We previously attempted "smart region targeting" (only query regions where
+ * facilities exist based on cache), but the /users/@me/twins endpoint returns 400
+ * errors when using region headers. The getFacilitiesForGroup() function uses a
+ * reliable approach that works for all cases.
  * 
  * @param {Array} accounts - Array of account objects
  * @param {string} accountName - Selected account name
@@ -407,30 +402,11 @@ async function populateFacilitiesDropdown(accounts, accountName) {
     if (accountFacilities.length === 0) {
       account.facilities = [];
     } else {
-      // SMART REGION TARGETING: Only query regions where facilities actually exist
-      // Example: If account has facilities in only US, regionsNeeded = ['us']
-      //          We make 1 API call instead of 3!
-      const regionsNeeded = [...new Set(accountFacilities.map(t => t.region || 'us'))];
+      // Use the existing getFacilitiesForGroup API function which handles
+      // multi-region fetching correctly for both @me and group accounts
+      console.log(`📍 Fetching facilities for ${accountName}`);
       
-      console.log(`📍 Fetching facilities for ${accountName} from ${regionsNeeded.length} region(s): ${regionsNeeded.join(', ')}`);
-      
-      // Fetch from only the specific regions (1-3 calls depending on distribution)
-      const facilitiesObj = {};
-      for (const region of regionsNeeded) {
-        const requestPath = account.id === '@me' 
-          ? `${tandemBaseURL}/users/@me/twins` 
-          : `${tandemBaseURL}/groups/${account.id}/twins`;
-        
-        try {
-          const response = await fetch(requestPath, makeRequestOptionsGET(region));
-          if (response.ok) {
-            const regionFacilities = await response.json();
-            Object.assign(facilitiesObj, regionFacilities);
-          }
-        } catch (error) {
-          console.warn(`Failed to fetch facilities from ${region}:`, error);
-        }
-      }
+      const facilitiesObj = await getFacilitiesForGroup(account.id);
       
       // Extract facility names from API response
       const facilities = facilitiesObj ? Object.entries(facilitiesObj).map(([urn, settings]) => ({
@@ -695,16 +671,16 @@ async function loadStats(facilityURN, region) {
     
     // Get and display systems (only if default model exists)
     const systems = hasDefaultModel ? await getSystems(facilityURN, region, models) : [];
-    await displaySystems(systemsList, systems, facilityURN);
+    await displaySystems(systemsList, systems, facilityURN, region);
     
     // Display tagged assets
     await displayTaggedAssets(taggedAssetsList, facilityURN, models, region);
     
     const levels = await getLevels(facilityURN, region);
-    await displayLevels(levelsList, levels, facilityURN);
+    await displayLevels(levelsList, levels, facilityURN, region);
     
     const rooms = await getRooms(facilityURN, region, schemaCache);
-    await displayRooms(roomsList, rooms, facilityURN);
+    await displayRooms(roomsList, rooms, facilityURN, region);
     
     const documents = await getDocuments(facilityURN, region);
     await displayDocuments(documentsList, documents);
