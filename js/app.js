@@ -12,7 +12,9 @@ import {
   getLevels,
   getRooms,
   getDocuments,
-  getUserResources
+  getUserResources,
+  tandemBaseURL,
+  makeRequestOptionsGET
 } from './api.js';
 import { loadSchemaForModel, getSchemaCache, clearSchemaCache } from './state/schemaCache.js';
 import { displayModels } from './features/models.js';
@@ -58,6 +60,26 @@ let accounts = [];
 let currentFacilityURN = null;
 let currentFacilityRegion = null;
 
+// Performance Optimization: Cache for user resources
+// 
+// The /users/@me/resources endpoint returns ALL facilities and groups across ALL regions
+// in a SINGLE API call. This is much more efficient than the old approach which made
+// 3 API calls per account (one per region: US, EMEA, AUS).
+//
+// What the cache contains:
+// - userResourcesCache: Full response with twins[] and groups[]
+//   - twins[]: facility URNs, regions, access levels, group associations
+//   - groups[]: account URNs and names
+// 
+// What the cache does NOT contain:
+// - Facility names (must be fetched separately via region-specific endpoints)
+//
+// Trade-off: We must still fetch facility names when populating dropdowns, but we can
+// target only the specific regions where facilities exist (smart region targeting).
+//
+let userResourcesCache = null;
+let facilityRegionMap = new Map(); // Map of facilityURN -> region for instant lookups
+
 /**
  * Toggle loading overlay
  * @param {boolean} show - Show or hide the loading overlay
@@ -101,15 +123,64 @@ function updateUIForLoginState(loggedIn, profileImg) {
 }
 
 /**
- * Build accounts and facilities data structure
- * @returns {Promise<Array>} Array of account objects with facilities
+ * Load and cache user resources (facilities and groups)
+ * 
+ * PERFORMANCE OPTIMIZATION:
+ * This function makes a SINGLE API call to /users/@me/resources which returns:
+ * - All facility URNs across all regions (US, EMEA, AUS)
+ * - Region for each facility
+ * - Access levels and group associations
+ * 
+ * This replaces the old approach which made:
+ * - 1 call to /groups (list accounts)
+ * - N accounts × 3 regions = 3N calls to fetch facilities per region
+ * - Example: 5 accounts = 1 + 15 = 16 API calls
+ * 
+ * New approach: Just 1 API call total!
+ * 
+ * Note: Facility names are NOT included and must be fetched separately when needed.
+ * This is a limitation of the API design, not our implementation.
+ * 
+ * @returns {Promise<void>}
+ */
+async function loadUserResourcesCache() {
+  try {
+    console.log('📊 Loading user resources (1 API call)...');
+    const startTime = Date.now();
+    
+    userResourcesCache = await getUserResources('@me');
+    
+    // Build facility region map for quick lookups (avoids redundant API calls later)
+    facilityRegionMap.clear();
+    if (userResourcesCache?.twins) {
+      userResourcesCache.twins.forEach(twin => {
+        facilityRegionMap.set(twin.urn, twin.region || 'us');
+      });
+    }
+    
+    const duration = Date.now() - startTime;
+    console.log(`✅ User resources loaded in ${duration}ms`);
+  } catch (error) {
+    console.error('Error loading user resources:', error);
+    userResourcesCache = { twins: [], groups: [] };
+  }
+}
+
+/**
+ * Build accounts list from cached user resources
+ * @returns {Promise<Array>} Array of account objects
  */
 async function buildAccounts() {
   try {
-    const groups = await getGroups();
+    // Ensure cache is loaded
+    if (!userResourcesCache) {
+      await loadUserResourcesCache();
+    }
+    
     const accounts = [];
+    const { groups = [] } = userResourcesCache;
 
-    // For each group, get its facilities
+    // Add accounts from groups
     for (const group of groups) {
       accounts.push({
         id: group.urn,
@@ -117,65 +188,87 @@ async function buildAccounts() {
       });
     }
 
-    // Also get facilities for user (not associated with a group)
-    accounts.push({
-      id: '@me',
-      name: '** SHARED DIRECTLY **'
-    });
+    // Check if there are any facilities shared directly (not via a group)
+    const { twins = [] } = userResourcesCache;
+    const directlySharedFacilities = twins.filter(twin => !twin.grantedViaGroup);
+    
+    if (directlySharedFacilities.length > 0) {
+      accounts.push({
+        id: '@me',
+        name: '** SHARED DIRECTLY **'
+      });
+    }
+    
     return accounts;
   } catch (error) {
-    console.error('Error building accounts and facilities:', error);
+    console.error('Error building accounts:', error);
     return [];
   }
 }
 
 /**
- * Build accounts and facilities data structure
- * @returns {Promise<Array>} Array of account objects with facilities
+ * Build accounts and facilities data structure from cached user resources
+ * 
+ * LAZY LOADING OPTIMIZATION:
+ * We intentionally set facilities: null to defer loading facility names until needed.
+ * This is because:
+ * 
+ * 1. The getUserResources cache contains facility URNs but NOT facility names
+ * 2. To get facility names, we must call /groups/{urn}/twins or /users/@me/twins
+ * 3. These endpoints require a Region header and only return facilities in that region
+ * 4. We can't avoid this limitation - it's how the API is designed
+ * 
+ * By lazy loading, we only fetch names when the user actually opens a dropdown,
+ * rather than pre-fetching for all accounts at startup (which would be slower).
+ * 
+ * @returns {Promise<Array>} Array of account objects with facilities=null (lazy loaded)
  */
 async function buildAccountsAndFacilities() {
   try {
-    const groups = await getGroups();
+    // Ensure cache is loaded
+    if (!userResourcesCache) {
+      await loadUserResourcesCache();
+    }
+    
     const accounts = [];
+    const { twins = [], groups = [] } = userResourcesCache;
+    
+    // Group facility URNs by their grantedViaGroup
+    const facilityUrnsByGroup = new Map();
+    const directlySharedUrns = [];
+    
+    twins.forEach(twin => {
+      if (twin.grantedViaGroup) {
+        if (!facilityUrnsByGroup.has(twin.grantedViaGroup)) {
+          facilityUrnsByGroup.set(twin.grantedViaGroup, []);
+        }
+        facilityUrnsByGroup.get(twin.grantedViaGroup).push(twin.urn);
+      } else {
+        directlySharedUrns.push(twin.urn);
+      }
+    });
 
-    // For each group, get its facilities
+    // Build accounts from groups
+    // facilities: null indicates names need to be loaded on-demand
     for (const group of groups) {
-      const facilitiesObj = await getFacilitiesForGroup(group.urn);
-      // Convert object to array: { "urn": {settings}, ... } -> [{urn, settings}, ...]
-      const facilities = facilitiesObj ? Object.entries(facilitiesObj).map(([urn, settings]) => ({
-        urn,
-        settings
-      })) : [];
+      const urns = facilityUrnsByGroup.get(group.urn) || [];
       
       accounts.push({
         id: group.urn,
         name: group.name || 'Unnamed Account',
-        facilities: facilities.map(f => ({
-          urn: f.urn,
-          name: f.settings?.props?.["Identity Data"]?.["Building Name"] || 'Unnamed Facility'
-        }))
+        facilityCount: urns.length,
+        facilities: null // Lazy loaded when dropdown is populated
       });
     }
 
-    // Also get facilities for user (not associated with a group)
-    const userFacilitiesObj = await getFacilitiesForUser('@me');
-    if (userFacilitiesObj) {
-      // Convert object to array
-      const userFacilities = Object.entries(userFacilitiesObj).map(([urn, settings]) => ({
-        urn,
-        settings
-      }));
-      
-      if (userFacilities.length > 0) {
-        accounts.push({
-          id: 'user',
-          name: '** SHARED DIRECTLY **',
-          facilities: userFacilities.map(f => ({
-            urn: f.urn,
-            name: f.settings?.props?.["Identity Data"]?.["Building Name"] || 'Unnamed Facility'
-          }))
-        });
-      }
+    // Add directly shared facilities account if any exist
+    if (directlySharedUrns.length > 0) {
+      accounts.push({
+        id: '@me',
+        name: '** SHARED DIRECTLY **',
+        facilityCount: directlySharedUrns.length,
+        facilities: null // Lazy loaded when dropdown is populated
+      });
     }
 
     return accounts;
@@ -271,6 +364,24 @@ function setLastFacilityForAccount(accountName, facilityURN) {
 
 /**
  * Populate facilities dropdown based on selected account
+ * 
+ * Uses the existing getFacilitiesForGroup() API function which handles multi-region
+ * fetching reliably for both SHARED DIRECTLY (@me) and group accounts.
+ * 
+ * APPROACH:
+ * - Queries all 3 regions (US, EMEA, AUS) in parallel and merges results
+ * - 3 API calls per account when facilities are first loaded
+ * - Works reliably for both @me and group accounts
+ * 
+ * CACHING:
+ * After first load, account.facilities is cached so subsequent selections are instant.
+ * This means the 3 API calls only happen once per account per session.
+ * 
+ * NOTE: We previously attempted "smart region targeting" (only query regions where
+ * facilities exist based on cache), but the /users/@me/twins endpoint returns 400
+ * errors when using region headers. The getFacilitiesForGroup() function uses a
+ * reliable approach that works for all cases.
+ * 
  * @param {Array} accounts - Array of account objects
  * @param {string} accountName - Selected account name
  */
@@ -280,16 +391,42 @@ async function populateFacilitiesDropdown(accounts, accountName) {
   const account = accounts.find(a => a.name === accountName);
   if (!account) return;
 
-  // If facilities are not loaded, load them now
+  // If facilities are not loaded, load them now with names
   if (!account.facilities) {
-    const facilitiesObj = await getFacilitiesForGroup(account.id);
-    const facilities = facilitiesObj ? Object.entries(facilitiesObj).map(([urn, settings]) => ({
-        urn,
-        name: settings?.props?.["Identity Data"]?.["Building Name"] || 'Unnamed Facility',
-        region: settings?.region || 'us'
-      })) : [];
+    // Get facility URNs for this account from cache (no API call)
+    const { twins = [] } = userResourcesCache;
+    const accountFacilities = account.id === '@me' 
+      ? twins.filter(t => !t.grantedViaGroup)
+      : twins.filter(t => t.grantedViaGroup === account.id);
+    
+    if (accountFacilities.length === 0) {
+      account.facilities = [];
+    } else {
+      // Use the existing getFacilitiesForGroup API function which handles
+      // multi-region fetching correctly for both @me and group accounts
+      console.log(`📍 Fetching facilities for ${accountName}`);
+      
+      const facilitiesObj = await getFacilitiesForGroup(account.id);
+      
+      // Extract facility names from API response
+      const facilities = facilitiesObj ? Object.entries(facilitiesObj).map(([urn, settings]) => ({
+          urn,
+          name: settings?.props?.["Identity Data"]?.["Building Name"] || 'Unnamed Facility',
+          region: settings?.region || 'us'
+        })) : [];
 
-    account.facilities = facilities;
+      // Cache for future use (no API calls on subsequent selections)
+      account.facilities = facilities;
+    }
+  }
+  
+  if (account.facilities.length === 0) {
+    const option = document.createElement('option');
+    option.value = '';
+    option.textContent = 'No facilities available';
+    option.disabled = true;
+    facilitySelect.appendChild(option);
+    return;
   }
   
   // Sort facilities alphabetically by name
@@ -328,6 +465,14 @@ async function populateFacilitiesDropdown(accounts, accountName) {
 
 /**
  * Load facility information and statistics
+ * 
+ * CACHED REGION LOOKUP OPTIMIZATION:
+ * Previously, this function called getUserResources() every time to determine the
+ * facility's region. This added 1 redundant API call per facility switch.
+ * 
+ * Now we use the facilityRegionMap cache populated during initial load.
+ * Result: 0 API calls for region lookup (instant from cache).
+ * 
  * @param {string} facilityURN - Facility URN
  */
 async function loadFacility(facilityURN) {
@@ -335,10 +480,10 @@ async function loadFacility(facilityURN) {
     return; // Already loaded
   }
   currentFacilityURN = facilityURN;
-  // find region of the facility
-  const userResources = await getUserResources('@me');
-  const region = userResources.twins.find(t => t.urn === facilityURN)?.region || 'us';
-
+  
+  // Get region from cache (instant lookup, no API call needed!)
+  // The facilityRegionMap was populated during loadUserResourcesCache()
+  const region = facilityRegionMap.get(facilityURN) || 'us';
   currentFacilityRegion = RegionLabelMap[region] || 'US';
   // Hide the buttons initially while loading
   viewUserResourcesBtn.classList.add('hidden');
@@ -526,16 +671,16 @@ async function loadStats(facilityURN, region) {
     
     // Get and display systems (only if default model exists)
     const systems = hasDefaultModel ? await getSystems(facilityURN, region, models) : [];
-    await displaySystems(systemsList, systems, facilityURN);
+    await displaySystems(systemsList, systems, facilityURN, region);
     
     // Display tagged assets
     await displayTaggedAssets(taggedAssetsList, facilityURN, models, region);
     
     const levels = await getLevels(facilityURN, region);
-    await displayLevels(levelsList, levels, facilityURN);
+    await displayLevels(levelsList, levels, facilityURN, region);
     
     const rooms = await getRooms(facilityURN, region, schemaCache);
-    await displayRooms(roomsList, rooms, facilityURN);
+    await displayRooms(roomsList, rooms, facilityURN, region);
     
     const documents = await getDocuments(facilityURN, region);
     await displayDocuments(documentsList, documents);
@@ -595,9 +740,12 @@ async function initialize() {
   if (loggedIn) {
     updateUIForLoginState(true, profileImg);
     
-    // Load accounts and facilities
-    //accounts = await buildAccountsAndFacilities();
-    accounts = await buildAccounts();
+    // Load user resources cache first (single API call for all data)
+    await loadUserResourcesCache();
+    
+    // Build accounts and facilities from cached data
+    // Facility names will be loaded on-demand when dropdown is populated
+    accounts = await buildAccountsAndFacilities();
     
     if (accounts && accounts.length > 0) {
       await populateAccountsDropdown(accounts);

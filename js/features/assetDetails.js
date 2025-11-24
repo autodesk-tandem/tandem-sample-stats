@@ -11,10 +11,12 @@ import { makeXrefKey, toFullKey } from '../../tandem/keys.js';
  * @param {string} facilityURN - Facility URN for link generation
  * @returns {string} HTML page content
  */
-function generateAssetDetailsHTML(elementsByModel, title, facilityURN) {
+function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, showLinks = true) {
   // Embed all data as JSON for client-side processing
   const dataJSON = JSON.stringify(elementsByModel).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
   const tokenValue = window.sessionStorage.token || '';
+  const regionValue = region || 'US';
+  const showLinksValue = showLinks ? 'true' : 'false';
   const facilityURNValue = facilityURN || '';
   
   // Embed functions from tandem/keys.js
@@ -513,6 +515,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN) {
     const API_BASE = '${tandemBaseURL}';
     const TOKEN = '${tokenValue}';
     const FACILITY_URN = '${facilityURNValue}';
+    const REGION = '${regionValue}';
+    const SHOW_LINKS = ${showLinksValue};
     const SCHEMA_CACHE = ${schemaCacheJSON};
     
     // Constants from tandem/constants.js
@@ -568,7 +572,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN) {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + TOKEN,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Region': REGION
         },
         body: payload
       });
@@ -593,7 +598,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN) {
         method: 'POST',
         headers: {
           'Authorization': 'Bearer ' + TOKEN,
-          'Content-Type': 'application/json'
+          'Content-Type': 'application/json',
+          'Region': REGION
         },
         body: payload
       });
@@ -1062,7 +1068,9 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN) {
             html += '</div>';
             html += '<div class="element-key">' + escapeHtml(key) + '</div>';
             html += '</div>';
-            html += '<button class="copy-link-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Copy link to asset">🔗</button>';
+            if (SHOW_LINKS) {
+              html += '<button class="copy-link-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Copy link to asset">🔗</button>';
+            }
             html += '<button class="element-toggle" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '">Show Details</button>';
             html += '</div>';
             html += '<div class="element-details"></div>';
@@ -1398,14 +1406,14 @@ let assetDetailsWindow = null;
  * @param {string} title - Page title
  * @param {string} facilityURN - Facility URN for link generation
  */
-export function viewAssetDetails(elementsByModel, title = 'Asset Details', facilityURN = '') {
+export function viewAssetDetails(elementsByModel, title = 'Asset Details', facilityURN = '', region = 'US', showLinks = true) {
   if (!elementsByModel || elementsByModel.length === 0) {
     alert('No elements to display');
     return;
   }
   
   // Generate HTML with all data embedded
-  const htmlContent = generateAssetDetailsHTML(elementsByModel, title, facilityURN);
+  const htmlContent = generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, showLinks);
   
   // Open in new window/tab
   assetDetailsWindow = window.open('', '_blank');

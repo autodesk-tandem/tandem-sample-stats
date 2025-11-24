@@ -788,7 +788,7 @@ export async function getSchema(modelURN, region) {
 
 /**
  * Get levels from all models in a facility
- * Levels have CategoryId === 240
+ * Uses ElementFlags.Level (0x01000001) to identify levels
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @returns {Promise<Array>} Array of level objects with modelId, key, name, and elevation
@@ -800,7 +800,7 @@ export async function getLevels(facilityURN, region) {
     
     for (const model of models) {
       const payload = JSON.stringify({
-        qualifiedColumns: [QC.CategoryId, QC.Name, QC.Elevation], // CategoryId, Name, Elevation
+        qualifiedColumns: [QC.ElementFlags, QC.Name, QC.Elevation], // ElementFlags, Name, Elevation
         includeHistory: false
       });
       
@@ -814,8 +814,8 @@ export async function getLevels(facilityURN, region) {
       
       const elements = await response.json();
       
-      // Filter for levels (CategoryId === 240)
-      const levels = elements.filter(row => row[QC.CategoryId]?.[0] === 240);
+      // Filter for levels using ElementFlags.Level (0x01000001)
+      const levels = elements.filter(row => row[QC.ElementFlags]?.[0] === ElementFlags.Level);
       
       // Add model info to each level
       levels.forEach(level => {
@@ -837,8 +837,9 @@ export async function getLevels(facilityURN, region) {
 }
 
 /**
- * Get rooms from all models in a facility
- * Rooms have CategoryId === 160, Spaces have CategoryId === 3600
+ * Get rooms and spaces from all models in a facility
+ * Uses ElementFlags.Room (0x00000005) to identify both Rooms and Spaces
+ * Then uses CategoryId to differentiate: 160 = Room, 3600 = Space
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @param {Object} schemaCache - Optional pre-loaded schema cache to avoid duplicate API calls
@@ -871,7 +872,8 @@ export async function getRooms(facilityURN, region, schemaCache = null) {
       const volumeUnit = volumeAttr?.forgeUnit || 'cubic feet'; // Default to cubic feet if not specified
       
       // Build the list of qualified columns to fetch
-      const qualifiedColumns = [QC.CategoryId, QC.Name]; // CategoryId, Name
+      // ElementFlags.Room matches both rooms and spaces; CategoryId differentiates them
+      const qualifiedColumns = [QC.ElementFlags, QC.CategoryId, QC.Name];
       if (areaQualifiedProp) {
         qualifiedColumns.push(areaQualifiedProp); // Add the Area qualified property
       }
@@ -894,35 +896,25 @@ export async function getRooms(facilityURN, region, schemaCache = null) {
       
       const elements = await response.json();
       
-      // Filter for rooms (CategoryId === 160)
-      const rooms = elements.filter(row => row[QC.CategoryId]?.[0] === 160);
-      rooms.forEach(room => {
-        allRooms.push({
-          modelId: model.modelId,
-          modelName: model.label,
-          key: room[QC.Key],
-          name: room[QC.Name]?.[0] || 'Unnamed Room',
-          area: areaQualifiedProp ? room[areaQualifiedProp]?.[0] : null,
-          areaUnit: areaUnit,
-          volume: volumeQualifiedProp ? room[volumeQualifiedProp]?.[0] : null,
-          volumeUnit: volumeUnit,
-          type: 'Room'
-        });
-      });
+      // Filter using ElementFlags.Room - this matches both rooms (CategoryId 160) and spaces (CategoryId 3600)
+      const roomElements = elements.filter(row => row[QC.ElementFlags]?.[0] === ElementFlags.Room);
       
-      // Filter for spaces (CategoryId === 3600)
-      const spaces = elements.filter(row => row[QC.CategoryId]?.[0] === 3600);
-      spaces.forEach(space => {
+      // Process each room element and differentiate by CategoryId
+      roomElements.forEach(element => {
+        const categoryId = element[QC.CategoryId]?.[0];
+        const type = categoryId === 3600 ? 'Space' : 'Room';
+        const defaultName = categoryId === 3600 ? 'Unnamed Space' : 'Unnamed Room';
+        
         allRooms.push({
           modelId: model.modelId,
           modelName: model.label,
-          key: space[QC.Key],
-          name: space[QC.Name]?.[0] || 'Unnamed Space',
-          area: areaQualifiedProp ? space[areaQualifiedProp]?.[0] : null,
+          key: element[QC.Key],
+          name: element[QC.Name]?.[0] || defaultName,
+          area: areaQualifiedProp ? element[areaQualifiedProp]?.[0] : null,
           areaUnit: areaUnit,
-          volume: volumeQualifiedProp ? space[volumeQualifiedProp]?.[0] : null,
+          volume: volumeQualifiedProp ? element[volumeQualifiedProp]?.[0] : null,
           volumeUnit: volumeUnit,
-          type: 'Space'
+          type: type
         });
       });
     }

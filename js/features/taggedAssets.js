@@ -20,8 +20,9 @@ const toggleTaggedAssetsDetail = createToggleFunction({
  * @param {string} sortColumn - Column to sort by
  * @param {string} sortDirection - 'asc' or 'desc'
  * @param {string} facilityURN - Facility URN for fetching element keys
+ * @param {string} region - Region identifier for API calls
  */
-function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDirection = 'desc', facilityURN = null) {
+function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDirection = 'desc', facilityURN = null, region = null) {
   const tableContainer = document.getElementById('taggedAssets-table');
   if (!tableContainer) return;
 
@@ -189,7 +190,7 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
         }
         
         // Open details page directly
-        viewAssetDetails(elementsByModel, `Asset Details: ${propertyName}`, facilityURN);
+        viewAssetDetails(elementsByModel, `Asset Details: ${propertyName}`, facilityURN, region);
       } catch (error) {
         console.error('Error fetching elements:', error);
         alert('Failed to fetch element keys. See console for details.');
@@ -344,7 +345,7 @@ export async function displayTaggedAssets(container, facilityURN, models, region
         }
         
         // Open Details page with cached data (no additional API calls!)
-        viewAssetDetails(details.elementsByModel, `Tagged Asset Details`, facilityURN);
+        viewAssetDetails(details.elementsByModel, `Tagged Asset Details`, facilityURN, region);
       });
     }
   } catch (error) {

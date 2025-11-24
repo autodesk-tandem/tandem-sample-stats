@@ -36,7 +36,7 @@ const toggleRoomsDetail = createToggleFunction({
  * @param {string} sortColumn - Sort by 'name', 'type', 'area', or 'volume' (default: null for no sorting)
  * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
  */
-export async function displayRooms(container, rooms, facilityURN, sortColumn = null, sortDirection = 'asc') {
+export async function displayRooms(container, rooms, facilityURN, region, sortColumn = null, sortDirection = 'asc') {
   if (!rooms || rooms.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No rooms or spaces found in this facility.</p>';
     return;
@@ -260,9 +260,6 @@ export async function displayRooms(container, rooms, facilityURN, sortColumn = n
   
   container.innerHTML = headerHtml + summaryHtml + detailHtml;
   
-  // Store rooms data for re-sorting
-  container.dataset.roomsData = JSON.stringify(rooms);
-  
   const toggleBtn = document.getElementById('toggle-rooms-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleRoomsDetail);
@@ -274,7 +271,7 @@ export async function displayRooms(container, rooms, facilityURN, sortColumn = n
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      displayRooms(container, rooms, column, direction);
+      displayRooms(container, rooms, facilityURN, region, column, direction);
     });
   });
   
@@ -309,7 +306,7 @@ export async function displayRooms(container, rooms, facilityURN, sortColumn = n
       modelMap.forEach(model => elementsByModel.push(model));
       
       // Open Details page
-      viewAssetDetails(elementsByModel, `Room & Space Details`, facilityURN);
+      viewAssetDetails(elementsByModel, `Room & Space Details`, facilityURN, region);
     });
   }
 }

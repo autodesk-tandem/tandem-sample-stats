@@ -20,7 +20,7 @@ const toggleLevelsDetail = createToggleFunction({
  * @param {string} sortColumn - Sort by 'name' or 'elevation' (default: null for no sorting)
  * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
  */
-export async function displayLevels(container, levels, facilityURN, sortColumn = null, sortDirection = 'asc') {
+export async function displayLevels(container, levels, facilityURN, region, sortColumn = null, sortDirection = 'asc') {
   if (!levels || levels.length === 0) {
     container.innerHTML = '<p class="text-dark-text-secondary">No levels found in this facility.</p>';
     return;
@@ -191,9 +191,6 @@ export async function displayLevels(container, levels, facilityURN, sortColumn =
   
   container.innerHTML = headerHtml + summaryHtml + detailHtml;
   
-  // Store levels data for re-sorting
-  container.dataset.levelsData = JSON.stringify(levels);
-  
   const toggleBtn = document.getElementById('toggle-levels-btn');
   if (toggleBtn) {
     toggleBtn.addEventListener('click', toggleLevelsDetail);
@@ -205,7 +202,7 @@ export async function displayLevels(container, levels, facilityURN, sortColumn =
     header.addEventListener('click', () => {
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
-      displayLevels(container, levels, column, direction);
+      displayLevels(container, levels, facilityURN, region, column, direction);
     });
   });
   
@@ -232,7 +229,7 @@ export async function displayLevels(container, levels, facilityURN, sortColumn =
       modelMap.forEach(model => elementsByModel.push(model));
       
       // Open Details page
-      viewAssetDetails(elementsByModel, `Level Details`, facilityURN);
+      viewAssetDetails(elementsByModel, `Level Details`, facilityURN, region);
     });
   }
 }

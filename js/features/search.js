@@ -800,7 +800,7 @@ function displaySearchResults(facilityURN, results, propertyName, searchOptions,
       }));
 
       const title = `Search Results: ${propertyName} = ${searchCriteria}`;
-      viewAssetDetails(elementsByModel, title, facilityURN);
+      viewAssetDetails(elementsByModel, title, facilityURN, region);
     });
   }
 }
