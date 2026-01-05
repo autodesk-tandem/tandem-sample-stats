@@ -627,7 +627,7 @@ tandem-sample-stats/
 │       ├── schema.js           # Schema viewer
 │       ├── streams.js          # Stream monitoring with charts
 │       └── taggedAssets.js     # Tagged assets
-├── AI_DEVELOPMENT_GUIDE.md     # This file
+├── AGENTS.md                   # This file
 ├── README.md                   # User documentation
 └── QUICKSTART.md               # Quick setup guide
 ```

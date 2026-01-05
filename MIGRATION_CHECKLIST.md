@@ -17,7 +17,7 @@
 ### 3. Files Modified
 - `README.md` - Project name, PKCE security section, GitHub Pages deployment instructions
 - `QUICKSTART.md` - Command examples with new project name
-- `AI_DEVELOPMENT_GUIDE.md` - Code examples with new project name
+- `AGENTS.md` - Code examples with new project name
 - `tandem/README.md` - Usage examples with new project name
 - `index.html` - GitHub link (title kept as "Tandem Stats")
 - `js/config.js` - Added comment explaining PKCE safety
@@ -138,7 +138,7 @@ Thank you for your interest in contributing! This is a sample application demons
 
 ## Questions?
 
-- Review the [AI_DEVELOPMENT_GUIDE.md](./AI_DEVELOPMENT_GUIDE.md) for architecture details
+- Review the [AGENTS.md](./AGENTS.md) for architecture details
 - Check [TROUBLESHOOTING.md](./TROUBLESHOOTING.md) for common issues
 - Open an issue for questions or discussions
 ```
@@ -228,7 +228,7 @@ After publication, users will be able to:
 1. Clone and run the sample immediately
 2. Use it as a template for AI-assisted development
 3. Copy the `tandem/` utilities to their own projects
-4. Reference the AI_DEVELOPMENT_GUIDE.md for best practices
+4. Reference the AGENTS.md for best practices
 
 ## Notes
 
