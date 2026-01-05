@@ -55,7 +55,7 @@
 ### Documentation
 - `README.md` - Complete user documentation with PKCE explanation
 - `QUICKSTART.md` - Fast setup guide
-- `AI_DEVELOPMENT_GUIDE.md` - Comprehensive guide for AI-assisted development
+- `AGENTS.md` - Comprehensive guide for AI-assisted development
 - `TROUBLESHOOTING.md` - Common issues and solutions
 - `CODE_ORGANIZATION.md` - Project structure explanation
 - `MIGRATION_CHECKLIST.md` - This migration's details
@@ -138,7 +138,7 @@ python3 -m http.server 8000
 ```
 
 ### For AI-Assisted Development
-1. Read `AI_DEVELOPMENT_GUIDE.md` first
+1. Read `AGENTS.md` first
 2. Copy `tandem/` utilities to new projects
 3. Use as reference for Tandem API patterns
 4. Leverage Claude/Cursor with this codebase
@@ -208,7 +208,7 @@ This application uses **PKCE (Proof Key for Code Exchange)**, which is the OAuth
 2. **GitHub Pages Ready** - Deploy in 2 clicks, no configuration
 3. **AI-Optimized** - Designed for AI-assisted development (vibe coding!)
 4. **Reusable Utilities** - Copy `tandem/` directory to new projects
-5. **Comprehensive Docs** - AI_DEVELOPMENT_GUIDE.md is a goldmine
+5. **Comprehensive Docs** - AGENTS.md is a goldmine
 
 ---
 

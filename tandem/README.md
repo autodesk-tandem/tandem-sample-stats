@@ -232,7 +232,7 @@ const elements = await getElementsByKeys(modelURN, [shortKey]);
 ## Reference
 
 For more details, see:
-- [`AI_DEVELOPMENT_GUIDE.md`](../AI_DEVELOPMENT_GUIDE.md) - Comprehensive development guide
+- [`AGENTS.md`](../AGENTS.md) - Comprehensive development guide
 - [Official Tandem API Docs](https://aps.autodesk.com/en/docs/tandem/v1/developers_guide/overview/)
 - [tandem-sample-rest-testbed](https://github.com/autodesk-tandem/tandem-sample-rest-testbed) - Reference implementation
 
