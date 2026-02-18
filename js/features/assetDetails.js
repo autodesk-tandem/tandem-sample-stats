@@ -1,7 +1,7 @@
 import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
 import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';
-import { getCategoryName } from '../utils.js';
+import { getCategoryName, compareQualifiedColumnIds } from '../utils.js';
 import { makeXrefKey, toFullKey } from '../../tandem/keys.js';
 
 /**
@@ -905,29 +905,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
               
               // Special handling for ID column - ignore "!" for grouping overrides
               if (sortBy === 'id') {
-                // Remove "!" from comparison but keep original values for secondary sort
-                const aClean = aVal.replace(/:/g, '').replace(/!/g, '');
-                const bClean = bVal.replace(/:/g, '').replace(/!/g, '');
-                
-                // First compare without "!" to group overrides together
-                const cleanComparison = aClean.toLowerCase().localeCompare(bClean.toLowerCase());
-                
-                if (cleanComparison !== 0) {
-                  return currentSort.direction === 'asc' ? cleanComparison : -cleanComparison;
-                }
-                
-                // If they're the same after removing "!", sort non-override first
-                // This puts "n:v" before "n:!v"
-                const aHasBang = aVal.includes('!');
-                const bHasBang = bVal.includes('!');
-                
-                if (aHasBang && !bHasBang) {
-                  return currentSort.direction === 'asc' ? 1 : -1;
-                } else if (!aHasBang && bHasBang) {
-                  return currentSort.direction === 'asc' ? -1 : 1;
-                }
-                
-                return 0;
+                // Sort by column family then property name (qualified ID format)
+                return compareQualifiedColumnIds(aVal, bVal, currentSort.direction === 'asc');
               }
               
               // Normal string comparison for other columns

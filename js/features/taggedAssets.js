@@ -1,6 +1,7 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { getTaggedAssetsDetails, getElementsByProperty } from '../api.js';
 import { getSchemaCache } from '../state/schemaCache.js';
+import { compareQualifiedColumnIds } from '../utils.js';
 import { viewAssetDetails } from './assetDetails.js';
 
 /**
@@ -54,8 +55,11 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
         } else {
           return bVal - aVal;
         }
+      } else if (sortColumn === 'id') {
+        // Sort by column family then property name (qualified ID format)
+        return compareQualifiedColumnIds(a.id, b.id, sortDirection === 'asc');
       } else {
-        // String sort for category, name, id
+        // String sort for category, name
         aVal = (a[sortColumn] || '').toString().toLowerCase();
         bVal = (b[sortColumn] || '').toString().toLowerCase();
         

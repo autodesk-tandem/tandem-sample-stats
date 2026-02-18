@@ -1,4 +1,4 @@
-import { getDataTypeName, isDefaultModel } from '../utils.js';
+import { getDataTypeName, isDefaultModel, compareQualifiedColumnIds } from '../utils.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { 
@@ -23,6 +23,9 @@ const toggleSchemaDetail = createToggleFunction({
   iconUpId: 'toggle-schema-icon-up'
 });
 
+/** Per-model expand state: modelId -> true if "show all" is active (so we can collapse again and preserve state on sort). */
+let schemaModelExpandState = {};
+
 /**
  * Render a sortable schema table for a specific model
  * @param {string} modelId - Model ID
@@ -35,9 +38,14 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   const tableContainer = document.getElementById(`schema-table-${modelId}`);
   if (!tableContainer) return;
 
-  // Sort attributes - always sort by category first, then by the selected column (or name as secondary)
+  // Sort attributes
   let sortedAttributes = [...attributes];
   sortedAttributes.sort((a, b) => {
+    // ID: sort by column family (before ":") then by property name (after ":")
+    if (sortColumn === 'id') {
+      return compareQualifiedColumnIds(a.id, b.id, sortDirection === 'asc');
+    }
+
     // If sorting by category, use name as secondary sort
     if (sortColumn === 'category') {
       const categoryComparison = (a.category || '').toString().toLowerCase().localeCompare((b.category || '').toString().toLowerCase());
@@ -47,17 +55,17 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
       // Secondary sort by name
       return (a.name || '').toString().toLowerCase().localeCompare((b.name || '').toString().toLowerCase());
     }
-    
+
     // For other columns, still use category as primary sort, then the selected column
     const categoryComparison = (a.category || '').toString().toLowerCase().localeCompare((b.category || '').toString().toLowerCase());
     if (categoryComparison !== 0) {
       return categoryComparison; // Always sort category ascending for grouping
     }
-    
+
     // Within same category, sort by the selected column
     const aVal = (a[sortColumn] || '').toString().toLowerCase();
     const bVal = (b[sortColumn] || '').toString().toLowerCase();
-    
+
     if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
     return 0;
@@ -136,6 +144,19 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
     `;
   }
 
+  if (sortedAttributes.length > 20 && showAll) {
+    tableHtml += `
+      <tr>
+        <td colspan="4" class="px-3 py-2 text-center border-t border-dark-border">
+          <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
+                  data-model="${modelId}" data-show-less="true">
+            Show first 20 only
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+
   tableHtml += `
       </tbody>
     </table>
@@ -150,7 +171,8 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
       const model = header.getAttribute('data-model');
-      renderSchemaTable(model, attributes, column, direction, showAll);
+      const expanded = schemaModelExpandState[model] ?? false;
+      renderSchemaTable(model, attributes, column, direction, expanded);
     });
   });
 
@@ -159,8 +181,30 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   if (showAllBtn) {
     showAllBtn.addEventListener('click', () => {
       const model = showAllBtn.getAttribute('data-model');
+      schemaModelExpandState[model] = true;
       renderSchemaTable(model, attributes, sortColumn, sortDirection, true);
     });
+  }
+
+  // Add click handler for "show less" button
+  const showLessBtn = tableContainer.querySelector('button[data-show-less]');
+  if (showLessBtn) {
+    showLessBtn.addEventListener('click', () => {
+      const model = showLessBtn.getAttribute('data-model');
+      schemaModelExpandState[model] = false;
+      renderSchemaTable(model, attributes, sortColumn, sortDirection, false);
+    });
+  }
+
+  // Double-click anywhere in the table to collapse back to first 20 (when expanded)
+  if (showAll && attributes.length > 20) {
+    const table = tableContainer.querySelector('table');
+    if (table) {
+      table.addEventListener('dblclick', () => {
+        schemaModelExpandState[modelId] = false;
+        renderSchemaTable(modelId, attributes, sortColumn, sortDirection, false);
+      });
+    }
   }
 }
 
@@ -175,6 +219,9 @@ export async function displaySchema(container, models, facilityURN) {
     container.innerHTML = '<p class="text-dark-text-secondary">No models found.</p>';
     return;
   }
+
+  // Reset per-model expand state so all tables start collapsed when (re)loading the card
+  schemaModelExpandState = {};
 
   // Get schema cache
   const schemaCache = getSchemaCache();
@@ -276,13 +323,14 @@ export async function displaySchema(container, models, facilityURN) {
     exportBtn.addEventListener('click', () => exportSchemaToExcel(models, schemaCache, facilityURN));
   }
 
-  // Render initial tables (unsorted)
+  // Render initial tables (unsorted, collapsed unless state says otherwise)
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     const schema = schemaCache[model.modelId];
     
     if (schema && schema.attributes && schema.attributes.length > 0) {
-      renderSchemaTable(model.modelId, schema.attributes);
+      const showAll = schemaModelExpandState[model.modelId] ?? false;
+      renderSchemaTable(model.modelId, schema.attributes, 'category', 'asc', showAll);
     }
   }
 }
