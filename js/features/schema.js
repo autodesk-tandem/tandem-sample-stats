@@ -1,4 +1,4 @@
-import { getDataTypeName, isDefaultModel } from '../utils.js';
+import { getDataTypeName, isDefaultModel, compareQualifiedColumnIds } from '../utils.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { 
@@ -23,6 +23,9 @@ const toggleSchemaDetail = createToggleFunction({
   iconUpId: 'toggle-schema-icon-up'
 });
 
+/** Per-model expand state: modelId -> true if "show all" is active (so we can collapse again and preserve state on sort). */
+let schemaModelExpandState = {};
+
 /**
  * Render a sortable schema table for a specific model
  * @param {string} modelId - Model ID
@@ -35,9 +38,14 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   const tableContainer = document.getElementById(`schema-table-${modelId}`);
   if (!tableContainer) return;
 
-  // Sort attributes - always sort by category first, then by the selected column (or name as secondary)
+  // Sort attributes
   let sortedAttributes = [...attributes];
   sortedAttributes.sort((a, b) => {
+    // ID: sort by column family (before ":") then by property name (after ":")
+    if (sortColumn === 'id') {
+      return compareQualifiedColumnIds(a.id, b.id, sortDirection === 'asc');
+    }
+
     // If sorting by category, use name as secondary sort
     if (sortColumn === 'category') {
       const categoryComparison = (a.category || '').toString().toLowerCase().localeCompare((b.category || '').toString().toLowerCase());
@@ -47,17 +55,17 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
       // Secondary sort by name
       return (a.name || '').toString().toLowerCase().localeCompare((b.name || '').toString().toLowerCase());
     }
-    
+
     // For other columns, still use category as primary sort, then the selected column
     const categoryComparison = (a.category || '').toString().toLowerCase().localeCompare((b.category || '').toString().toLowerCase());
     if (categoryComparison !== 0) {
       return categoryComparison; // Always sort category ascending for grouping
     }
-    
+
     // Within same category, sort by the selected column
     const aVal = (a[sortColumn] || '').toString().toLowerCase();
     const bVal = (b[sortColumn] || '').toString().toLowerCase();
-    
+
     if (aVal < bVal) return sortDirection === 'asc' ? -1 : 1;
     if (aVal > bVal) return sortDirection === 'asc' ? 1 : -1;
     return 0;
@@ -113,8 +121,9 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   for (let j = 0; j < displayCount; j++) {
     const attr = sortedAttributes[j];
     const dataTypeName = getDataTypeName(attr.dataType);
+    const attrIdEscaped = (attr.id || '').replace(/"/g, '&quot;');
     tableHtml += `
-      <tr class="hover:bg-dark-bg/30">
+      <tr class="hover:bg-dark-bg/30" data-attr-id="${attrIdEscaped}">
         <td class="px-3 py-2 font-mono text-dark-text-secondary">${attr.id || ''}</td>
         <td class="px-3 py-2 text-dark-text">${attr.category || ''}</td>
         <td class="px-3 py-2 text-dark-text">${attr.name || ''}</td>
@@ -136,6 +145,19 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
     `;
   }
 
+  if (sortedAttributes.length > 20 && showAll) {
+    tableHtml += `
+      <tr>
+        <td colspan="4" class="px-3 py-2 text-center border-t border-dark-border">
+          <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
+                  data-model="${modelId}" data-show-less="true">
+            Show first 20 only
+          </button>
+        </td>
+      </tr>
+    `;
+  }
+
   tableHtml += `
       </tbody>
     </table>
@@ -150,7 +172,8 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
       const column = header.getAttribute('data-column');
       const direction = header.getAttribute('data-direction');
       const model = header.getAttribute('data-model');
-      renderSchemaTable(model, attributes, column, direction, showAll);
+      const expanded = schemaModelExpandState[model] ?? false;
+      renderSchemaTable(model, attributes, column, direction, expanded);
     });
   });
 
@@ -159,8 +182,30 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   if (showAllBtn) {
     showAllBtn.addEventListener('click', () => {
       const model = showAllBtn.getAttribute('data-model');
+      schemaModelExpandState[model] = true;
       renderSchemaTable(model, attributes, sortColumn, sortDirection, true);
     });
+  }
+
+  // Add click handler for "show less" button
+  const showLessBtn = tableContainer.querySelector('button[data-show-less]');
+  if (showLessBtn) {
+    showLessBtn.addEventListener('click', () => {
+      const model = showLessBtn.getAttribute('data-model');
+      schemaModelExpandState[model] = false;
+      renderSchemaTable(model, attributes, sortColumn, sortDirection, false);
+    });
+  }
+
+  // Double-click anywhere in the table to collapse back to first 20 (when expanded)
+  if (showAll && attributes.length > 20) {
+    const table = tableContainer.querySelector('table');
+    if (table) {
+      table.addEventListener('dblclick', () => {
+        schemaModelExpandState[modelId] = false;
+        renderSchemaTable(modelId, attributes, sortColumn, sortDirection, false);
+      });
+    }
   }
 }
 
@@ -176,6 +221,9 @@ export async function displaySchema(container, models, facilityURN) {
     return;
   }
 
+  // Reset per-model expand state so all tables start collapsed when (re)loading the card
+  schemaModelExpandState = {};
+
   // Get schema cache
   const schemaCache = getSchemaCache();
 
@@ -185,7 +233,7 @@ export async function displaySchema(container, models, facilityURN) {
     totalAttributes += schemaCache[modelURN].attributes.length;
   }
 
-  // Build header with toggle and export buttons
+  // Build header with search, toggle and export buttons
   let headerHtml = `
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
@@ -214,6 +262,17 @@ export async function displaySchema(container, models, facilityURN) {
           </svg>
         </button>
       </div>
+    </div>
+    <div class="flex items-center gap-2 mb-3 flex-wrap">
+      <label for="schema-search-input" class="text-sm text-dark-text-secondary whitespace-nowrap">Find property</label>
+      <input id="schema-search-input" type="text" placeholder="ID or name (e.g. n:n, Temperature)" 
+             class="flex-1 min-w-[120px] max-w-[240px] px-2 py-1.5 text-sm bg-dark-bg border border-dark-border rounded text-dark-text placeholder-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-tandem-blue"
+             aria-label="Find property by ID or name">
+      <button id="schema-search-btn" type="button"
+              class="px-3 py-1.5 text-xs font-medium rounded border border-tandem-blue text-tandem-blue hover:bg-tandem-blue hover:text-white transition">
+        Find
+      </button>
+      <span id="schema-search-message" class="text-sm text-red-400 hidden" role="status"></span>
     </div>
   `;
   
@@ -276,15 +335,241 @@ export async function displaySchema(container, models, facilityURN) {
     exportBtn.addEventListener('click', () => exportSchemaToExcel(models, schemaCache, facilityURN));
   }
 
-  // Render initial tables (unsorted)
+  // Schema search: find all matches across models, open results in a new tab grouped by model
+  const searchInput = document.getElementById('schema-search-input');
+  const searchBtn = document.getElementById('schema-search-btn');
+  const searchMessage = document.getElementById('schema-search-message');
+  if (searchInput && searchBtn && searchMessage) {
+    const runSearch = () => {
+      const q = (searchInput.value || '').trim().toLowerCase();
+      searchMessage.classList.add('hidden');
+      searchMessage.textContent = '';
+      if (!q) return;
+
+      const resultsByModel = [];
+      for (const model of models) {
+        const schema = schemaCache[model.modelId];
+        if (!schema?.attributes?.length) continue;
+        const matches = schema.attributes.filter(
+          (attr) =>
+            (attr.id && attr.id.toLowerCase().includes(q)) ||
+            ((attr.name || '').toString().toLowerCase().includes(q))
+        );
+        if (matches.length === 0) continue;
+        const isDefault = isDefaultModel(facilityURN, model.modelId);
+        const modelName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
+        resultsByModel.push({
+          model,
+          modelName,
+          modelId: model.modelId,
+          matches
+        });
+      }
+
+      if (resultsByModel.length === 0) {
+        searchMessage.textContent = 'No property found';
+        searchMessage.classList.remove('hidden');
+        return;
+      }
+
+      const htmlContent = generateSchemaSearchResultsHTML(q, resultsByModel);
+      const newWindow = window.open('', '_blank');
+      if (!newWindow) {
+        searchMessage.textContent = 'Please allow pop-ups to open search results';
+        searchMessage.classList.remove('hidden');
+        return;
+      }
+      newWindow.document.write(htmlContent);
+      newWindow.document.close();
+    };
+    searchBtn.addEventListener('click', runSearch);
+    searchInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') runSearch();
+    });
+  }
+
+  // Render initial tables (unsorted, collapsed unless state says otherwise)
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
     const schema = schemaCache[model.modelId];
     
     if (schema && schema.attributes && schema.attributes.length > 0) {
-      renderSchemaTable(model.modelId, schema.attributes);
+      const showAll = schemaModelExpandState[model.modelId] ?? false;
+      renderSchemaTable(model.modelId, schema.attributes, 'category', 'asc', showAll);
     }
   }
+}
+
+/**
+ * Generate HTML for schema search results (new tab): matches grouped by model with section headers.
+ * @param {string} query - Search query used
+ * @param {Array<{ model: { modelId: string, label?: string }, modelName: string, matches: Array<{ id: string, category: string, name: string, dataType: number }> }>} resultsByModel - Matches per model
+ * @returns {string} Full HTML document
+ */
+function generateSchemaSearchResultsHTML(query, resultsByModel) {
+  const escape = (s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
+  let sectionsHtml = '';
+  for (const { modelName, modelId, matches } of resultsByModel) {
+    let rowsHtml = '';
+    for (const attr of matches) {
+      const dataTypeName = getDataTypeName(attr.dataType);
+      rowsHtml += `
+        <tr>
+          <td class="cell-id">${escape(attr.id)}</td>
+          <td class="cell-cat">${escape(attr.category)}</td>
+          <td class="cell-name">${escape(attr.name)}</td>
+          <td class="cell-type">${escape(dataTypeName)}</td>
+        </tr>`;
+    }
+    sectionsHtml += `
+      <div class="model-section">
+        <div class="model-header">
+          <div class="model-name">${escape(modelName)}</div>
+          <div class="model-urn">${escape(modelId)}</div>
+          <div class="model-count">${matches.length} match${matches.length !== 1 ? 'es' : ''}</div>
+        </div>
+        <table class="schema-results-table">
+          <colgroup>
+            <col style="width: 20%;">
+            <col style="width: 25%;">
+            <col style="width: 35%;">
+            <col style="width: 20%;">
+          </colgroup>
+          <thead>
+            <tr>
+              <th class="sortable" data-column="id">ID <span class="sort-icon"></span></th>
+              <th class="sortable" data-column="category">Category <span class="sort-icon"></span></th>
+              <th class="sortable" data-column="name">Name <span class="sort-icon"></span></th>
+              <th class="sortable" data-column="dataType">Data Type <span class="sort-icon"></span></th>
+            </tr>
+          </thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+      </div>`;
+  }
+  const totalMatches = resultsByModel.reduce((sum, r) => sum + r.matches.length, 0);
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Schema search: ${escape(query)} - Tandem Stats</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background-color: #1a1a1a;
+      color: #e0e0e0;
+      padding: 20px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; }
+    .page-header {
+      background: #2a2a2a;
+      padding: 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
+      border: 1px solid #404040;
+    }
+    .page-header h1 { font-size: 22px; font-weight: 600; color: #0696D7; margin-bottom: 8px; }
+    .page-header .query { font-family: monospace; color: #a0a0a0; font-size: 14px; }
+    .page-header .total { font-size: 13px; color: #a0a0a0; margin-top: 8px; }
+    .model-section {
+      background: #2a2a2a;
+      border-radius: 8px;
+      border: 1px solid #404040;
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+    .model-header {
+      background: linear-gradient(to right, rgba(67, 56, 202, 0.3), rgba(67, 56, 202, 0.2));
+      padding: 12px 20px;
+      border-bottom: 1px solid #404040;
+    }
+    .model-name { font-size: 16px; font-weight: 600; color: #e0e0e0; }
+    .model-urn { font-size: 12px; font-family: monospace; color: #a0a0a0; margin-top: 4px; }
+    .model-count { font-size: 12px; color: #a0a0a0; margin-top: 4px; }
+    table.schema-results-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    thead { background: #333; }
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: #a0a0a0;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid #404040;
+    }
+    th.sortable { cursor: pointer; user-select: none; }
+    th.sortable:hover { color: #0696D7; }
+    .sort-icon { opacity: 0.4; margin-left: 2px; }
+    th.sorted-asc .sort-icon, th.sorted-desc .sort-icon { opacity: 1; color: #0696D7; }
+    th.sorted-asc .sort-icon::after { content: ' ▲'; }
+    th.sorted-desc .sort-icon::after { content: ' ▼'; }
+    td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #404040; overflow: hidden; text-overflow: ellipsis; }
+    .cell-id { font-family: monospace; color: #a0a0a0; }
+    .cell-type { color: #a0a0a0; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="page-header">
+      <h1>Schema search results</h1>
+      <div class="query">Query: "${escape(query)}"</div>
+      <div class="total">${totalMatches} match${totalMatches !== 1 ? 'es' : ''} across ${resultsByModel.length} model${resultsByModel.length !== 1 ? 's' : ''}</div>
+    </div>
+    ${sectionsHtml}
+  </div>
+  <script>
+    (function() {
+      function compareQualifiedIds(a, b) {
+        var pa = (a || '').split(':');
+        var pb = (b || '').split(':');
+        var fa = (pa[0] || '').toLowerCase();
+        var fb = (pb[0] || '').toLowerCase();
+        var cf = fa.localeCompare(fb);
+        if (cf !== 0) return cf;
+        return (pa[1] || '').toLowerCase().localeCompare((pb[1] || '').toLowerCase());
+      }
+      function getCellText(row, colIndex) {
+        var cell = row.cells[colIndex];
+        return cell ? (cell.textContent || '').trim() : '';
+      }
+      document.querySelectorAll('.schema-results-table').forEach(function(table) {
+        var tbody = table.querySelector('tbody');
+        var headers = table.querySelectorAll('th.sortable');
+        var state = { column: null, direction: 'asc' };
+        headers.forEach(function(th, colIndex) {
+          th.addEventListener('click', function() {
+            var col = th.getAttribute('data-column');
+            if (state.column === col) state.direction = state.direction === 'asc' ? 'desc' : 'asc';
+            else { state.column = col; state.direction = 'asc'; }
+            headers.forEach(function(h) {
+              h.classList.remove('sorted-asc', 'sorted-desc');
+              h.querySelector('.sort-icon').textContent = '';
+            });
+            th.classList.add(state.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+            var rows = Array.from(tbody.querySelectorAll('tr'));
+            var idx = ['id','category','name','dataType'].indexOf(col);
+            if (idx === -1) return;
+            rows.sort(function(ra, rb) {
+              var a = getCellText(ra, idx);
+              var b = getCellText(rb, idx);
+              var cmp = col === 'id' ? compareQualifiedIds(a, b) : a.localeCompare(b, undefined, { sensitivity: 'base' });
+              return state.direction === 'asc' ? cmp : -cmp;
+            });
+            rows.forEach(function(r) { tbody.appendChild(r); });
+          });
+        });
+      });
+    })();
+  </script>
+</body>
+</html>`;
 }
 
 /**

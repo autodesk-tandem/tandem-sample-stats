@@ -34,6 +34,34 @@ export function getDataTypeName(typeCode) {
 }
 
 /**
+ * Parse qualified column ID into family and property (e.g. "n:n" -> { family: "n", property: "n" }).
+ * @param {string} id - Qualified column ID (family:property)
+ * @returns {{ family: string, property: string }}
+ */
+export function parseQualifiedId(id) {
+  const s = (id || '').toString();
+  const colon = s.indexOf(':');
+  if (colon === -1) return { family: '', property: s };
+  return { family: s.slice(0, colon), property: s.slice(colon + 1) };
+}
+
+/**
+ * Compare two qualified column IDs for sorting: first by column family, then by property name.
+ * @param {string} aId - First qualified ID
+ * @param {string} bId - Second qualified ID
+ * @param {boolean} ascending - True for asc, false for desc
+ * @returns {number} Negative if a < b, 0 if equal, positive if a > b
+ */
+export function compareQualifiedColumnIds(aId, bId, ascending) {
+  const aParts = parseQualifiedId(aId);
+  const bParts = parseQualifiedId(bId);
+  const familyCompare = aParts.family.toLowerCase().localeCompare(bParts.family.toLowerCase());
+  if (familyCompare !== 0) return ascending ? familyCompare : -familyCompare;
+  const propCompare = aParts.property.toLowerCase().localeCompare(bParts.property.toLowerCase());
+  return ascending ? propCompare : -propCompare;
+}
+
+/**
  * Create a map of stream data indexed by short keys
  * The API returns data with long keys, but we need to map them back to short keys
  * Uses toShortKey from keys.js for consistency
