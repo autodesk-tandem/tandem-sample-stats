@@ -801,6 +801,20 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return categories[categoryId] || "Category " + categoryId;
     }
     
+    // Qualified column ID sort (family then property) - used by properties table in this window
+    function compareQualifiedColumnIds(aId, bId, ascending) {
+      const aParts = (aId || '').toString().split(':');
+      const bParts = (bId || '').toString().split(':');
+      const aFamily = (aParts[0] || '').toLowerCase();
+      const bFamily = (bParts[0] || '').toLowerCase();
+      const familyCompare = aFamily.localeCompare(bFamily);
+      if (familyCompare !== 0) return ascending ? familyCompare : -familyCompare;
+      const aProp = (aParts[1] != null ? aParts[1] : (aId || '')).toString().toLowerCase();
+      const bProp = (bParts[1] != null ? bParts[1] : (bId || '')).toString().toLowerCase();
+      const propCompare = aProp.localeCompare(bProp);
+      return ascending ? propCompare : -propCompare;
+    }
+    
     async function toggleElementDetails(modelURN, elementKey, button, detailsDiv) {
       if (detailsDiv.classList.contains('visible')) {
         // Collapse
