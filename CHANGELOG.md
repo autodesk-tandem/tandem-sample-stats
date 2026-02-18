@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+- **Schema card – Property search**: Find properties by ID or name across all models
+  - "Find property" input and Find button in Schema card header (Enter or click)
+  - Results open in a new tab with all matches grouped by model
+  - Each model section shows ID, Category, Name, Data Type with fixed column alignment
+  - Sortable columns in the search results tab (ID sorts by family then property)
+  - No-match message when nothing matches
+
+- **Schema card – Expand/collapse**: Easier navigation when viewing many attributes
+  - Per-model expand state: "Show all" and "Show first 20 only" per table
+  - Double-click anywhere in an expanded table to collapse back to first 20
+  - State preserved when sorting; reset when switching facility or reloading the card
+
+- **Consistent ID column sorting**: Qualified column IDs (e.g. `n:n`, `z:LQ`) now sort by column family then property name everywhere
+  - Schema card table, Tagged Assets table, and Asset Details properties table use shared `compareQualifiedColumnIds` from `utils.js`
+  - Schema search results tab and Asset Details drill-down page include the same logic for sortable ID columns
+
 - **Facility Access History**: View audit trail of permission changes for facilities
   - "Access History" button in Facility Information card
   - Shows who was granted/revoked access and when
@@ -28,8 +44,12 @@ All notable changes to this project will be documented in this file.
   - See `FEATURE_USER_RESOURCES.md` for detailed documentation
 
 ### Changed
+- **Schema card**: ID column now sorts by column family then property name (was raw string sort)
 - Updated `README.md` to include new Global Resources View feature
 - Enhanced Facility Information card with drill-down button
+
+### Fixed
+- **Asset Details drill-down**: Sorting by ID in the properties table now works (comparison function was missing in the generated page)
 
 ### Technical Details
 - Integrated with new Tandem API endpoints:
