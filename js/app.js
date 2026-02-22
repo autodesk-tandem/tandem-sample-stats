@@ -31,6 +31,8 @@ import { displayDiagnostics } from './features/diagnostics.js';
 import { displaySearch } from './features/search.js';
 import { viewUserResources } from './features/userResources.js';
 import { viewFacilityHistory } from './features/facilityHistory.js';
+import { viewFacilityUsers } from './features/facilityUsers.js';
+import { viewFacilityViews } from './features/facilityViews.js';
 import { RegionLabelMap, SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
@@ -46,6 +48,8 @@ const loadingOverlay = document.getElementById('loadingOverlay');
 const facilityInfo = document.getElementById('facilityInfo');
 const viewUserResourcesBtn = document.getElementById('viewUserResourcesBtn');
 const viewFacilityHistoryBtn = document.getElementById('viewFacilityHistoryBtn');
+const viewFacilityUsersBtn = document.getElementById('viewFacilityUsersBtn');
+const viewFacilityViewsBtn = document.getElementById('viewFacilityViewsBtn');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
 const ticketsList = document.getElementById('ticketsList');
@@ -491,6 +495,8 @@ async function loadFacility(facilityURN) {
   // Hide the buttons initially while loading
   viewUserResourcesBtn.classList.add('hidden');
   viewFacilityHistoryBtn.classList.add('hidden');
+  viewFacilityUsersBtn.classList.add('hidden');
+  viewFacilityViewsBtn.classList.add('hidden');
   
   toggleLoading(true);
   
@@ -576,9 +582,13 @@ async function loadFacility(facilityURN) {
       // Show the buttons
       viewUserResourcesBtn.classList.remove('hidden');
       viewFacilityHistoryBtn.classList.remove('hidden');
-      
-      // Set up facility history button handler with current facility info
+      viewFacilityUsersBtn.classList.remove('hidden');
+      viewFacilityViewsBtn.classList.remove('hidden');
+
+      // Set up per-facility button handlers (need facilityURN, region, and name)
       viewFacilityHistoryBtn.onclick = () => viewFacilityHistory(facilityURN, region, buildingName);
+      viewFacilityUsersBtn.onclick = () => viewFacilityUsers(facilityURN, region, buildingName);
+      viewFacilityViewsBtn.onclick = () => viewFacilityViews(facilityURN, region, buildingName);
       
       // Check schema version - API only supports version 2
       if (schemaVersion < SchemaVersion) {
@@ -628,6 +638,8 @@ async function loadFacility(facilityURN) {
     // Keep buttons hidden on error
     viewUserResourcesBtn.classList.add('hidden');
     viewFacilityHistoryBtn.classList.add('hidden');
+    viewFacilityUsersBtn.classList.add('hidden');
+    viewFacilityViewsBtn.classList.add('hidden');
   } finally {
     toggleLoading(false);
   }
@@ -710,9 +722,8 @@ async function initialize() {
   loginBtn.addEventListener('click', login);
   logoutBtn.addEventListener('click', logout);
   viewUserResourcesBtn.addEventListener('click', viewUserResources);
-  
-  // Facility history button - handler set dynamically when facility loads
-  // (needs facility URN and name)
+  // History, Users, and Views button handlers are set dynamically in loadFacility
+  // because they need the current facilityURN, region, and facility name.
 
   accountSelect.addEventListener('change', async (e) => {
     const accountName = e.target.value;

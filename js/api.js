@@ -1214,8 +1214,22 @@ export async function getSystems(facilityURN, region, models) {
 }
 
 /**
- * Get count of tagged assets (elements with user-defined properties) from all models in a facility
- * Tagged assets are elements that have at least one property in the 'z' (DtProperties) family
+ * Returns true when an element type is eligible to be a tagged asset.
+ * Physical elements (flags 0x00–0x04) and GenericAsset (0x01000005) are eligible.
+ * Rooms, Levels, Streams, Tickets, Systems, etc. are not.
+ * @param {number|undefined} flags - Element flags value from QC.ElementFlags
+ * @returns {boolean}
+ */
+function isAssetCandidate(flags) {
+  if (flags === undefined || flags === null) return false;
+  return flags <= 0x00000004 || flags === ElementFlags.GenericAsset;
+}
+
+/**
+ * Get count of tagged assets from all models in a facility.
+ * An element is a tagged asset when the n:ia (IsAsset) field is present and truthy.
+ * For older elements that predate this field, the fallback is: eligible element type
+ * AND has at least one z: (user-defined) property.
  * @param {string} facilityURN - Facility URN
  * @returns {Promise<number>} Count of tagged assets
  */
@@ -1266,33 +1280,42 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
       const elements = await response.json();
       const modelKeys = [];
       
-      // Process each element - ONLY count elements with IsAsset flag
+      // Determine which elements are tagged assets using the same two-method logic as the server.
       elements.forEach(element => {
-        // Check for explicit IsAsset flag (new correct method)
-        const isAsset = element[QC.IsAsset];
-        if (!isAsset) {
-          return; // Skip elements that aren't flagged as assets
+        const isAssetFlag = element[QC.IsAsset];
+        const hasIsAssetField = isAssetFlag !== undefined && isAssetFlag !== null;
+        let isTaggedAsset;
+
+        if (hasIsAssetField) {
+          // n:ia present: its value is the authoritative answer. The field is set automatically
+          // when a z: property is first written and persists even if those properties are later removed.
+          isTaggedAsset = !!isAssetFlag;
+        } else {
+          // n:ia absent (older elements): fall back to eligible element type AND has z: properties.
+          const flags = element[QC.ElementFlags];
+          const hasZProps = Object.keys(element).some(k => k.startsWith(`${ColumnFamilies.DtProperties}:`));
+          isTaggedAsset = isAssetCandidate(flags) && hasZProps;
         }
-        
-        const keys = Object.keys(element);
-        const zProperties = keys.filter(key => key.startsWith(`${ColumnFamilies.DtProperties}:`));
-        
-        if (zProperties.length > 0) {
-          totalTaggedAssets++;
-          
-          // Collect element key if requested
-          if (includeKeys && element[QC.Key]) {
-            modelKeys.push(element[QC.Key]);
+
+        if (!isTaggedAsset) return;
+
+        totalTaggedAssets++;
+
+        // Collect element key if requested
+        if (includeKeys && element[QC.Key]) {
+          modelKeys.push(element[QC.Key]);
+        }
+
+        // Track z: property usage for the property breakdown table.
+        // Separate from asset counting — an asset may have no z: props if they were cleared
+        // after the n:ia flag was set.
+        const zProperties = Object.keys(element).filter(key => key.startsWith(`${ColumnFamilies.DtProperties}:`));
+        zProperties.forEach(prop => {
+          if (!propertyUsage[prop]) {
+            propertyUsage[prop] = 0;
           }
-          
-          // Count usage of each z: property
-          zProperties.forEach(prop => {
-            if (!propertyUsage[prop]) {
-              propertyUsage[prop] = 0;
-            }
-            propertyUsage[prop]++;
-          });
-        }
+          propertyUsage[prop]++;
+        });
       });
       
       // Add model to results if it has tagged assets
@@ -1537,6 +1560,50 @@ export async function getGroupHistory(groupURN, options = {}) {
  * @param {string} region - Region identifier
  * @returns {Promise<Object|null>} Model properties object or null if error
  */
+/**
+ * Get the list of users who have access to a facility.
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @returns {Promise<Object>} Dictionary of userId -> { name, email, accessLevel }
+ */
+export async function getFacilityUsers(facilityURN, region) {
+  try {
+    const requestPath = `${tandemBaseURL}/twins/${facilityURN}/users`;
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch facility users: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching facility users:', error);
+    return {};
+  }
+}
+
+/**
+ * Get the saved views for a facility.
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @returns {Promise<Array>} Array of view objects with viewName, id, etc.
+ */
+export async function getFacilityViews(facilityURN, region) {
+  try {
+    const requestPath = `${tandemBaseURL}/twins/${facilityURN}/views`;
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch facility views: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching facility views:', error);
+    return [];
+  }
+}
+
 export async function getModelProperties(modelURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/models/${modelURN}/props`;
