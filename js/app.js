@@ -8,6 +8,7 @@ import {
   cleanupThumbnailURLs,
   getModels,
   getStreams,
+  getTickets,
   getSystems,
   getLevels,
   getRooms,
@@ -22,6 +23,7 @@ import { displayLevels } from './features/levels.js';
 import { displayRooms } from './features/rooms.js';
 import { displayDocuments } from './features/documents.js';
 import { displayStreams } from './features/streams.js';
+import { displayTickets } from './features/tickets.js';
 import { displaySystems } from './features/systems.js';
 import { displaySchema } from './features/schema.js';
 import { displayTaggedAssets } from './features/taggedAssets.js';
@@ -46,6 +48,7 @@ const viewUserResourcesBtn = document.getElementById('viewUserResourcesBtn');
 const viewFacilityHistoryBtn = document.getElementById('viewFacilityHistoryBtn');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
+const ticketsList = document.getElementById('ticketsList');
 const searchContainer = document.getElementById('searchContainer');
 const systemsList = document.getElementById('systemsList');
 const levelsList = document.getElementById('levelsList');
@@ -665,6 +668,10 @@ async function loadStats(facilityURN, region) {
     
     const streams = hasDefaultModel ? await getStreams(facilityURN, region) : [];
     await displayStreams(streamsList, streams, facilityURN, region);
+    
+    // Get and display tickets (only if default model exists)
+    const tickets = hasDefaultModel ? await getTickets(facilityURN, region) : [];
+    await displayTickets(ticketsList, tickets, facilityURN, region);
     
     // Display search interface
     await displaySearch(searchContainer, facilityURN, region, models);

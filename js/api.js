@@ -666,6 +666,108 @@ export async function getStreams(facilityURN, region) {
 }
 
 /**
+ * Get all stream configurations for the default model
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @returns {Promise<Array>} Array of stream configuration objects
+ */
+export async function getStreamConfigs(facilityURN, region) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    const requestPath = `${tandemBaseURL}/models/${defaultModelURN}/stream-configs`;
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
+    
+    if (!response.ok) {
+      if (response.status === 403 || response.status === 404) {
+        console.log('Stream configurations not available');
+        return [];
+      }
+      throw new Error(`Failed to fetch stream configurations: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching stream configurations:', error);
+    return [];
+  }
+}
+
+/**
+ * Get tickets from the default model
+ * Tickets only exist in the default model
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @returns {Promise<Array>} Array of ticket objects
+ */
+export async function getTickets(facilityURN, region) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    
+    const payload = JSON.stringify({
+      families: [
+        ColumnFamilies.Standard,
+        ColumnFamilies.Refs,
+        ColumnFamilies.Xrefs
+      ],
+      includeHistory: false,
+      skipArrays: true
+    });
+    
+    const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+    
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.log('No default model found - tickets not available');
+        return [];
+      }
+      throw new Error(`Failed to fetch tickets: ${response.statusText}`);
+    }
+    
+    const data = await response.json();
+    
+    // Filter for elements that are tickets (ElementFlags.Ticket)
+    const tickets = data.filter(row => {
+      const flags = row[QC.ElementFlags];
+      return flags && flags[0] === ElementFlags.Ticket;
+    });
+    
+    return tickets;
+  } catch (error) {
+    console.error('Error fetching tickets:', error);
+    return [];
+  }
+}
+
+/**
+ * Get a single stream configuration
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @param {string} streamKey - Stream key
+ * @returns {Promise<Object|null>} Stream configuration object or null
+ */
+export async function getStreamConfig(facilityURN, region, streamKey) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+    const requestPath = `${tandemBaseURL}/models/${defaultModelURN}/stream-configs/${streamKey}`;
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
+    
+    if (!response.ok) {
+      if (response.status === 404) {
+        console.log(`Stream configuration not found for ${streamKey}`);
+        return null;
+      }
+      throw new Error(`Failed to fetch stream configuration: ${response.statusText}`);
+    }
+    
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching stream configuration:', error);
+    return null;
+  }
+}
+
+/**
  * Get element details by keys
  * @param {string} modelURN - Model URN
  * @param {string} region - Region identifier
@@ -1142,9 +1244,13 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
     const elementsByModel = []; // Array of {modelURN, modelName, keys}
     
     for (const model of models) {
-      // Scan for elements with user-defined properties (z family = DtProperties)
+      // Scan for elements with Standard and DtProperties families
+      // IMPORTANT: Must include Standard family to get IsAsset flag
       const payload = JSON.stringify({
-        families: ['z'], // DtProperties column family
+        families: [
+          ColumnFamilies.Standard,  // Need this for IsAsset flag
+          ColumnFamilies.DtProperties
+        ],
         includeHistory: false,
         skipArrays: true
       });
@@ -1160,8 +1266,14 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
       const elements = await response.json();
       const modelKeys = [];
       
-      // Process each element
+      // Process each element - ONLY count elements with IsAsset flag
       elements.forEach(element => {
+        // Check for explicit IsAsset flag (new correct method)
+        const isAsset = element[QC.IsAsset];
+        if (!isAsset) {
+          return; // Skip elements that aren't flagged as assets
+        }
+        
         const keys = Object.keys(element);
         const zProperties = keys.filter(key => key.startsWith(`${ColumnFamilies.DtProperties}:`));
         

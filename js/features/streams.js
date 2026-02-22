@@ -1,7 +1,8 @@
-import { getLastSeenStreamValues, getStreamValues, getElementsByKeys } from '../api.js';
+import { getLastSeenStreamValues, getStreamValues, getElementsByKeys, getStreamConfigs } from '../api.js';
 import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
+import { showStreamConfigModal } from '../components/streamConfigModal.js';
 import { viewAssetDetails } from './assetDetails.js';
 import { QC } from '../../tandem/constants.js';
 import { decodeXref, toShortKey } from '../../tandem/keys.js';
@@ -15,6 +16,64 @@ const CATEGORY_NAMES = {
   240: 'Level',
   // Add more as needed
 };
+
+/**
+ * Render configuration badges for a stream
+ * @param {Object} streamConfig - Stream configuration object
+ * @returns {string} HTML for configuration badges
+ */
+function renderConfigBadges(streamConfig) {
+  if (!streamConfig || !streamConfig.streamSettings) return '';
+  
+  const badges = [];
+  const settings = streamConfig.streamSettings;
+  
+  // Frequency badge
+  if (settings.frequency) {
+    const freqMin = settings.frequency / 60000;
+    let freqLabel;
+    if (freqMin < 60) {
+      freqLabel = `${freqMin}m`;
+    } else if (freqMin < 1440) {
+      freqLabel = `${freqMin / 60}h`;
+    } else {
+      freqLabel = `${freqMin / 1440}d`;
+    }
+    badges.push(`
+      <span class="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded font-medium" 
+            title="Sampling frequency: ${freqLabel}">
+        ${freqLabel}
+      </span>
+    `);
+  }
+  
+  // Threshold badge
+  const thresholdCount = Object.keys(settings.thresholds || {}).length;
+  if (thresholdCount > 0) {
+    badges.push(`
+      <span class="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-300 rounded flex items-center gap-1 font-medium" 
+            title="${thresholdCount} threshold(s) configured">
+        <svg class="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+          <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
+        </svg>
+        ${thresholdCount}
+      </span>
+    `);
+  }
+  
+  // Calculated badge
+  const calcCount = Object.keys(settings.calculationSettings || {}).length;
+  if (calcCount > 0) {
+    badges.push(`
+      <span class="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 rounded font-medium" 
+            title="Calculated stream">
+        ƒ
+      </span>
+    `);
+  }
+  
+  return badges.join(' ');
+}
 
 /**
  * Toggle streams detail view
@@ -619,6 +678,18 @@ export async function displayStreams(container, streams, facilityURN, region) {
   
   // Convert long keys to short keys so we can match them with our stream objects
   const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
+  
+  // Fetch stream configurations
+  const streamConfigs = await getStreamConfigs(facilityURN, region);
+  
+  // Create a map of stream key to config for quick lookup
+  // IMPORTANT: Config API returns long keys, but we need to match against short keys
+  const configMap = new Map();
+  for (const config of streamConfigs) {
+    // Convert long key to short key for matching
+    const shortKey = toShortKey(config.elementId);
+    configMap.set(shortKey, config);
+  }
 
   // Decode xrefs and fetch host information
   const hostInfoMap = new Map(); // Map xref -> {name, type}
@@ -690,6 +761,10 @@ export async function displayStreams(container, streams, facilityURN, region) {
     const hostRef = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
     const hostInfo = hostRef ? hostInfoMap.get(hostRef) : null;
     
+    // Get configuration for this stream
+    const streamConfig = configMap.get(streamKey);
+    const configBadges = renderConfigBadges(streamConfig);
+    
     // Get last seen values for this stream
     const streamValues = lastSeenValues[streamKey];
     let valuesHtml = '';
@@ -726,23 +801,39 @@ export async function displayStreams(container, streams, facilityURN, region) {
       <div class="border border-dark-border rounded p-4 hover:border-tandem-blue transition">
         <div class="flex items-center justify-between">
           <div class="flex-grow">
-            <div class="flex items-center gap-2 mb-1">
+            <div class="flex items-center gap-2 mb-1 flex-wrap">
               <h3 class="font-semibold text-dark-text">${streamName}</h3>
               ${classification ? `<span class="px-2 py-0.5 text-xs font-medium bg-gradient-to-r from-green-500/30 to-green-600/30 text-green-300 rounded">${classification}</span>` : ''}
+              ${configBadges}
             </div>
             ${hostInfo ? `<p class="text-xs text-dark-text-secondary mt-1">Host: ${hostInfo.name} (${hostInfo.type})</p>` : ''}
             <p class="text-xs text-dark-text-secondary mt-1">Key: <span class="font-mono">${streamKey}</span></p>
           </div>
-          <button 
-            class="view-stream-chart-btn flex-shrink-0 inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
-            data-stream-key="${streamKey}"
-            data-stream-name="${streamName}"
-            title="View 30-day chart">
-            <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
-            </svg>
-            View Chart
-          </button>
+          <div class="flex-shrink-0 flex items-center gap-2">
+            ${streamConfig ? `
+              <button 
+                class="view-stream-config-btn inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+                data-stream-key="${streamKey}"
+                data-stream-name="${streamName}"
+                title="View configuration">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"></path>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                </svg>
+                Config
+              </button>
+            ` : ''}
+            <button 
+              class="view-stream-chart-btn inline-flex items-center px-3 py-2 border border-tandem-blue text-xs font-medium rounded text-tandem-blue hover:bg-tandem-blue hover:text-white transition"
+              data-stream-key="${streamKey}"
+              data-stream-name="${streamName}"
+              title="View 30-day chart">
+              <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+              </svg>
+              View Chart
+            </button>
+          </div>
         </div>
         ${valuesHtml}
       </div>
@@ -790,6 +881,19 @@ export async function displayStreams(container, streams, facilityURN, region) {
       const streamKey = button.dataset.streamKey;
       const streamName = button.dataset.streamName;
       viewStreamChart(facilityURN, region, streamKey, streamName, button);
+    });
+  });
+  
+  // Bind view config button event listeners
+  const configButtons = container.querySelectorAll('.view-stream-config-btn');
+  configButtons.forEach(button => {
+    button.addEventListener('click', () => {
+      const streamKey = button.dataset.streamKey;
+      const streamName = button.dataset.streamName;
+      const config = configMap.get(streamKey);
+      if (config) {
+        showStreamConfigModal(streamName, streamKey, config, defaultModelURN);
+      }
     });
   });
 }
