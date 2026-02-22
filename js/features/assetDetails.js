@@ -292,6 +292,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       display: block;
     }
     .properties-table {
+      table-layout: fixed;
       width: 100%;
       border-collapse: collapse;
       font-size: 13px;
@@ -350,6 +351,35 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       text-align: center;
       color: #ff6b6b;
     }
+    .props-section {
+      margin-bottom: 4px;
+    }
+    .props-section-type {
+      margin-top: 16px;
+    }
+    .props-section-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #0696D7;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      padding: 6px 12px 6px 12px;
+      background: rgba(6, 150, 215, 0.08);
+      border-bottom: 1px solid rgba(6, 150, 215, 0.3);
+    }
+    .props-section-type .props-section-label {
+      color: #a78bfa;
+      background: rgba(167, 139, 250, 0.08);
+      border-bottom-color: rgba(167, 139, 250, 0.25);
+    }
+    .properties-table th:nth-child(1),
+    .properties-table td:nth-child(1) { width: 11%; }
+    .properties-table th:nth-child(2),
+    .properties-table td:nth-child(2) { width: 22%; }
+    .properties-table th:nth-child(3),
+    .properties-table td:nth-child(3) { width: 27%; }
+    .properties-table th:nth-child(4),
+    .properties-table td:nth-child(4) { width: 40%; }
     /* Modal styles */
     .keys-modal {
       display: none;
@@ -563,7 +593,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     
     async function fetchElementDetails(modelURN, elementKeys) {
       const payload = JSON.stringify({
-        families: ['n', 'r', 'z'],
+        families: ['n', 'l', 'r', 'z'],
         keys: elementKeys,
         includeHistory: false
       });
@@ -801,7 +831,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return categories[categoryId] || "Category " + categoryId;
     }
     
-    // Qualified column ID sort (family then property) - used by properties table in this window
+    // Qualified column ID sort (family then property) - runs in the detached window, cannot use ES module imports
     function compareQualifiedColumnIds(aId, bId, ascending) {
       const aParts = (aId || '').toString().split(':');
       const bParts = (bId || '').toString().split(':');
@@ -814,27 +844,124 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       const propCompare = aProp.localeCompare(bProp);
       return ascending ? propCompare : -propCompare;
     }
-    
+
+    // Build a sortable properties table HTML string from an array of property objects
+    function buildPropertiesTable(properties) {
+      let html = '<table class="properties-table">';
+      html += '<thead><tr>';
+      html += '<th data-sort="id">ID</th>';
+      html += '<th data-sort="category" class="sorted">Category</th>';
+      html += '<th data-sort="name">Property Name</th>';
+      html += '<th data-sort="value">Value</th>';
+      html += '</tr></thead>';
+      html += '<tbody class="properties-tbody">';
+
+      properties.forEach(prop => {
+        const idEscaped = escapeHtml(prop.id);
+        const categoryEscaped = escapeHtml(prop.category);
+        const nameEscaped = escapeHtml(prop.name);
+        const valueEscaped = escapeHtml(prop.value);
+
+        html += '<tr data-id="' + prop.id.replace(/"/g, '&quot;') + '" data-category="' + prop.category.replace(/"/g, '&quot;') + '" data-name="' + prop.name.replace(/"/g, '&quot;') + '" data-value="' + prop.value.replace(/"/g, '&quot;') + '">';
+        html += '<td class="property-id">' + idEscaped + '</td>';
+        html += '<td class="property-category">' + categoryEscaped + '</td>';
+        html += '<td class="property-name">' + nameEscaped + '</td>';
+        html += '<td class="property-value">' + valueEscaped + '</td>';
+        html += '</tr>';
+      });
+
+      html += '</tbody></table>';
+      return html;
+    }
+
+    // Attach column-header click sorting to a .properties-table element
+    function attachTableSorting(table) {
+      const headers = table.querySelectorAll('th[data-sort]');
+      const tbody = table.querySelector('.properties-tbody');
+      let currentSort = { column: 'category', direction: 'asc' };
+
+      headers.forEach(header => {
+        header.addEventListener('click', () => {
+          const sortBy = header.getAttribute('data-sort');
+          const rows = Array.from(tbody.querySelectorAll('tr'));
+
+          if (currentSort.column === sortBy) {
+            currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+          } else {
+            currentSort.column = sortBy;
+            currentSort.direction = 'asc';
+          }
+
+          headers.forEach(h => h.classList.remove('sorted', 'sorted-desc'));
+          header.classList.add(currentSort.direction === 'asc' ? 'sorted' : 'sorted-desc');
+
+          rows.sort((a, b) => {
+            let aVal = a.getAttribute('data-' + sortBy) || '';
+            let bVal = b.getAttribute('data-' + sortBy) || '';
+
+            if (sortBy === 'id') {
+              return compareQualifiedColumnIds(aVal, bVal, currentSort.direction === 'asc');
+            }
+
+            const comparison = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
+            if (sortBy === 'category' && comparison === 0) {
+              const aName = a.getAttribute('data-name') || '';
+              const bName = b.getAttribute('data-name') || '';
+              const nameComparison = aName.toLowerCase().localeCompare(bName.toLowerCase());
+              return currentSort.direction === 'asc' ? nameComparison : -nameComparison;
+            }
+            return currentSort.direction === 'asc' ? comparison : -comparison;
+          });
+
+          rows.forEach(row => tbody.appendChild(row));
+        });
+      });
+    }
+
+    // Fetch type/family element properties by type key (l:t value)
+    async function fetchTypeProperties(modelURN, typeKey) {
+      const payload = JSON.stringify({
+        families: ['n', 'r'],
+        keys: [typeKey],
+        includeHistory: false
+      });
+
+      const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + TOKEN,
+          'Content-Type': 'application/json',
+          'Region': REGION
+        },
+        body: payload
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch type properties: ' + response.statusText);
+      }
+
+      const data = await response.json();
+      return data.filter(item => typeof item === 'object' && item !== null && item['k']);
+    }
+
+
     async function toggleElementDetails(modelURN, elementKey, button, detailsDiv) {
       if (detailsDiv.classList.contains('visible')) {
-        // Collapse
         detailsDiv.classList.remove('visible');
         button.textContent = 'Show Details';
         return;
       }
-      
-      // Check if already loaded
+
       if (loadedDetails.has(elementKey)) {
         detailsDiv.classList.add('visible');
         button.textContent = 'Hide Details';
         return;
       }
-      
-      // Load details
+
       button.textContent = 'Loading...';
       button.classList.add('loading');
       button.disabled = true;
-      
+
       try {
         const elements = await fetchElementDetails(modelURN, [elementKey]);
         if (elements.length === 0) {
@@ -843,104 +970,61 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           loadedDetails.set(elementKey, true);
           return;
         }
-        
+
         const element = elements[0];
         const properties = organizeProperties(element, modelURN);
-        
-        // Sort properties by Category first, then by Property Name (default sort)
+
         properties.sort((a, b) => {
-          // First sort by category
-          const categoryComparison = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
-          if (categoryComparison !== 0) return categoryComparison;
-          
-          // Then sort by property name within the same category
+          const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+          if (cc !== 0) return cc;
           return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
         });
-        
-        // Create sortable table
-        let html = '<table class="properties-table">';
-        html += '<thead><tr>';
-        html += '<th data-sort="id">ID</th>';
-        html += '<th data-sort="category" class="sorted">Category</th>';
-        html += '<th data-sort="name">Property Name</th>';
-        html += '<th data-sort="value">Value</th>';
-        html += '</tr></thead>';
-        html += '<tbody class="properties-tbody">';
-        
-        properties.forEach(prop => {
-          // Escape HTML for display (but not for data attributes - they're safe)
-          const idEscaped = escapeHtml(prop.id);
-          const categoryEscaped = escapeHtml(prop.category);
-          const nameEscaped = escapeHtml(prop.name);
-          const valueEscaped = escapeHtml(prop.value);
-          
-          // Use original values for data attributes (not displayed, used for sorting)
-          // Use escaped values for display content
-          html += '<tr data-id="' + prop.id.replace(/"/g, '&quot;') + '" data-category="' + prop.category.replace(/"/g, '&quot;') + '" data-name="' + prop.name.replace(/"/g, '&quot;') + '" data-value="' + prop.value.replace(/"/g, '&quot;') + '">';
-          html += '<td class="property-id">' + idEscaped + '</td>';
-          html += '<td class="property-category">' + categoryEscaped + '</td>';
-          html += '<td class="property-name">' + nameEscaped + '</td>';
-          html += '<td class="property-value">' + valueEscaped + '</td>';
-          html += '</tr>';
-        });
-        
-        html += '</tbody></table>';
-        
-        detailsDiv.innerHTML = html;
-        
-        // Add sorting functionality
-        const headers = detailsDiv.querySelectorAll('th[data-sort]');
-        let currentSort = { column: 'category', direction: 'asc' }; // Start with Category sorted ascending
-        
-        headers.forEach(header => {
-          header.addEventListener('click', () => {
-            const sortBy = header.getAttribute('data-sort');
-            const tbody = detailsDiv.querySelector('.properties-tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
-            
-            // Toggle direction if same column
-            if (currentSort.column === sortBy) {
-              currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
-            } else {
-              currentSort.column = sortBy;
-              currentSort.direction = 'asc';
+
+        // Check for a type reference: l:t (QC.FamilyType = Refs family + 't' column)
+        const typeKey = element['l:t']?.[0];
+        let typeProperties = [];
+        let typeName = null;
+
+        if (typeKey) {
+          try {
+            const typeElements = await fetchTypeProperties(modelURN, typeKey);
+            if (typeElements.length > 0) {
+              const typeElement = typeElements[0];
+              typeName = typeElement['n:n']?.[0] || null;
+              typeProperties = organizeProperties(typeElement, modelURN);
+              typeProperties.sort((a, b) => {
+                const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+                if (cc !== 0) return cc;
+                return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+              });
             }
-            
-            // Update header classes
-            headers.forEach(h => {
-              h.classList.remove('sorted', 'sorted-desc');
-            });
-            header.classList.add(currentSort.direction === 'asc' ? 'sorted' : 'sorted-desc');
-            
-            // Sort rows
-            rows.sort((a, b) => {
-              let aVal = a.getAttribute('data-' + sortBy) || '';
-              let bVal = b.getAttribute('data-' + sortBy) || '';
-              
-              // Special handling for ID column - ignore "!" for grouping overrides
-              if (sortBy === 'id') {
-                // Sort by column family then property name (qualified ID format)
-                return compareQualifiedColumnIds(aVal, bVal, currentSort.direction === 'asc');
-              }
-              
-              // Normal string comparison for other columns
-              const comparison = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
-              
-              // If sorting by category and categories are the same, use property name as secondary sort
-              if (sortBy === 'category' && comparison === 0) {
-                const aName = a.getAttribute('data-name') || '';
-                const bName = b.getAttribute('data-name') || '';
-                const nameComparison = aName.toLowerCase().localeCompare(bName.toLowerCase());
-                return currentSort.direction === 'asc' ? nameComparison : -nameComparison;
-              }
-              
-              return currentSort.direction === 'asc' ? comparison : -comparison;
-            });
-            
-            // Re-append rows
-            rows.forEach(row => tbody.appendChild(row));
-          });
+          } catch (typeError) {
+            console.warn('Could not fetch type properties:', typeError);
+          }
+        }
+
+        // Render Element Properties section
+        let html = '<div class="props-section">';
+        html += '<div class="props-section-label">Element Properties</div>';
+        html += buildPropertiesTable(properties);
+        html += '</div>';
+
+        // Render Type Properties section (only when a type element was found)
+        if (typeProperties.length > 0) {
+          const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
+          html += '<div class="props-section props-section-type">';
+          html += '<div class="props-section-label">' + typeLabel + '</div>';
+          html += buildPropertiesTable(typeProperties);
+          html += '</div>';
+        }
+
+        detailsDiv.innerHTML = html;
+
+        // Wire up sorting for every table rendered
+        detailsDiv.querySelectorAll('.properties-table').forEach(table => {
+          attachTableSorting(table);
         });
+
         detailsDiv.classList.add('visible');
         loadedDetails.set(elementKey, true);
       } catch (error) {
