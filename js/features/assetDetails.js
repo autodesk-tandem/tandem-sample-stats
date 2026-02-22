@@ -1,7 +1,7 @@
 import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
 import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';
-import { getCategoryName } from '../utils.js';
+import { getCategoryName, compareQualifiedColumnIds } from '../utils.js';
 import { makeXrefKey, toFullKey } from '../../tandem/keys.js';
 
 /**
@@ -831,6 +831,20 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return categories[categoryId] || "Category " + categoryId;
     }
     
+    // Qualified column ID sort (family then property) - runs in the detached window, cannot use ES module imports
+    function compareQualifiedColumnIds(aId, bId, ascending) {
+      const aParts = (aId || '').toString().split(':');
+      const bParts = (bId || '').toString().split(':');
+      const aFamily = (aParts[0] || '').toLowerCase();
+      const bFamily = (bParts[0] || '').toLowerCase();
+      const familyCompare = aFamily.localeCompare(bFamily);
+      if (familyCompare !== 0) return ascending ? familyCompare : -familyCompare;
+      const aProp = (aParts[1] != null ? aParts[1] : (aId || '')).toString().toLowerCase();
+      const bProp = (bParts[1] != null ? bParts[1] : (bId || '')).toString().toLowerCase();
+      const propCompare = aProp.localeCompare(bProp);
+      return ascending ? propCompare : -propCompare;
+    }
+
     // Build a sortable properties table HTML string from an array of property objects
     function buildPropertiesTable(properties) {
       let html = '<table class="properties-table">';
@@ -886,15 +900,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
             let bVal = b.getAttribute('data-' + sortBy) || '';
 
             if (sortBy === 'id') {
-              const aClean = aVal.replace(/:/g, '').replace(/!/g, '');
-              const bClean = bVal.replace(/:/g, '').replace(/!/g, '');
-              const cleanComparison = aClean.toLowerCase().localeCompare(bClean.toLowerCase());
-              if (cleanComparison !== 0) return currentSort.direction === 'asc' ? cleanComparison : -cleanComparison;
-              const aHasBang = aVal.includes('!');
-              const bHasBang = bVal.includes('!');
-              if (aHasBang && !bHasBang) return currentSort.direction === 'asc' ? 1 : -1;
-              if (!aHasBang && bHasBang) return currentSort.direction === 'asc' ? -1 : 1;
-              return 0;
+              return compareQualifiedColumnIds(aVal, bVal, currentSort.direction === 'asc');
             }
 
             const comparison = aVal.toLowerCase().localeCompare(bVal.toLowerCase());
@@ -937,6 +943,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       const data = await response.json();
       return data.filter(item => typeof item === 'object' && item !== null && item['k']);
     }
+
 
     async function toggleElementDetails(modelURN, elementKey, button, detailsDiv) {
       if (detailsDiv.classList.contains('visible')) {
