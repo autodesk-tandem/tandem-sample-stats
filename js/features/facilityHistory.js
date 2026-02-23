@@ -167,26 +167,34 @@ function buildHistoryHTML(history) {
   // Process history records into display-friendly format
   const processedHistory = sortedHistory.map(record => {
     const timestamp = record[HC.Timestamp];
-    const username = record[HC.Username] || 'Unknown';
+    const rawUsername = record[HC.Username] || '';
+    const clientId = record[HC.ClientID] || '';
     const operation = record[HC.Operation] || 'unknown';
+    const description = record[HC.Description] || '';
     const detailsStr = record.details || '{}';
-    
+
     let details = {};
     try {
       details = JSON.parse(detailsStr);
     } catch (e) {
-      console.warn('Failed to parse details:', detailsStr);
+      // details may already be an object when the server embeds it inline
+      if (record.details && typeof record.details === 'object') {
+        details = record.details;
+      }
     }
-    
+
     return {
       timestamp,
-      username,
+      username: rawUsername,
+      clientId,
       operation,
+      description,
       details,
       date: timestamp ? new Date(timestamp).toLocaleString() : 'Unknown',
+      usernameDisplay: formatUsername(rawUsername, clientId),
       operationDisplay: formatOperation(operation),
       operationColor: getOperationColor(operation),
-      detailsDisplay: formatDetails(details, operation)
+      detailsDisplay: formatDetails(details, description, operation)
     };
   });
   
@@ -248,7 +256,7 @@ function buildHistoryHTML(history) {
     html += `
       <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
         <td class="py-2 px-3 text-dark-text-secondary whitespace-nowrap">${record.date}</td>
-        <td class="py-2 px-3 text-dark-text whitespace-nowrap">${record.username}</td>
+        <td class="py-2 px-3 whitespace-nowrap">${record.usernameDisplay}</td>
         <td class="py-2 px-3 whitespace-nowrap">
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${record.operationColor}">
             ${record.operationDisplay}
@@ -287,78 +295,187 @@ function getUniqueUserCount(history) {
 }
 
 /**
+ * Escape HTML special characters to prevent XSS
+ * @param {string} str - Raw string
+ * @returns {string} Escaped string
+ */
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+/**
+ * Format username for display, substituting "System" for automated entries
+ * @param {string} username - Raw username (may be empty for system operations)
+ * @param {string} clientId - Client ID of the actor
+ * @returns {string} HTML string for the user cell
+ */
+function formatUsername(username, clientId) {
+  if (username) {
+    return `<span class="text-dark-text">${escapeHtml(username)}</span>`;
+  }
+  // Automated server operation — no human actor
+  const tooltip = clientId ? ` title="Client: ${escapeHtml(clientId)}"` : '';
+  return `<span class="italic text-dark-text-secondary/60"${tooltip}>System</span>`;
+}
+
+/**
  * Format operation name for display
- * @param {string} operation - Operation code
- * @returns {string} Formatted operation name
+ * @param {string} operation - Operation code from server
+ * @returns {string} Human-readable operation name
  */
 function formatOperation(operation) {
   const operationNames = {
-    'acl_update_twin': 'Access Updated',
-    'acl_delete_twin': 'Access Removed',
-    'acl_create_twin': 'Access Granted',
-    'create_twin': 'Facility Created',
-    'delete_twin': 'Facility Deleted',
-    'update_twin': 'Facility Updated'
+    // ACL / access control
+    'acl_update_twin':  'Access Updated',
+    'acl_update_group': 'Group Access Updated',
+    'acl_delete_twin':  'Access Removed',
+    'acl_create_twin':  'Access Granted',
+    // Facility lifecycle
+    'create_twin':          'Facility Created',
+    'delete_twin':          'Facility Deleted',
+    'update_twin':          'Facility Updated',
+    'move_twin':            'Facility Moved',
+    'update_twin_settings': 'Settings Updated',
+    'account_merged_in':    'Account Merged',
+    'update_group_twins':   'Account Facilities Updated',
+    // Element data
+    'mutate':                  'Property Changed',
+    'bulk_import':             'Bulk Import',
+    'bulk_update':             'Bulk Update',
+    'bulk_fail':               'Bulk Import Failed',
+    'apply_pset':              'Parameter Set Applied',
+    'delete_pset':             'Parameter Set Deleted',
+    'update_classification':   'Classification Updated',
+    'state_change':            'State Changed',
+    // Templates
+    'apply_template':  'Template Applied',
+    'remove_template': 'Template Removed',
+    // Documents
+    'add_document':    'Document Added',
+    'delete_document': 'Document Deleted',
+    'update_document': 'Document Updated',
+    // Views & systems
+    'update_view':              'View Updated',
+    'update_systems':           'Systems Updated',
+    'update_system_connections':'System Connections Updated',
+    // Streams / IoT
+    'delete_stream_data':   'Stream Data Deleted',
+    'update_iot':           'IoT Updated',
+    'stream_alert':         'Stream Alert',
+    'stream_connectivity':  'Stream Connectivity',
+    // System
+    'metrics_update': 'Metrics Update',
+    'db_maintenance': 'Maintenance',
   };
   return operationNames[operation] || operation;
 }
 
 /**
- * Get color class for operation type
+ * Get badge color class for an operation type
  * @param {string} operation - Operation code
  * @returns {string} Tailwind color classes
  */
 function getOperationColor(operation) {
-  if (operation.includes('create') || operation.includes('grant')) {
-    return 'bg-green-600 text-white';
-  }
-  if (operation.includes('delete') || operation.includes('remove')) {
+  const colorMap = {
+    // Green — creations / additions
+    'acl_create_twin': 'bg-green-600 text-white',
+    'create_twin':     'bg-green-600 text-white',
+    'add_document':    'bg-green-600 text-white',
+    'bulk_import':     'bg-green-700 text-white',
+    'apply_template':  'bg-green-700 text-white',
+    'apply_pset':      'bg-green-700 text-white',
+    // Red — deletions / failures
+    'acl_delete_twin':    'bg-red-600 text-white',
+    'delete_twin':        'bg-red-600 text-white',
+    'delete_document':    'bg-red-600 text-white',
+    'delete_pset':        'bg-red-600 text-white',
+    'delete_stream_data': 'bg-red-600 text-white',
+    'remove_template':    'bg-red-600 text-white',
+    'bulk_fail':          'bg-red-600 text-white',
+    // Purple — account / facility moves
+    'move_twin':            'bg-purple-600 text-white',
+    'update_group_twins':   'bg-purple-600 text-white',
+    'account_merged_in':    'bg-purple-600 text-white',
+    // Gray — automated / system operations
+    'metrics_update':     'bg-gray-500 text-white',
+    'db_maintenance':     'bg-gray-500 text-white',
+    'stream_alert':       'bg-gray-500 text-white',
+    'stream_connectivity':'bg-gray-500 text-white',
+    'update_iot':         'bg-gray-500 text-white',
+  };
+  if (colorMap[operation]) return colorMap[operation];
+  if (operation.includes('delete') || operation.includes('remove') || operation.includes('fail')) {
     return 'bg-red-600 text-white';
   }
-  if (operation.includes('update')) {
+  if (operation.includes('create') || operation.includes('add') || operation.includes('import')) {
+    return 'bg-green-600 text-white';
+  }
+  if (operation.includes('update') || operation.includes('mutate') || operation.includes('apply') || operation.includes('change')) {
     return 'bg-blue-600 text-white';
   }
   return 'bg-gray-600 text-white';
 }
 
 /**
- * Format details object for display
- * @param {Object} details - Details object
+ * Format details for display in the table.
+ * Priority: ACL formatting → move_twin account summary → description text → raw details JSON → dash.
+ * @param {Object} details - Parsed details object (may be empty)
+ * @param {string} description - Change description from the 'd' field
  * @param {string} operation - Operation type
- * @returns {string} Formatted details HTML
+ * @returns {string} HTML string
  */
-function formatDetails(details, operation) {
-  if (!details || Object.keys(details).length === 0) {
-    return '<span class="italic">No details</span>';
-  }
+function formatDetails(details, description, operation) {
+  const hasDetails = details && Object.keys(details).length > 0;
 
-  // For ACL operations, show level and name
+  // ACL operations — show access level and grantee name
   if (operation.includes('acl')) {
     const level = details.level || '';
     const name = details.name || '';
-    
     if (level && name) {
       const levelColorMap = {
-        'Owner': '#fbbf24',
-        'Manage': '#4ade80',
+        'Owner':     '#fbbf24',
+        'Manage':    '#4ade80',
         'ReadWrite': '#c084fc',
-        'Read': '#60a5fa',
-        'None': '#9ca3af'
+        'Read':      '#60a5fa',
+        'None':      '#9ca3af'
       };
       const color = levelColorMap[level] || '#e0e0e0';
-      
-      return `<span style="color: ${color}; font-weight: 500;">${level}</span> → ${name}`;
+      return `<span style="color:${color};font-weight:500">${escapeHtml(level)}</span> → ${escapeHtml(name)}`;
     }
-    if (level) {
-      return `Level: ${level}`;
-    }
-    if (name) {
-      return `User: ${name}`;
+    if (level) return `Level: ${escapeHtml(level)}`;
+    if (name)  return `User: ${escapeHtml(name)}`;
+  }
+
+  // move_twin — extract human-readable from/to account names
+  if (operation === 'move_twin' && hasDetails) {
+    const twinName  = details.twin?.name  || '';
+    const srcName   = details.sourceAccount?.name  || '';
+    const destName  = details.destinationAccount?.name || '';
+    if (srcName && destName) {
+      const label = twinName ? `<span class="text-dark-text font-medium">${escapeHtml(twinName)}</span> ` : '';
+      return `${label}${escapeHtml(srcName)} → ${escapeHtml(destName)}`;
     }
   }
 
-  // For other operations, show JSON
-  return `<code class="text-xs">${JSON.stringify(details)}</code>`;
+  // Description text (the 'd' field) when there are no details to show
+  if (!hasDetails && description) {
+    return `<span>${escapeHtml(description)}</span>`;
+  }
+
+  // Generic details JSON
+  if (hasDetails) {
+    // If description is also present, prepend it
+    const prefix = description
+      ? `<span class="text-dark-text">${escapeHtml(description)}</span> `
+      : '';
+    return `${prefix}<code class="text-xs break-all">${escapeHtml(JSON.stringify(details))}</code>`;
+  }
+
+  return '<span class="text-dark-text-secondary/40">—</span>';
 }
 
 /**
@@ -390,8 +507,8 @@ function setupSorting(newWindow, historyData) {
           bVal = b.timestamp || 0;
           break;
         case 'username':
-          aVal = (a.username || '').toLowerCase();
-          bVal = (b.username || '').toLowerCase();
+          aVal = (a.username || a.clientId || 'zzz').toLowerCase();
+          bVal = (b.username || b.clientId || 'zzz').toLowerCase();
           break;
         case 'operation':
           aVal = (a.operationDisplay || '').toLowerCase();
@@ -410,7 +527,7 @@ function setupSorting(newWindow, historyData) {
     tbody.innerHTML = sorted.map((record, index) => `
       <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
         <td class="py-2 px-3 text-dark-text-secondary whitespace-nowrap">${record.date}</td>
-        <td class="py-2 px-3 text-dark-text whitespace-nowrap">${record.username}</td>
+        <td class="py-2 px-3 whitespace-nowrap">${record.usernameDisplay}</td>
         <td class="py-2 px-3 whitespace-nowrap">
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${record.operationColor}">
             ${record.operationDisplay}

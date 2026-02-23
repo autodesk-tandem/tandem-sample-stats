@@ -1,7 +1,7 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { getTaggedAssetsDetails, getElementsByProperty } from '../api.js';
 import { getSchemaCache } from '../state/schemaCache.js';
-import { compareQualifiedColumnIds } from '../utils.js';
+import { compareQualifiedColumnIds, isDefaultModel } from '../utils.js';
 import { viewAssetDetails } from './assetDetails.js';
 
 /**
@@ -243,7 +243,7 @@ export async function displayTaggedAssets(container, facilityURN, models, region
         <div class="flex items-center space-x-2">
           <div class="text-xl font-bold text-tandem-blue">${details.totalCount.toLocaleString()}</div>
           <div class="text-sm text-dark-text-secondary">
-            <div>Element${details.totalCount !== 1 ? 's' : ''} with user-defined properties</div>
+            <div>Element${details.totalCount !== 1 ? 's' : ''} designated as assets</div>
           </div>
         </div>
         <div class="flex items-center space-x-3">
@@ -278,49 +278,48 @@ export async function displayTaggedAssets(container, facilityURN, models, region
     let detailHtml = '<div id="taggedAssets-detail" class="hidden">';
     
     // If we have property details, show a table
-    const propertyKeys = Object.keys(details.propertyUsage);
+    const hasPropertyData = details.propertyUsageByModel &&
+      Object.keys(details.propertyUsageByModel).length > 0;
     let propertyDetails = [];
-    
-    if (propertyKeys.length > 0) {
-      // Build array of property info with schema lookups
-      propertyDetails = propertyKeys.map(propId => {
-        let category = '';
-        let name = '';
-        let modelId = '';
-        let modelName = '';
-        
-        // Look up in schema cache across all models
-        for (const cachedModelId in schemaCache) {
-          const schema = schemaCache[cachedModelId];
+
+    if (hasPropertyData) {
+      // Build property details using each model's own schema — this avoids
+      // cross-model mismatches and filters out internal system columns (e.g. z:z)
+      // that don't appear in any schema.
+      for (const modelId in details.propertyUsageByModel) {
+        const { modelName: rawModelName, props } = details.propertyUsageByModel[modelId];
+        const schema = schemaCache[modelId];
+        const modelRecord = models.find(m => m.modelId === modelId);
+        const modelName = modelRecord?.label || rawModelName ||
+          (isDefaultModel(facilityURN, modelId) ? 'Default Model' : 'Unknown Model');
+
+        for (const propId in props) {
+          if (!schema) continue; // schema not loaded — skip rather than show Unknown
           const attr = schema.lookup.get(propId);
-          if (attr) {
-            category = attr.category || '';
-            name = attr.name || '';
-            modelId = cachedModelId;
-            // Find model name from models array
-            const model = models.find(m => m.modelId === cachedModelId);
-            modelName = model ? model.label : 'Unknown Model';
-            break;
-          }
+          if (!attr) continue; // not a user-defined schema property — skip system columns
+
+          propertyDetails.push({
+            id: propId,
+            category: attr.category || 'Unknown',
+            name: attr.name || propId,
+            count: props[propId],
+            modelId,
+            modelName
+          });
         }
-        
-        return {
-          id: propId,
-          category: category || 'Unknown',
-          name: name || 'Unknown',
-          count: details.propertyUsage[propId],
-          modelId: modelId || 'Unknown',
-          modelName: modelName || 'Unknown Model'
-        };
-      });
-      
+      }
+
       detailHtml += `
         <div class="mt-3 overflow-x-auto">
+          <p class="text-xs text-dark-text-secondary mb-2">
+            Count shows how many tagged assets have each property.
+            Assets with multiple properties are counted once per property.
+          </p>
           <div id="taggedAssets-table"></div>
         </div>
       `;
     } else {
-      detailHtml += '<p class="text-dark-text-secondary mt-3">No user-defined properties found.</p>';
+      detailHtml += '<p class="text-dark-text-secondary mt-3">No asset-designated elements found.</p>';
     }
     
     detailHtml += '</div>';
@@ -328,7 +327,7 @@ export async function displayTaggedAssets(container, facilityURN, models, region
     container.innerHTML = headerHtml + summaryHtml + detailHtml;
     
     // Render the sortable table (default sort by count descending)
-    if (propertyKeys.length > 0) {
+    if (propertyDetails.length > 0) {
       renderTaggedAssetsTable(propertyDetails, 'count', 'desc', facilityURN, region);
     }
     

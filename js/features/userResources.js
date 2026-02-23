@@ -214,10 +214,10 @@ export async function viewUserResources() {
       contentDiv.classList.remove('hidden');
       contentDiv.innerHTML = contentHTML;
 
-      // Add sorting and filtering functionality
+      // Add sorting, filtering, and groups rendering
       addInteractivity(newWindow, enrichedTwins, twinsByRegion, groups, allRegions);
-      
-      // Add group history button handlers
+
+      // Wire up History buttons for the initial groups render
       addGroupHistoryHandlers(newWindow);
       
       // Start loading facility names progressively in the background
@@ -401,56 +401,9 @@ function buildResourcesHTML(enrichedTwins, twinsByRegion, groups, allRegions, av
     </div>
   `;
 
-  // Groups section
+  // Groups container (populated by addInteractivity → renderGroups)
   if (groups.length > 0) {
-    html += `
-      <div class="mb-6">
-        <h2 class="text-lg font-semibold text-dark-text mb-4">Groups</h2>
-        <div class="bg-dark-card rounded border border-dark-border">
-          <div class="p-4">
-            <div class="overflow-x-auto">
-              <table class="min-w-full">
-                <thead>
-                  <tr class="border-b border-dark-border">
-                    <th class="text-left text-xs font-medium text-dark-text-secondary py-2 px-3">Group Name</th>
-                    <th class="text-left text-xs font-medium text-dark-text-secondary py-2 px-3">Group URN</th>
-                    <th class="text-right text-xs font-medium text-dark-text-secondary py-2 px-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-    `;
-
-    groups.forEach((group, index) => {
-      const groupName = group.name || 'Unnamed Group';
-      const groupUrn = group.urn || 'N/A';
-
-      html += `
-        <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
-          <td class="py-2 px-3 text-xs text-dark-text">${groupName}</td>
-          <td class="py-2 px-3 text-xs font-mono text-dark-text-secondary">${groupUrn}</td>
-          <td class="py-2 px-3 text-right">
-            <button 
-              class="view-group-history-btn inline-flex items-center px-2 py-1 text-xs font-medium text-tandem-blue hover:text-white hover:bg-tandem-blue border border-tandem-blue rounded transition"
-              data-group-urn="${groupUrn}"
-              data-group-name="${groupName}">
-              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-              </svg>
-              History
-            </button>
-          </td>
-        </tr>
-      `;
-    });
-
-    html += `
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
-    `;
+    html += `<div id="groups-container" class="mb-6"></div>`;
   }
 
   return html;
@@ -468,7 +421,9 @@ function addInteractivity(newWindow, enrichedTwins, twinsByRegion, groups, allRe
     allRegions,
     currentRegion: Region.US,
     sortColumn: 'group', // Default sort by group
-    sortDirection: 'asc'
+    sortDirection: 'asc',
+    groupSortColumn: 'name',
+    groupSortDirection: 'asc'
   };
 
   // Store Region constants in window (pass by value since window is different context)
@@ -667,6 +622,99 @@ function addInteractivity(newWindow, enrichedTwins, twinsByRegion, groups, allRe
     });
   };
 
+  // Render the groups table with sortable headers
+  newWindow.renderGroups = function() {
+    const container = newWindow.document.getElementById('groups-container');
+    if (!container) return;
+
+    const data = newWindow.appData;
+    const sortedGroups = [...data.groups].sort((a, b) => {
+      let aVal, bVal;
+      if (data.groupSortColumn === 'urn') {
+        aVal = (a.urn || '').toLowerCase();
+        bVal = (b.urn || '').toLowerCase();
+      } else {
+        aVal = (a.name || 'Unnamed Group').toLowerCase();
+        bVal = (b.name || 'Unnamed Group').toLowerCase();
+      }
+      if (aVal < bVal) return data.groupSortDirection === 'asc' ? -1 : 1;
+      if (aVal > bVal) return data.groupSortDirection === 'asc' ? 1 : -1;
+      return 0;
+    });
+
+    const sortIcon = (col) => `
+      <span class="sort-icon ${data.groupSortColumn === col ? 'active' : ''}">
+        ${data.groupSortColumn === col && data.groupSortDirection === 'asc' ? '▲' : '▼'}
+      </span>`;
+
+    let html = `
+      <h2 class="text-lg font-semibold text-dark-text mb-4">Groups</h2>
+      <div class="bg-dark-card rounded border border-dark-border">
+        <div class="p-4">
+          <div class="overflow-x-auto">
+            <table class="min-w-full">
+              <thead>
+                <tr class="border-b border-dark-border">
+                  <th class="sortable-group text-left text-xs font-medium text-dark-text-secondary py-2 px-3" data-col="name">
+                    Group Name ${sortIcon('name')}
+                  </th>
+                  <th class="sortable-group text-left text-xs font-medium text-dark-text-secondary py-2 px-3" data-col="urn">
+                    Group URN ${sortIcon('urn')}
+                  </th>
+                  <th class="text-right text-xs font-medium text-dark-text-secondary py-2 px-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+    `;
+
+    sortedGroups.forEach((group, index) => {
+      const groupName = group.name || 'Unnamed Group';
+      const groupUrn = group.urn || 'N/A';
+      html += `
+        <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
+          <td class="py-2 px-3 text-xs text-dark-text">${groupName}</td>
+          <td class="py-2 px-3 text-xs font-mono text-dark-text-secondary">${groupUrn}</td>
+          <td class="py-2 px-3 text-right">
+            <button
+              class="view-group-history-btn inline-flex items-center px-2 py-1 text-xs font-medium text-tandem-blue hover:text-white hover:bg-tandem-blue border border-tandem-blue rounded transition"
+              data-group-urn="${groupUrn}"
+              data-group-name="${groupName}">
+              <svg class="w-3 h-3 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+              </svg>
+              History
+            </button>
+          </td>
+        </tr>
+      `;
+    });
+
+    html += `
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    `;
+
+    container.innerHTML = html;
+
+    // Attach sort handlers
+    container.querySelectorAll('.sortable-group').forEach(th => {
+      th.addEventListener('click', function() {
+        const col = this.getAttribute('data-col');
+        if (data.groupSortColumn === col) {
+          data.groupSortDirection = data.groupSortDirection === 'asc' ? 'desc' : 'asc';
+        } else {
+          data.groupSortColumn = col;
+          data.groupSortDirection = 'asc';
+        }
+        newWindow.renderGroups();
+        addGroupHistoryHandlers(newWindow);
+      });
+    });
+  };
+
   // Add region filter handlers
   const regionButtons = newWindow.document.querySelectorAll('.region-filter-btn');
   regionButtons.forEach(btn => {
@@ -692,6 +740,9 @@ function addInteractivity(newWindow, enrichedTwins, twinsByRegion, groups, allRe
 
   // Initial render (US region)
   newWindow.renderFacilities(Region.US);
+
+  // Initial render for groups
+  newWindow.renderGroups();
 }
 
 /**
