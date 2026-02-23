@@ -126,11 +126,28 @@ export async function viewFacilityUsers(facilityURN, region, facilityName = 'Fac
 }
 
 /**
+ * Render the Name cell for a user/service entry.
+ * When a name is known, show it with the raw ID underneath.
+ * When no name is known (e.g. an app registered without a profile lookup),
+ * show only the ID in monospace.
+ * @param {{ name: string, id: string }} user
+ * @returns {string} HTML string
+ */
+function renderNameCell(user) {
+  if (user.name) {
+    return `
+      <span class="text-dark-text">${user.name}</span>
+      <span class="block font-mono text-dark-text-secondary/50 text-xs leading-tight mt-0.5">${user.id}</span>`;
+  }
+  return `<span class="font-mono text-dark-text-secondary text-xs">${user.id}</span>`;
+}
+
+/**
  * @param {Array} users
  * @returns {{ html: string, userData: Array }}
  */
 function buildUsersHTML(users) {
-  const sorted = [...users].sort((a, b) => a.name.localeCompare(b.name));
+  const sorted = [...users].sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
 
   // Count by access level for the summary row
   const levelCounts = {};
@@ -174,15 +191,12 @@ function buildUsersHTML(users) {
   `;
 
   sorted.forEach((user, index) => {
-    const nameCell = user.name
-      ? `<span class="text-dark-text">${user.name}</span>`
-      : `<span class="font-mono text-dark-text-secondary text-xs">${user.id}</span>`;
     const emailCell = user.email
       ? `<span>${user.email}</span>`
       : `<span class="italic text-dark-text-secondary/60">not available</span>`;
     html += `
       <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
-        <td class="py-2 px-3">${nameCell}</td>
+        <td class="py-2 px-3">${renderNameCell(user)}</td>
         <td class="py-2 px-3 text-dark-text-secondary">${emailCell}</td>
         <td class="py-2 px-3">
           <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
@@ -223,15 +237,12 @@ function setupSorting(newWindow, userData) {
     });
 
     tbody.innerHTML = sorted.map((user, index) => {
-      const nameCell = user.name
-        ? `<span class="text-dark-text">${user.name}</span>`
-        : `<span class="font-mono text-dark-text-secondary text-xs">${user.id}</span>`;
       const emailCell = user.email
         ? `<span>${user.email}</span>`
         : `<span class="italic text-dark-text-secondary/60">not available</span>`;
       return `
         <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
-          <td class="py-2 px-3">${nameCell}</td>
+          <td class="py-2 px-3">${renderNameCell(user)}</td>
           <td class="py-2 px-3 text-dark-text-secondary">${emailCell}</td>
           <td class="py-2 px-3">
             <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"

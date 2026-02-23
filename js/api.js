@@ -1254,7 +1254,8 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
   try {
     const models = await getModels(facilityURN, region);
     let totalTaggedAssets = 0;
-    const propertyUsage = {}; // Map of qualifiedProp -> count
+    // Map of modelId -> { modelName, props: { propId -> count } }
+    const propertyUsageByModel = {};
     const elementsByModel = []; // Array of {modelURN, modelName, keys}
     
     for (const model of models) {
@@ -1277,7 +1278,9 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
         continue;
       }
       
-      const elements = await response.json();
+      const rawData = await response.json();
+      // Filter out the leading version string and any non-element entries
+      const elements = rawData.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
       const modelKeys = [];
       
       // Determine which elements are tagged assets using the same two-method logic as the server.
@@ -1306,16 +1309,22 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
           modelKeys.push(element[QC.Key]);
         }
 
-        // Track z: property usage for the property breakdown table.
+        // Track z: property usage per model for the property breakdown table.
         // Separate from asset counting — an asset may have no z: props if they were cleared
         // after the n:ia flag was set.
         const zProperties = Object.keys(element).filter(key => key.startsWith(`${ColumnFamilies.DtProperties}:`));
-        zProperties.forEach(prop => {
-          if (!propertyUsage[prop]) {
-            propertyUsage[prop] = 0;
+        if (zProperties.length > 0) {
+          if (!propertyUsageByModel[model.modelId]) {
+            propertyUsageByModel[model.modelId] = {
+              modelName: model.label || '',
+              props: {}
+            };
           }
-          propertyUsage[prop]++;
-        });
+          zProperties.forEach(prop => {
+            propertyUsageByModel[model.modelId].props[prop] =
+              (propertyUsageByModel[model.modelId].props[prop] || 0) + 1;
+          });
+        }
       });
       
       // Add model to results if it has tagged assets
@@ -1330,7 +1339,7 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
     
     const result = {
       totalCount: totalTaggedAssets,
-      propertyUsage: propertyUsage
+      propertyUsageByModel: propertyUsageByModel
     };
     
     if (includeKeys) {

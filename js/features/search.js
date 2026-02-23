@@ -104,6 +104,16 @@ export async function displaySearch(container, facilityURN, region, models) {
                 <input 
                   type="radio" 
                   name="search-match-type" 
+                  value="any"
+                  class="mr-2 text-tandem-blue focus:ring-tandem-blue"
+                />
+                <span class="text-xs font-medium text-tandem-blue">Any Value <span class="font-normal text-dark-text-secondary">(find all)</span></span>
+              </label>
+              <div class="border-t border-dark-border/40 my-1"></div>
+              <label class="flex items-center cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="search-match-type" 
                   value="partial" 
                   checked
                   class="mr-2 text-tandem-blue focus:ring-tandem-blue"
@@ -135,6 +145,16 @@ export async function displaySearch(container, facilityURN, region, models) {
           <div id="numeric-operator-options" class="hidden">
             <label class="block text-xs font-medium text-dark-text mb-2">Comparison</label>
             <div class="space-y-1.5">
+              <label class="flex items-center cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="search-numeric-operator" 
+                  value="any"
+                  class="mr-2 text-tandem-blue focus:ring-tandem-blue"
+                />
+                <span class="text-xs font-medium text-tandem-blue">Any Value <span class="font-normal text-dark-text-secondary">(find all)</span></span>
+              </label>
+              <div class="border-t border-dark-border/40 my-1"></div>
               <label class="flex items-center cursor-pointer">
                 <input 
                   type="radio" 
@@ -196,7 +216,16 @@ export async function displaySearch(container, facilityURN, region, models) {
           <!-- Boolean Options -->
           <div id="boolean-value-options" class="hidden col-span-2">
             <label class="block text-xs font-medium text-dark-text mb-2">Boolean Value</label>
-            <div class="flex gap-4">
+            <div class="flex gap-4 flex-wrap">
+              <label class="flex items-center cursor-pointer">
+                <input 
+                  type="radio" 
+                  name="search-boolean-value" 
+                  value="any"
+                  class="mr-2 text-tandem-blue focus:ring-tandem-blue"
+                />
+                <span class="text-xs font-medium text-tandem-blue">Any Value <span class="font-normal text-dark-text-secondary">(find all)</span></span>
+              </label>
               <label class="flex items-center cursor-pointer">
                 <input 
                   type="radio" 
@@ -381,8 +410,46 @@ export async function displaySearch(container, facilityURN, region, models) {
       propertyValueInput.disabled = false;
       propertyValueInput.placeholder = 'e.g., 123, *floor*, or ^Concrete';
     }
+
+    // Re-evaluate "any value" state after panel switch
+    applyAnyValueState();
   }
   
+  // Helper: check if "any value" is currently selected across all visible option panels
+  function isAnyValueSelected() {
+    const matchType = detailSection.querySelector('input[name="search-match-type"]:checked')?.value;
+    const numericOp = detailSection.querySelector('input[name="search-numeric-operator"]:checked')?.value;
+    const boolVal   = detailSection.querySelector('input[name="search-boolean-value"]:checked')?.value;
+    return matchType === 'any' || numericOp === 'any' || boolVal === 'any';
+  }
+
+  // Helper: apply or remove the "any value" disabled state on the value input
+  function applyAnyValueState() {
+    if (isAnyValueSelected()) {
+      propertyValueInput.disabled = true;
+      propertyValueInput.style.opacity = '0.4';
+      propertyValueInput.placeholder = 'Not needed — finding all elements with this property';
+      caseSensitiveOptions.style.opacity = '0.4';
+      caseSensitiveOptions.style.pointerEvents = 'none';
+    } else {
+      propertyValueInput.disabled = false;
+      propertyValueInput.style.opacity = '';
+      caseSensitiveOptions.style.opacity = '';
+      caseSensitiveOptions.style.pointerEvents = '';
+      // Restore the correct placeholder based on which type panel is active
+      if (!numericOperatorOptions.classList.contains('hidden')) {
+        propertyValueInput.placeholder = 'e.g., 100 or 3.14';
+      } else {
+        propertyValueInput.placeholder = 'e.g., 123, *floor*, or ^Concrete';
+      }
+    }
+  }
+
+  // Listen for any radio change across the options grid
+  detailSection.querySelector('#search-options-container').addEventListener('change', () => {
+    applyAnyValueState();
+  });
+
   // Update options when property name changes
   propertyNameInput.addEventListener('input', updateSearchOptionsForDataType);
   propertyNameInput.addEventListener('change', updateSearchOptionsForDataType);
@@ -408,35 +475,64 @@ export async function displaySearch(container, facilityURN, region, models) {
       const isBoolean = dataType === AttributeType.Boolean;
       
       if (isBoolean) {
-        // Boolean search
         const boolValue = detailSection.querySelector('input[name="search-boolean-value"]:checked')?.value;
-        searchOptions = {
-          dataType: 'boolean',
-          value: boolValue === 'true'
-        };
+        if (boolValue === 'any') {
+          searchOptions = { dataType: 'any' };
+        } else {
+          searchOptions = {
+            dataType: 'boolean',
+            value: boolValue === 'true'
+          };
+        }
       } else if (isNumeric) {
-        // Numeric search
         const operator = detailSection.querySelector('input[name="search-numeric-operator"]:checked')?.value || '=';
-        const value = propertyValueInput.value.trim();
-        if (!value) {
-          resultsContent.innerHTML = '<p class="text-yellow-500 text-xs">⚠️ Please enter a numeric value.</p>';
-          resultsDiv.classList.remove('hidden');
-          return;
+        if (operator === 'any') {
+          searchOptions = { dataType: 'any' };
+        } else {
+          const value = propertyValueInput.value.trim();
+          if (!value) {
+            resultsContent.innerHTML = '<p class="text-yellow-500 text-xs">⚠️ Please enter a numeric value.</p>';
+            resultsDiv.classList.remove('hidden');
+            return;
+          }
+          const numValue = parseFloat(value);
+          if (isNaN(numValue)) {
+            resultsContent.innerHTML = '<p class="text-yellow-500 text-xs">⚠️ Please enter a valid number.</p>';
+            resultsDiv.classList.remove('hidden');
+            return;
+          }
+          searchOptions = {
+            dataType: 'numeric',
+            operator: operator,
+            value: numValue
+          };
         }
-        const numValue = parseFloat(value);
-        if (isNaN(numValue)) {
-          resultsContent.innerHTML = '<p class="text-yellow-500 text-xs">⚠️ Please enter a valid number.</p>';
-          resultsDiv.classList.remove('hidden');
-          return;
-        }
-        searchOptions = {
-          dataType: 'numeric',
-          operator: operator,
-          value: numValue
-        };
       } else {
-        // String search
         const matchType = detailSection.querySelector('input[name="search-match-type"]:checked')?.value || 'partial';
+        if (matchType === 'any') {
+          searchOptions = { dataType: 'any' };
+        } else {
+          const caseSensitive = detailSection.querySelector('#search-case-sensitive').checked;
+          const value = propertyValueInput.value.trim();
+          if (!value) {
+            resultsContent.innerHTML = '<p class="text-yellow-500 text-xs">⚠️ Please enter a value to search for.</p>';
+            resultsDiv.classList.remove('hidden');
+            return;
+          }
+          searchOptions = {
+            dataType: 'string',
+            matchType: matchType,
+            caseSensitive: caseSensitive,
+            value: value
+          };
+        }
+      }
+    } else {
+      // Unknown property type - treat as string
+      const matchType = detailSection.querySelector('input[name="search-match-type"]:checked')?.value || 'partial';
+      if (matchType === 'any') {
+        searchOptions = { dataType: 'any' };
+      } else {
         const caseSensitive = detailSection.querySelector('#search-case-sensitive').checked;
         const value = propertyValueInput.value.trim();
         if (!value) {
@@ -451,22 +547,6 @@ export async function displaySearch(container, facilityURN, region, models) {
           value: value
         };
       }
-    } else {
-      // Unknown property type - treat as string
-      const matchType = detailSection.querySelector('input[name="search-match-type"]:checked')?.value || 'partial';
-      const caseSensitive = detailSection.querySelector('#search-case-sensitive').checked;
-      const value = propertyValueInput.value.trim();
-      if (!value) {
-        resultsContent.innerHTML = '<p class="text-yellow-500 text-xs">⚠️ Please enter a value to search for.</p>';
-        resultsDiv.classList.remove('hidden');
-        return;
-      }
-      searchOptions = {
-        dataType: 'string',
-        matchType: matchType,
-        caseSensitive: caseSensitive,
-        value: value
-      };
     }
 
     await executeSearch(facilityURN, region, models, propertyName, searchOptions, resultsDiv, resultsContent);
@@ -571,7 +651,7 @@ async function executeSearch(facilityURN, region, models, propertyName, searchOp
     }
     
     // Display results with context about property availability
-    displaySearchResults(facilityURN, allResults, propertyName, searchOptions, modelsWithProperty, modelsWithoutProperty, resultsContent);
+    displaySearchResults(facilityURN, allResults, propertyName, searchOptions, modelsWithProperty, modelsWithoutProperty, resultsContent, region);
     
   } catch (error) {
     console.error('Error executing search:', error);
@@ -609,8 +689,11 @@ async function searchElementsByProperty(modelURN, region, qualifiedColumn, searc
     
     // Create matcher function based on data type
     let matcher;
-    
-    if (searchOptions.dataType === 'boolean') {
+
+    if (searchOptions.dataType === 'any') {
+      // Any value: accept all elements that have the column set (non-null check handled below)
+      matcher = () => true;
+    } else if (searchOptions.dataType === 'boolean') {
       // Boolean matching
       matcher = (val) => {
         if (typeof val === 'boolean') {
@@ -718,7 +801,7 @@ async function searchElementsByProperty(modelURN, region, qualifiedColumn, searc
  * @param {Array} modelsWithoutProperty - List of model names that don't have this property
  * @param {HTMLElement} container - Container element
  */
-function displaySearchResults(facilityURN, results, propertyName, searchOptions, modelsWithProperty, modelsWithoutProperty, container) {
+function displaySearchResults(facilityURN, results, propertyName, searchOptions, modelsWithProperty, modelsWithoutProperty, container, region) {
   // Format search criteria for display
   let searchCriteria = '';
   if (searchOptions.dataType === 'boolean') {

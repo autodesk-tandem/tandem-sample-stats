@@ -119,29 +119,87 @@ export async function viewFacilityViews(facilityURN, region, facilityName = 'Fac
 }
 
 /**
- * @param {Array} views
+ * Flatten raw view API objects into display-ready records.
+ * @param {Array} views - Raw view objects from the API
+ * @returns {Array} Processed view records
+ */
+function processViews(views) {
+  return views.map(v => ({
+    id:         v.id || '',
+    viewName:   v.viewName || '',
+    author:     v.author?.name || '',
+    authorId:   v.author?.userId || '',
+    createTime: v.createTime || '',
+    label:      v.label || '',
+    // Level filter is stored as an array of level name strings inside facets
+    levels:     (v.facets?.filters?.levels || []).join(', '),
+    createdDate: v.createTime ? new Date(v.createTime).toLocaleString() : '—',
+  }));
+}
+
+/**
+ * Render a single table row.
+ * @param {Object} view - Processed view record
+ * @param {number} index - Row index for border styling
+ * @returns {string} HTML string
+ */
+function renderViewRow(view, index) {
+  const labelBadge = view.label
+    ? `<span class="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-blue-900/40 text-blue-300 border border-blue-700/40">${view.label}</span>`
+    : '';
+  const nameCell = labelBadge
+    ? `<span class="text-dark-text">${view.viewName || '—'}</span>
+       <span class="block mt-0.5">${labelBadge}</span>`
+    : `<span class="text-dark-text">${view.viewName || '—'}</span>`;
+
+  return `
+    <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
+      <td class="py-2 px-3">${nameCell}</td>
+      <td class="py-2 px-3 text-dark-text-secondary">${view.author
+        ? `${view.author}${view.authorId ? `<span class="block font-mono text-dark-text-secondary/50 text-xs leading-tight mt-0.5">${view.authorId}</span>` : ''}`
+        : '<span class="text-dark-text-secondary/40">—</span>'}</td>
+      <td class="py-2 px-3 text-dark-text-secondary whitespace-nowrap">${view.createdDate}</td>
+      <td class="py-2 px-3 text-dark-text-secondary">${view.levels || '<span class="text-dark-text-secondary/40">—</span>'}</td>
+      <td class="py-2 px-3 text-dark-text-secondary font-mono">${view.id || '—'}</td>
+    </tr>`;
+}
+
+/**
+ * @param {Array} views - Raw views from API
  * @returns {{ html: string, viewData: Array }}
  */
 function buildViewsHTML(views) {
-  const sorted = [...views].sort((a, b) =>
-    (a.viewName || '').localeCompare(b.viewName || '')
-  );
+  const processed = processViews(views);
+  const sorted = [...processed].sort((a, b) => a.viewName.localeCompare(b.viewName));
 
-  // Extract any level groupings from view data
-  const withLevel = sorted.filter(v => v.levelName);
-  const withoutLevel = sorted.filter(v => !v.levelName);
+  // Count views that have a level filter applied
+  const withLevelFilter = sorted.filter(v => v.levels).length;
+  // Count distinct labels/groups
+  const labels = [...new Set(sorted.map(v => v.label).filter(Boolean))];
 
-  let html = `
-    <div class="mb-6 grid grid-cols-2 gap-4">
-      <div class="bg-dark-card rounded border border-dark-border p-4">
-        <div class="text-3xl font-bold text-tandem-blue mb-1">${sorted.length}</div>
-        <div class="text-xs text-dark-text-secondary">Saved Views</div>
-      </div>
-      ${withLevel.length > 0 ? `
-      <div class="bg-dark-card rounded border border-dark-border p-4">
-        <div class="text-3xl font-bold text-tandem-blue mb-1">${withLevel.length}</div>
-        <div class="text-xs text-dark-text-secondary">Level Views</div>
-      </div>` : ''}
+  let summaryCards = `
+    <div class="bg-dark-card rounded border border-dark-border p-4">
+      <div class="text-3xl font-bold text-tandem-blue mb-1">${sorted.length}</div>
+      <div class="text-xs text-dark-text-secondary">Saved Views</div>
+    </div>`;
+  if (withLevelFilter > 0) {
+    summaryCards += `
+    <div class="bg-dark-card rounded border border-dark-border p-4">
+      <div class="text-3xl font-bold text-tandem-blue mb-1">${withLevelFilter}</div>
+      <div class="text-xs text-dark-text-secondary">With Level Filter</div>
+    </div>`;
+  }
+  if (labels.length > 0) {
+    summaryCards += `
+    <div class="bg-dark-card rounded border border-dark-border p-4">
+      <div class="text-3xl font-bold text-tandem-blue mb-1">${labels.length}</div>
+      <div class="text-xs text-dark-text-secondary">Group${labels.length > 1 ? 's' : ''} (${labels.join(', ')})</div>
+    </div>`;
+  }
+
+  const html = `
+    <div class="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+      ${summaryCards}
     </div>
 
     <div class="bg-dark-card rounded border border-dark-border">
@@ -155,27 +213,25 @@ function buildViewsHTML(views) {
               <th class="sortable-header text-left py-2 px-3 font-medium text-dark-text-secondary" data-column="viewName">
                 Name <span class="sort-indicator">▲</span>
               </th>
-              <th class="sortable-header text-left py-2 px-3 font-medium text-dark-text-secondary" data-column="levelName">
-                Level <span class="sort-indicator"></span>
+              <th class="sortable-header text-left py-2 px-3 font-medium text-dark-text-secondary" data-column="author">
+                Created By <span class="sort-indicator"></span>
               </th>
-              <th class="text-left py-2 px-3 font-medium text-dark-text-secondary">
-                ID
+              <th class="sortable-header text-left py-2 px-3 font-medium text-dark-text-secondary" data-column="createTime">
+                Created <span class="sort-indicator"></span>
               </th>
+              <th class="sortable-header text-left py-2 px-3 font-medium text-dark-text-secondary" data-column="levels">
+                Level Filter <span class="sort-indicator"></span>
+              </th>
+              <th class="text-left py-2 px-3 font-medium text-dark-text-secondary">ID</th>
             </tr>
           </thead>
           <tbody id="viewsTableBody">
-  `;
+            ${sorted.map((view, i) => renderViewRow(view, i)).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>`;
 
-  sorted.forEach((view, index) => {
-    html += `
-      <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
-        <td class="py-2 px-3 text-dark-text">${view.viewName || '—'}</td>
-        <td class="py-2 px-3 text-dark-text-secondary">${view.levelName || '—'}</td>
-        <td class="py-2 px-3 text-dark-text-secondary font-mono">${view.id || '—'}</td>
-      </tr>`;
-  });
-
-  html += `</tbody></table></div></div>`;
   return { html, viewData: sorted };
 }
 
@@ -196,12 +252,7 @@ function setupSorting(newWindow, viewData) {
       return 0;
     });
 
-    tbody.innerHTML = sorted.map((view, index) => `
-      <tr class="${index > 0 ? 'border-t border-dark-border/50' : ''}">
-        <td class="py-2 px-3 text-dark-text">${view.viewName || '—'}</td>
-        <td class="py-2 px-3 text-dark-text-secondary">${view.levelName || '—'}</td>
-        <td class="py-2 px-3 text-dark-text-secondary font-mono">${view.id || '—'}</td>
-      </tr>`).join('');
+    tbody.innerHTML = sorted.map((view, i) => renderViewRow(view, i)).join('');
 
     headers.forEach(header => {
       const indicator = header.querySelector('.sort-indicator');
