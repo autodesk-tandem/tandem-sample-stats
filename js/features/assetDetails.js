@@ -1098,7 +1098,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         }
         case 'n:ia': { // IsAsset
           const n = parseInt(val);
-          if (!isNaN(n)) return n ? 'true (designated as asset)' : 'false';
+          if (!isNaN(n)) return n ? 'true · designated as asset' : 'false';
           return null;
         }
         case 'n:b':
@@ -1417,7 +1417,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     // Fetch type/family element properties by type key (l:t value)
     async function fetchTypeProperties(modelURN, typeKey) {
       const payload = JSON.stringify({
-        families: ['n', 'r'],
+        families: ['n', 'l', 'x', 'r', 'z'],
         keys: [typeKey],
         includeHistory: false
       });
