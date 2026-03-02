@@ -1362,43 +1362,48 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @param {string} qualifiedProp - Qualified property (e.g., 'z:LQ')
+ * @param {string} [modelIdFilter] - If set, only scan this model (e.g. from Tagged Assets row); avoids scanning all models and ensures correct model
  * @returns {Promise<Array<{modelURN: string, modelName: string, keys: Array<string>}>>} Array of models with their element keys
  */
-export async function getElementsByProperty(facilityURN, region, qualifiedProp) {
+export async function getElementsByProperty(facilityURN, region, qualifiedProp, modelIdFilter = null) {
   try {
     const models = await getModels(facilityURN, region);
+    const modelsToScan = modelIdFilter
+      ? models.filter(m => m.modelId === modelIdFilter)
+      : models;
     const resultsByModel = [];
-    
-    // Extract family from qualified property (e.g., 'z' from 'z:LQ')
+
     const [family] = qualifiedProp.split(':');
-    
-    for (const model of models) {
-      // Scan for elements with the specific property
+    const families = family === ColumnFamilies.DtProperties
+      ? [ColumnFamilies.Standard, ColumnFamilies.DtProperties]
+      : [family];
+
+    // Use same scan shape as getTaggedAssetsDetails (no qualifiedColumns) so the server
+    // returns all columns in the requested families; we filter client-side for the property.
+    // This avoids server omitting or normalizing the column id when requested explicitly.
+    for (const model of modelsToScan) {
       const payload = JSON.stringify({
-        families: [family],
-        qualifiedColumns: [qualifiedProp],
+        families,
         includeHistory: false,
         skipArrays: true
       });
-      
+
       const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
       const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
-      
+
       if (!response.ok) {
         console.error(`Failed to fetch elements for model ${model.modelId}`);
         continue;
       }
-      
-      const elements = await response.json();
+
+      const rawData = await response.json();
+      const elements = rawData.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
       const elementKeys = [];
-      
-      // Process each element - filter out version string
+
       elements.forEach(element => {
-        if (typeof element === 'object' && element !== null && element[QC.Key]) {
-          // Check if the element has the property
-          if (element[qualifiedProp]) {
-            elementKeys.push(element[QC.Key]);
-          }
+        // Include if the property key is present (even if value is null/empty/0)
+        if (Object.prototype.hasOwnProperty.call(element, qualifiedProp)) {
+          elementKeys.push(element[QC.Key]);
         }
       });
       

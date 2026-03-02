@@ -129,6 +129,7 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
     `;
     
     modelGroup.properties.forEach(prop => {
+      const modelIdAttr = (prop.modelId || '').replace(/"/g, '&quot;');
       tableHtml += `
         <tr class="hover:bg-dark-bg/30 bg-dark-card" data-property-id="${prop.id}">
           <td class="px-3 py-2 text-dark-text">${prop.category}</td>
@@ -138,6 +139,7 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
             <button class="tagged-asset-count-btn text-tandem-blue hover:text-blue-600 hover:underline cursor-pointer" 
                     data-property-id="${prop.id}"
                     data-property-name="${prop.category}.${prop.name}"
+                    data-model-id="${modelIdAttr}"
                     title="Click to view ${prop.count} element${prop.count !== 1 ? 's' : ''}">
               ${prop.count.toLocaleString()}
             </button>
@@ -173,20 +175,20 @@ function renderTaggedAssetsTable(propertyDetails, sortColumn = 'count', sortDire
     button.addEventListener('click', async () => {
       const propertyId = button.getAttribute('data-property-id');
       const propertyName = button.getAttribute('data-property-name');
-      
+      const modelIdFilter = button.getAttribute('data-model-id') || null;
+
       if (!facilityURN || !propertyId) {
         console.error('Missing facilityURN or propertyId');
         return;
       }
-      
-      // Show loading state
+
       const originalText = button.textContent;
       button.textContent = '...';
       button.disabled = true;
-      
+
       try {
-        // Fetch element keys grouped by model
-        const elementsByModel = await getElementsByProperty(facilityURN, region, propertyId);
+        // Scan only the model for this row so results match the count and response is fast
+        const elementsByModel = await getElementsByProperty(facilityURN, region, propertyId, modelIdFilter);
         
         if (elementsByModel.length === 0) {
           alert('No elements found with this property');
