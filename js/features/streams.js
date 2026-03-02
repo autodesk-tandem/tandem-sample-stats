@@ -28,19 +28,28 @@ function renderConfigBadges(streamConfig) {
   const badges = [];
   const settings = streamConfig.streamSettings;
   
-  // Frequency badge
-  if (settings.frequency) {
-    const freqMin = settings.frequency / 60000;
-    let freqLabel;
-    if (freqMin < 60) {
-      freqLabel = `${freqMin}m`;
-    } else if (freqMin < 1440) {
-      freqLabel = `${freqMin / 60}h`;
-    } else {
-      freqLabel = `${freqMin / 1440}d`;
-    }
+  // Frequency badge — server default is 1 minute when frequency is omitted from the response
+  const freqMs = settings.frequency || null;
+  const isDefaultFreq = !settings.frequency;
+  const freqMin = freqMs ? freqMs / 60000 : 1;
+  let freqLabel;
+  if (freqMin < 60) {
+    freqLabel = `${freqMin}m`;
+  } else if (freqMin < 1440) {
+    freqLabel = `${freqMin / 60}h`;
+  } else {
+    freqLabel = `${freqMin / 1440}d`;
+  }
+  if (isDefaultFreq) {
     badges.push(`
-      <span class="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded font-medium" 
+      <span class="px-2 py-0.5 text-xs bg-blue-500/10 text-blue-300/50 rounded font-medium"
+            title="Default sampling frequency (not explicitly configured)">
+        ${freqLabel}*
+      </span>
+    `);
+  } else {
+    badges.push(`
+      <span class="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 rounded font-medium"
             title="Sampling frequency: ${freqLabel}">
         ${freqLabel}
       </span>

@@ -2,7 +2,7 @@ import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
 import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { getCategoryName, compareQualifiedColumnIds } from '../utils.js';
-import { makeXrefKey, toFullKey } from '../../tandem/keys.js';
+import { makeXrefKey, toFullKey, toShortKey, decodeXref } from '../../tandem/keys.js';
 
 /**
  * Generate HTML page for asset details
@@ -22,6 +22,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
   // Embed functions from tandem/keys.js
   const makeXrefKeySource = makeXrefKey.toString();
   const toFullKeySource = toFullKey.toString();
+  const toShortKeySource = toShortKey.toString();
+  const decodeXrefSource = decodeXref.toString();
   
   // Get and embed schema cache for property lookups
   // Convert Map to object for JSON serialization
@@ -346,6 +348,45 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       font-family: 'Courier New', monospace;
       word-break: break-all;
     }
+    .prop-hint {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 11px;
+      color: #808080;
+      margin-left: 4px;
+      white-space: nowrap;
+    }
+    .json-view-btn {
+      background: none;
+      border: 1px solid #404040;
+      cursor: pointer;
+      color: #a0a0a0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      font-size: 11px;
+      padding: 1px 7px;
+      border-radius: 3px;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .json-view-btn:hover {
+      border-color: #808080;
+      color: #e0e0e0;
+    }
+    .json-pre {
+      background: #1a1a1a;
+      border: 1px solid #333;
+      border-radius: 4px;
+      padding: 12px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      color: #e0e0e0;
+      overflow-x: auto;
+      white-space: pre;
+      line-height: 1.5;
+    }
+    .json-key   { color: #9cdcfe; }
+    .json-str   { color: #ce9178; }
+    .json-num   { color: #b5cea8; }
+    .json-bool  { color: #569cd6; }
+    .json-null  { color: #569cd6; }
     .error-message {
       padding: 20px;
       text-align: center;
@@ -491,6 +532,113 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     .keys-modal-btn-primary:hover {
       background: #0580b8;
     }
+    /* Ref drill-down */
+    .ref-drill-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #4fc3f7;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      text-align: left;
+      padding: 2px 6px;
+      border-radius: 3px;
+      border: 1px solid transparent;
+      transition: background 0.15s, border-color 0.15s;
+      word-break: break-all;
+      display: inline-flex;
+      align-items: baseline;
+      gap: 4px;
+    }
+    .ref-drill-btn:hover {
+      background: rgba(79, 195, 247, 0.12);
+      border-color: rgba(79, 195, 247, 0.3);
+      color: #81d4fa;
+    }
+    .ref-drill-btn .ref-arrow {
+      font-size: 10px;
+      opacity: 0.6;
+      flex-shrink: 0;
+    }
+    /* Ref detail modal */
+    #ref-modal {
+      display: none;
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0,0,0,0.85);
+      z-index: 2000;
+      overflow: hidden;
+      padding: 40px 20px;
+      box-sizing: border-box;
+    }
+    #ref-modal.active {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+    }
+    #ref-modal .ref-modal-content {
+      background: #2a2a2a;
+      border-radius: 8px;
+      border: 1px solid #4fc3f7;
+      max-width: 1000px;
+      width: 100%;
+      max-height: 100%;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    #ref-modal .ref-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid #404040;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      flex-shrink: 0;
+      gap: 12px;
+    }
+    #ref-modal .ref-modal-header-left {
+      flex: 1;
+      min-width: 0;
+    }
+    #ref-modal .ref-modal-title {
+      font-size: 16px;
+      font-weight: 600;
+      color: #4fc3f7;
+      margin: 0 0 4px 0;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+    #ref-modal .ref-modal-subtitle {
+      font-size: 11px;
+      font-family: 'Courier New', monospace;
+      color: #808080;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    #ref-modal .ref-modal-close {
+      background: none;
+      border: none;
+      color: #a0a0a0;
+      font-size: 24px;
+      cursor: pointer;
+      padding: 0;
+      width: 30px;
+      height: 30px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+    #ref-modal .ref-modal-close:hover { color: #e0e0e0; }
+    #ref-modal .ref-modal-body {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
+    }
   </style>
 </head>
 <body>
@@ -540,6 +688,20 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     </div>
   </div>
   
+  <!-- Modal for ref drill-down -->
+  <div id="ref-modal">
+    <div class="ref-modal-content">
+      <div class="ref-modal-header">
+        <div class="ref-modal-header-left">
+          <h2 class="ref-modal-title" id="ref-modal-title">Referenced Element</h2>
+          <div class="ref-modal-subtitle" id="ref-modal-subtitle"></div>
+        </div>
+        <button class="ref-modal-close" id="ref-modal-close">&times;</button>
+      </div>
+      <div class="ref-modal-body" id="ref-modal-body"></div>
+    </div>
+  </div>
+
   <script>
     const DATA = ${dataJSON};
     const API_BASE = '${tandemBaseURL}';
@@ -556,6 +718,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     };
     const kElementFlagsSize = ${kElementFlagsSize};
     const kElementIdWithFlagsSize = ${kElementIdWithFlagsSize};
+    const kModelIdSize = 16;
+    const kElementIdSize = 20;
     
     // Track which elements have loaded details
     const loadedDetails = new Map();
@@ -572,10 +736,21 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     
     ${makeXrefKeySource}
     
-    // Helper function to look up property display name from schema
+    ${toShortKeySource}
+    
+    ${decodeXrefSource}
+    
+    // AttributeType constants (matches viewer/src/dt/schema/Attribute.js and dt-server attribute.go)
+    const AttributeType = {
+      DbKey: 11,       // single link to another element (same model)
+      DbKeyList: 12,   // list of links to elements within the same model (l: family)
+      ExDbKeyList: 13  // list of links to elements in external models (x: family)
+    };
+
+    // Helper function to look up property display name and dataType from schema
     function getPropertyDisplayInfo(modelURN, qualifiedProp) {
       if (!SCHEMA_CACHE[modelURN]) {
-        return { category: '', name: qualifiedProp };
+        return { category: '', name: qualifiedProp, dataType: null };
       }
       
       const schema = SCHEMA_CACHE[modelURN];
@@ -584,16 +759,17 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       if (attr) {
         return {
           category: attr.category || '',
-          name: attr.name || qualifiedProp
+          name: attr.name || qualifiedProp,
+          dataType: attr.dataType ?? null
         };
       }
       
-      return { category: '', name: qualifiedProp };
+      return { category: '', name: qualifiedProp, dataType: null };
     }
     
     async function fetchElementDetails(modelURN, elementKeys) {
       const payload = JSON.stringify({
-        families: ['n', 'l', 'r', 'z'],
+        families: ['n', 'l', 'x', 'r', 'z'],
         keys: elementKeys,
         includeHistory: false
       });
@@ -676,13 +852,53 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         
         // Get display info from schema
         const displayInfo = getPropertyDisplayInfo(modelURN, key);
-        
+
+        // Determine if this property is a drillable element reference.
+        // Prefer schema dataType (authoritative) then fall back to column family.
+        // AtDbKey=11: single same-model ref (l: family)
+        // AtDbKeyList=12: list of same-model refs (l: family, blob of 20-byte short keys)
+        // AtExDbKeyList=13: list of cross-model refs (x: family, blob of 40-byte xrefs)
+        const dt = displayInfo.dataType;
+        let isRef = false;
+        let refFamily = null;
+        if (dt === AttributeType.DbKey || dt === AttributeType.DbKeyList) {
+          isRef = true;
+          refFamily = 'l';
+        } else if (dt === AttributeType.ExDbKeyList) {
+          isRef = true;
+          refFamily = 'x';
+        } else if (dt === null) {
+          // Schema not available — fall back to column family heuristic
+          if (family === 'l' && prop !== 'd') { isRef = true; refFamily = 'l'; }
+          else if (family === 'x') { isRef = true; refFamily = 'x'; }
+        }
+
+        const rawValue = isRef
+          ? (Array.isArray(value) ? value[0] : value) || null
+          : null;
+
+        const hint = interpretPropertyHint(key, value);
+
+        // n:s (Settings) is a base64-encoded JSON blob (StreamSettings) — offer a JSON viewer.
+        // Match by qualified column id; also treat "Settings" display name as fallback (e.g. override column).
+        const isJsonBlob = key === 'n:s' || key === 'n:!s' || (displayInfo.name === 'Settings' && family === 'n');
+        const jsonBlobRawValue = isJsonBlob
+          ? (Array.isArray(value) ? value[0] : value) || null
+          : null;
+
         allProperties.push({
           id: key,
           family: familyName,
           category: displayInfo.category || familyName,
           name: displayInfo.name,
-          value: formatPropertyValue(value)
+          value: formatPropertyValue(value),
+          hint,
+          isRef,
+          refFamily,
+          refModelURN: modelURN,
+          rawValue,
+          isJsonBlob,
+          jsonBlobRawValue
         });
       }
       
@@ -831,6 +1047,71 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return categories[categoryId] || "Category " + categoryId;
     }
     
+    // Full ElementFlags map (from viewer/src/dt/schema/dt-schema.js - superset of constants.js)
+    // Format: "Name · type" to avoid nested parentheses in the UI hint
+    const ElementFlagsMap = {
+      0x00000000: 'SimpleElement · Physical',
+      0x00000001: 'NestedChild · Physical, instanced/nested',
+      0x00000002: 'NestedParent · Physical, host family',
+      0x00000003: 'CompositeChild · Physical, e.g. curtain wall panel',
+      0x00000004: 'CompositeParent · Physical, e.g. curtain wall',
+      0x00000005: 'Room',
+      0x01000000: 'FamilyType · Logical',
+      0x01000001: 'Level · Logical',
+      0x01000002: 'DocumentRoot · Logical',
+      0x01000003: 'Stream · Logical, IoT',
+      0x01000004: 'System · Logical, MEP',
+      0x01000005: 'GenericAsset · Logical',
+      0x01000006: 'Collection · Logical',
+      0x01000007: 'Ticket · Logical',
+      0x03000000: 'Virtual · Logical, placeholder',
+      0xfffffffe: 'Deleted',
+      0xffffffff: 'Unknown'
+    };
+
+    const SystemClassNames = [
+      'Supply Air', 'Return Air', 'Exhaust Air', 'Hydronic Supply', 'Hydronic Return',
+      'Domestic Hot Water', 'Domestic Cold Water', 'Sanitary', 'Power', 'Vent',
+      'Controls', 'Fire Protection Wet', 'Fire Protection Dry', 'Fire Protection Pre-Action',
+      'Other Air', 'Other', 'Fire Protection Other', 'Communication', 'Data Circuit',
+      'Telephone', 'Security', 'Fire Alarm', 'Nurse Call', 'Switch Topology',
+      'Cable Tray Conduit', 'Storm'
+    ];
+
+    // Return a human-readable hint string for well-known property values, or null.
+    function interpretPropertyHint(qualifiedProp, rawValue) {
+      if (rawValue === null || rawValue === undefined) return null;
+      const val = Array.isArray(rawValue) ? rawValue[0] : rawValue;
+
+      switch (qualifiedProp) {
+        case 'n:a': { // ElementFlags
+          const n = parseInt(val);
+          if (!isNaN(n)) {
+            const label = ElementFlagsMap[n >>> 0];
+            return label ? label : '0x' + (n >>> 0).toString(16).toUpperCase().padStart(8, '0');
+          }
+          return null;
+        }
+        case 'n:c': { // CategoryId
+          const n = parseInt(val);
+          return !isNaN(n) ? getCategoryName(n) : null;
+        }
+        case 'n:ia': { // IsAsset
+          const n = parseInt(val);
+          if (!isNaN(n)) return n ? 'true (designated as asset)' : 'false';
+          return null;
+        }
+        case 'n:b':
+        case 'n:!b': { // SystemClass / OSystemClass
+          const n = parseInt(val);
+          if (!isNaN(n) && n >= 0 && n < SystemClassNames.length) return SystemClassNames[n];
+          return null;
+        }
+        default:
+          return null;
+      }
+    }
+
     // Qualified column ID sort (family then property) - runs in the detached window, cannot use ES module imports
     function compareQualifiedColumnIds(aId, bId, ascending) {
       const aParts = (aId || '').toString().split(':');
@@ -866,7 +1147,31 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         html += '<td class="property-id">' + idEscaped + '</td>';
         html += '<td class="property-category">' + categoryEscaped + '</td>';
         html += '<td class="property-name">' + nameEscaped + '</td>';
-        html += '<td class="property-value">' + valueEscaped + '</td>';
+        const hintSpan = prop.hint
+          ? ' <span class="prop-hint">(' + escapeHtml(prop.hint) + ')</span>'
+          : '';
+        if (prop.isRef && prop.rawValue) {
+          const rawEsc = prop.rawValue.replace(/"/g, '&quot;');
+          html += '<td class="property-value">'
+            + '<button class="ref-drill-btn"'
+            + ' data-ref-family="' + prop.refFamily + '"'
+            + ' data-model-urn="' + prop.refModelURN.replace(/"/g, '&quot;') + '"'
+            + ' data-raw-value="' + rawEsc + '"'
+            + ' title="View referenced element">'
+            + valueEscaped
+            + '<span class="ref-arrow">&#x2197;</span>'
+            + '</button>'
+            + hintSpan + '</td>';
+        } else if (prop.isJsonBlob && prop.jsonBlobRawValue) {
+          const rawEsc = String(prop.jsonBlobRawValue).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+          html += '<td class="property-value">'
+            + '<button class="json-view-btn" data-raw-value="' + rawEsc + '" title="View decoded JSON">'
+            + 'View JSON'
+            + '</button>'
+            + hintSpan + '</td>';
+        } else {
+          html += '<td class="property-value">' + valueEscaped + hintSpan + '</td>';
+        }
         html += '</tr>';
       });
 
@@ -916,6 +1221,197 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           rows.forEach(row => tbody.appendChild(row));
         });
       });
+    }
+
+    // Attach click handlers to .ref-drill-btn elements inside a container
+    function attachRefDrillHandlers(container) {
+      container.querySelectorAll('.ref-drill-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          const refFamily = this.getAttribute('data-ref-family');
+          const modelURN = this.getAttribute('data-model-urn');
+          const rawValue = this.getAttribute('data-raw-value');
+          openRefElement(refFamily, modelURN, rawValue);
+        });
+      });
+    }
+
+    // Attach click handlers to .json-view-btn elements inside a container
+    function attachJsonViewHandlers(container) {
+      container.querySelectorAll('.json-view-btn').forEach(btn => {
+        btn.addEventListener('click', function(e) {
+          e.stopPropagation();
+          openJsonBlob(this.getAttribute('data-raw-value'));
+        });
+      });
+    }
+
+    // Syntax-highlight a JSON string for display in the modal
+    function syntaxHighlightJson(json) {
+      return json
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g,
+          function(match) {
+            let cls = 'json-num';
+            if (/^"/.test(match)) {
+              cls = /:$/.test(match) ? 'json-key' : 'json-str';
+            } else if (/true|false/.test(match)) {
+              cls = 'json-bool';
+            } else if (/null/.test(match)) {
+              cls = 'json-null';
+            }
+            return '<span class="' + cls + '">' + match + '</span>';
+          });
+    }
+
+    function openJsonBlob(b64Value) {
+      const titleEl = document.getElementById('ref-modal-title');
+      const subtitleEl = document.getElementById('ref-modal-subtitle');
+      const bodyEl = document.getElementById('ref-modal-body');
+
+      try {
+        // Decode base64 → UTF-8 string → parse JSON
+        let s = b64Value.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const jsonStr = decodeURIComponent(
+          atob(s).split('').map(c => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2)).join('')
+        );
+        const parsed = JSON.parse(jsonStr);
+        const pretty = JSON.stringify(parsed, null, 2);
+
+        titleEl.innerHTML = '<span>Stream Settings</span>'
+          + '<span class="category-badge">n:s</span>';
+        subtitleEl.textContent = 'Decoded JSON blob (StreamSettings)';
+        bodyEl.innerHTML = '<pre class="json-pre">' + syntaxHighlightJson(pretty) + '</pre>';
+        showRefModal();
+      } catch (err) {
+        titleEl.innerHTML = '<span>Stream Settings</span>';
+        subtitleEl.textContent = 'n:s';
+        bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Could not decode JSON: ' + escapeHtml(err.message) + '</div>';
+        showRefModal();
+      }
+    }
+
+    function showRefModal() {
+      document.getElementById('ref-modal').classList.add('active');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeRefModal() {
+      document.getElementById('ref-modal').classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
+    // Parse a base64 blob of concatenated 20-byte short keys (l: family, AtDbKeyList).
+    // Returns an array of base64url short key strings.
+    function parseShortKeyBlob(b64) {
+      try {
+        let s = b64.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bytes = new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0)));
+        const keys = [];
+        for (let i = 0; i + kElementIdSize <= bytes.length; i += kElementIdSize) {
+          const chunk = bytes.slice(i, i + kElementIdSize);
+          keys.push(makeWebsafe(btoa(String.fromCharCode.apply(null, chunk))));
+        }
+        return keys;
+      } catch (e) { return []; }
+    }
+
+    // Parse a base64 blob of concatenated 40-byte xrefs (x: family, AtExDbKeyList).
+    // Each xref is [16 bytes modelId][4 bytes flags][20 bytes elementId].
+    // Returns an array of base64url xref strings (one per referenced element).
+    function parseXrefBlob(b64) {
+      const xrefSize = kModelIdSize + kElementIdWithFlagsSize; // 16 + 24 = 40
+      try {
+        let s = b64.replace(/-/g, '+').replace(/_/g, '/');
+        while (s.length % 4) s += '=';
+        const bytes = new Uint8Array(atob(s).split('').map(c => c.charCodeAt(0)));
+        const xrefs = [];
+        for (let i = 0; i + xrefSize <= bytes.length; i += xrefSize) {
+          const chunk = bytes.slice(i, i + xrefSize);
+          xrefs.push(makeWebsafe(btoa(String.fromCharCode.apply(null, chunk))));
+        }
+        return xrefs;
+      } catch (e) { return []; }
+    }
+
+    async function openRefElement(refFamily, modelURN, rawValue) {
+      const titleEl = document.getElementById('ref-modal-title');
+      const bodyEl = document.getElementById('ref-modal-body');
+
+      titleEl.innerHTML = '<span>Loading\u2026</span>';
+      document.getElementById('ref-modal-subtitle').textContent = '';
+      bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:#4fc3f7">Loading referenced element\u2026</div>';
+      showRefModal();
+
+      try {
+        let targetModelURN = modelURN;
+        let elementKey;
+
+        if (refFamily === 'x') {
+          // AtExDbKeyList: base64 blob of concatenated 40-byte xrefs
+          const xrefs = parseXrefBlob(rawValue);
+          if (xrefs.length === 0) {
+            bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Could not parse cross-model reference.</div>';
+            return;
+          }
+          const decoded = decodeXref(xrefs[0]);
+          if (!decoded) {
+            bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Could not decode cross-model reference.</div>';
+            return;
+          }
+          targetModelURN = decoded.modelURN;
+          elementKey = toShortKey(decoded.elementKey);
+        } else {
+          // l: family — AtDbKey or AtDbKeyList: base64 blob of concatenated 20-byte short keys
+          const shortKeys = parseShortKeyBlob(rawValue);
+          if (shortKeys.length === 0) {
+            bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Could not parse reference key.</div>';
+            return;
+          }
+          elementKey = shortKeys[0];
+        }
+
+        const elements = await fetchElementDetails(targetModelURN, [elementKey]);
+
+        if (!elements || elements.length === 0) {
+          bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Referenced element not found in model.</div>';
+          return;
+        }
+
+        const element = elements[0];
+        const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed Element';
+        const categoryId = element['n:c']?.[0];
+        const categoryName = categoryId !== undefined ? getCategoryName(categoryId) : null;
+        const classification = element['n:!v']?.[0] || element['n:v']?.[0];
+
+        let titleHTML = '<span>' + escapeHtml(name) + '</span>';
+        if (categoryName) {
+          titleHTML += '<span class="category-badge">' + escapeHtml(categoryName) + '</span>';
+        }
+        if (classification) {
+          titleHTML += '<span class="classification-badge">' + escapeHtml(classification) + '</span>';
+        }
+        titleEl.innerHTML = titleHTML;
+        document.getElementById('ref-modal-subtitle').textContent =
+          targetModelURN + '  ·  ' + elementKey;
+
+        const properties = organizeProperties(element, targetModelURN);
+        const tableHTML = buildPropertiesTable(properties);
+
+        bodyEl.innerHTML = tableHTML;
+
+        const table = bodyEl.querySelector('.properties-table');
+        if (table) {
+          attachTableSorting(table);
+          attachRefDrillHandlers(table);
+          attachJsonViewHandlers(table);
+        }
+      } catch (err) {
+        console.error('Error fetching referenced element:', err);
+        bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Error: ' + escapeHtml(err.message) + '</div>';
+      }
     }
 
     // Fetch type/family element properties by type key (l:t value)
@@ -1020,9 +1516,11 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
 
         detailsDiv.innerHTML = html;
 
-        // Wire up sorting for every table rendered
+        // Wire up sorting, ref drill-down, and JSON viewer for every table rendered
         detailsDiv.querySelectorAll('.properties-table').forEach(table => {
           attachTableSorting(table);
+          attachRefDrillHandlers(table);
+          attachJsonViewHandlers(table);
         });
 
         detailsDiv.classList.add('visible');
@@ -1245,6 +1743,14 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     document.getElementById('keys-modal').addEventListener('click', (e) => {
       if (e.target.id === 'keys-modal') {
         closeKeysModal();
+      }
+    });
+
+    // Ref detail modal
+    document.getElementById('ref-modal-close').addEventListener('click', closeRefModal);
+    document.getElementById('ref-modal').addEventListener('click', (e) => {
+      if (e.target.id === 'ref-modal') {
+        closeRefModal();
       }
     });
     
