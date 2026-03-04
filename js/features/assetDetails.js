@@ -285,6 +285,48 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     .copy-link-btn.copied {
       color: #22c55e;
     }
+    .bbox-btn {
+      background: none;
+      border: none;
+      color: #808080;
+      cursor: pointer;
+      font-size: 14px;
+      padding: 4px;
+      transition: color 0.2s, transform 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    .bbox-btn:hover {
+      background: #333333;
+      color: #0696D7;
+    }
+    .bbox-btn:active { transform: scale(0.95); }
+    .bbox-btn:disabled { cursor: wait; opacity: 0.5; }
+    #bbox-popup {
+      position: fixed;
+      background: #2a2a2a;
+      border: 1px solid #404040;
+      border-radius: 6px;
+      padding: 12px 16px;
+      z-index: 9999;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+      min-width: 270px;
+    }
+    .bbox-popup-title { font-size: 11px; font-weight: 600; color: #0696D7; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .bbox-popup-table { border-collapse: collapse; font-size: 12px; width: 100%; }
+    .bbox-popup-table th { text-align: center; padding: 3px 10px; color: #a0a0a0; font-size: 11px; border-bottom: 1px solid #404040; }
+    .bbox-popup-table td { text-align: right; padding: 4px 10px; font-family: monospace; color: #e0e0e0; }
+    .bbox-popup-table .bbox-axis-label { text-align: left; color: #a0a0a0; font-family: sans-serif; font-size: 11px; }
+    .bbox-popup-none { font-size: 12px; color: #a0a0a0; }
+    .bbox-popup-footer { margin-top: 10px; display: flex; justify-content: flex-end; }
+    .bbox-copy-btn { background: none; border: 1px solid #404040; color: #a0a0a0; border-radius: 4px; padding: 3px 10px; font-size: 11px; cursor: pointer; transition: color 0.2s, border-color 0.2s; }
+    .bbox-copy-btn:hover { color: #0696D7; border-color: #0696D7; }
+    .bbox-copy-btn.copied { color: #22c55e; border-color: #22c55e; }
     .element-details {
       padding: 16px 20px;
       background: #1a1a1a;
@@ -1580,6 +1622,160 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       }
     }
     
+    // Cache of model metadata (fragmentTransformsOffset) keyed by modelURN
+    const modelMetaCache = {};
+
+    async function fetchModelMeta(modelURN) {
+      if (modelMetaCache[modelURN]) return modelMetaCache[modelURN];
+      const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/model', {
+        headers: { 'Authorization': 'Bearer ' + TOKEN, 'Region': REGION }
+      });
+      if (!response.ok) throw new Error('Failed to fetch model metadata: ' + response.statusText);
+      const data = await response.json();
+      modelMetaCache[modelURN] = data;
+      return data;
+    }
+
+    // Decode bounding box binary blob (base64) into world-space min/max coordinates.
+    // The blob is little-endian floats: [minx, miny, minz, maxx, maxy, maxz] per 28-byte record.
+    // fragmentTransformsOffset is the world-space origin of the model.
+    function decodeBBox(text, offset) {
+      let b64 = (text || '').replace(/-/g, '+').replace(/_/g, '/');
+      while (b64.length % 4) b64 += '=';
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      const view = new DataView(bytes.buffer);
+      const kRecordSize = 28;
+      const ox = offset.x || 0, oy = offset.y || 0, oz = offset.z || 0;
+      let minx = view.getFloat32(0, true) + ox;
+      let miny = view.getFloat32(4, true) + oy;
+      let minz = view.getFloat32(8, true) + oz;
+      let maxx = view.getFloat32(12, true) + ox;
+      let maxy = view.getFloat32(16, true) + oy;
+      let maxz = view.getFloat32(20, true) + oz;
+      for (let i = kRecordSize; i + 20 < bytes.length; i += kRecordSize) {
+        minx = Math.min(minx, view.getFloat32(i,      true) + ox);
+        miny = Math.min(miny, view.getFloat32(i +  4, true) + oy);
+        minz = Math.min(minz, view.getFloat32(i +  8, true) + oz);
+        maxx = Math.max(maxx, view.getFloat32(i + 12, true) + ox);
+        maxy = Math.max(maxy, view.getFloat32(i + 16, true) + oy);
+        maxz = Math.max(maxz, view.getFloat32(i + 20, true) + oz);
+      }
+      return { minx, miny, minz, maxx, maxy, maxz };
+    }
+
+    function showBBoxPopup(button, box) {
+      // Remove any existing popup
+      const existing = document.getElementById('bbox-popup');
+      if (existing) existing.remove();
+
+      const popup = document.createElement('div');
+      popup.id = 'bbox-popup';
+      popup.setAttribute('data-for-key', button.getAttribute('data-element-key'));
+
+      if (!box) {
+        popup.innerHTML = '<div class="bbox-popup-none">No bounding box data — element may be logical (no geometry)</div>';
+      } else {
+        const fmt = (v) => v.toFixed(3);
+        const jsonObj = {
+          min: { x: parseFloat(box.minx.toFixed(6)), y: parseFloat(box.miny.toFixed(6)), z: parseFloat(box.minz.toFixed(6)) },
+          max: { x: parseFloat(box.maxx.toFixed(6)), y: parseFloat(box.maxy.toFixed(6)), z: parseFloat(box.maxz.toFixed(6)) }
+        };
+        const jsonStr = JSON.stringify(jsonObj, null, 2);
+        popup.innerHTML =
+          '<div class="bbox-popup-title">Bounding Box</div>' +
+          '<table class="bbox-popup-table">' +
+            '<thead><tr><th></th><th>X</th><th>Y</th><th>Z</th></tr></thead>' +
+            '<tbody>' +
+              '<tr><td class="bbox-axis-label">Min</td><td>' + fmt(box.minx) + '</td><td>' + fmt(box.miny) + '</td><td>' + fmt(box.minz) + '</td></tr>' +
+              '<tr><td class="bbox-axis-label">Max</td><td>' + fmt(box.maxx) + '</td><td>' + fmt(box.maxy) + '</td><td>' + fmt(box.maxz) + '</td></tr>' +
+            '</tbody>' +
+          '</table>' +
+          '<div class="bbox-popup-footer"><button class="bbox-copy-btn" data-json="' + jsonStr.replace(/"/g, '&quot;') + '">Copy JSON</button></div>';
+
+        // Wire up copy button after inserting into DOM
+        setTimeout(() => {
+          const copyBtn = popup.querySelector('.bbox-copy-btn');
+          if (copyBtn) {
+            copyBtn.addEventListener('click', (e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(jsonStr).then(() => {
+                copyBtn.textContent = 'Copied!';
+                copyBtn.classList.add('copied');
+                setTimeout(() => { copyBtn.textContent = 'Copy JSON'; copyBtn.classList.remove('copied'); }, 2000);
+              }).catch(() => {
+                copyBtn.textContent = 'Failed';
+                setTimeout(() => { copyBtn.textContent = 'Copy JSON'; }, 2000);
+              });
+            });
+          }
+        }, 0);
+      }
+
+      document.body.appendChild(popup);
+
+      // Position: below the button, horizontally centered on it
+      const rect = button.getBoundingClientRect();
+      const popupW = popup.offsetWidth;
+      let left = rect.left + rect.width / 2 - popupW / 2;
+      left = Math.max(8, Math.min(left, window.innerWidth - popupW - 8));
+      popup.style.top = (rect.bottom + 6) + 'px';
+      popup.style.left = left + 'px';
+
+      // Close when clicking outside
+      const closeHandler = (e) => {
+        if (!popup.contains(e.target) && e.target !== button) {
+          popup.remove();
+          document.removeEventListener('click', closeHandler, true);
+        }
+      };
+      setTimeout(() => document.addEventListener('click', closeHandler, true), 0);
+    }
+
+    async function showBoundingBox(modelURN, elementKey, button) {
+      // Toggle: clicking the same button again closes the popup
+      const existing = document.getElementById('bbox-popup');
+      if (existing && existing.getAttribute('data-for-key') === elementKey) {
+        existing.remove();
+        return;
+      }
+
+      const originalHTML = button.innerHTML;
+      button.innerHTML = '⏳';
+      button.disabled = true;
+
+      try {
+        const modelMeta = await fetchModelMeta(modelURN);
+        const offset = modelMeta.fragmentTransformsOffset || { x: 0, y: 0, z: 0 };
+
+        // Scan with LMV family ('0') to get the bounding box column (0:0)
+        const payload = JSON.stringify({ families: ['0'], keys: [elementKey], includeHistory: false });
+        const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json', 'Region': REGION },
+          body: payload
+        });
+        if (!response.ok) throw new Error('Failed to fetch element LMV data');
+        const data = await response.json();
+        const elements = data.filter(item => typeof item === 'object' && item !== null && item['k']);
+        const element = elements[0];
+        const bboxVal = element && element['0:0']; // QC.BoundingBox — API returns an array
+        const bboxRaw = Array.isArray(bboxVal) ? bboxVal[0] : bboxVal;
+
+        const box = bboxRaw ? decodeBBox(bboxRaw, offset) : null;
+        showBBoxPopup(button, box);
+      } catch (error) {
+        console.error('Failed to fetch bounding box:', error);
+        button.innerHTML = '✗';
+        setTimeout(() => { button.innerHTML = originalHTML; }, 2000);
+        return;
+      } finally {
+        button.innerHTML = originalHTML;
+        button.disabled = false;
+      }
+    }
+
     async function loadInitialData() {
       const container = document.getElementById('content-container');
       
@@ -1646,6 +1842,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
             if (SHOW_LINKS) {
               html += '<button class="copy-link-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Copy link to asset">🔗</button>';
             }
+            html += '<button class="bbox-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Show bounding box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></button>';
             html += '<button class="element-toggle" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '">Show Details</button>';
             html += '</div>';
             html += '<div class="element-details"></div>';
@@ -1681,6 +1878,17 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           });
         });
         
+        // Add event listeners to all bounding box buttons
+        const bboxButtons = container.querySelectorAll('.bbox-btn');
+        bboxButtons.forEach(button => {
+          button.addEventListener('click', async function(e) {
+            e.stopPropagation();
+            const modelURN = this.getAttribute('data-model-urn');
+            const elementKey = this.getAttribute('data-element-key');
+            await showBoundingBox(modelURN, elementKey, this);
+          });
+        });
+
         // Add event listeners to all View Keys buttons
         const viewKeysButtons = container.querySelectorAll('.view-keys-btn');
         viewKeysButtons.forEach(button => {
