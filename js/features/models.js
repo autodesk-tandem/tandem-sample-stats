@@ -357,13 +357,23 @@ export async function displayModels(container, models, facilityURN, region) {
     return;
   }
 
+  // Default facility model last (stable: preserves API order within default vs non-default)
+  const modelsOrdered = [...models].sort((a, b) => {
+    const aDefault = isDefaultModel(facilityURN, a.modelId);
+    const bDefault = isDefaultModel(facilityURN, b.modelId);
+    if (aDefault === bDefault) {
+      return 0;
+    }
+    return aDefault ? 1 : -1;
+  });
+
   // Build header with toggle button (always visible)
   let headerHtml = `
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center space-x-2">
-        <div class="text-xl font-bold text-tandem-blue">${models.length}</div>
+        <div class="text-xl font-bold text-tandem-blue">${modelsOrdered.length}</div>
         <div class="text-sm text-dark-text-secondary">
-          <div>Model${models.length !== 1 ? 's' : ''}</div>
+          <div>Model${modelsOrdered.length !== 1 ? 's' : ''}</div>
           <div id="summary-total-elements" class="text-xs text-dark-text-secondary">Calculating...</div>
         </div>
       </div>
@@ -398,8 +408,8 @@ export async function displayModels(container, models, facilityURN, region) {
   // Build detailed view (initially hidden)
   let detailHtml = '<div id="models-detail" class="hidden space-y-2">';
   
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
+  for (let i = 0; i < modelsOrdered.length; i++) {
+    const model = modelsOrdered[i];
     // Check if it's the default model by comparing URN IDs
     const isDefault = isDefaultModel(facilityURN, model.modelId);
     const isMainModel = model.main === true;
@@ -519,14 +529,14 @@ export async function displayModels(container, models, facilityURN, region) {
   const viewHistoryBtn = document.getElementById('view-history-btn');
   if (viewHistoryBtn) {
     viewHistoryBtn.addEventListener('click', () => {
-      viewModelsHistory(facilityURN, region, models, viewHistoryBtn);
+      viewModelsHistory(facilityURN, region, modelsOrdered, viewHistoryBtn);
     });
   }
 
   // Fetch element counts asynchronously for each model
   const countPromises = [];
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
+  for (let i = 0; i < modelsOrdered.length; i++) {
+    const model = modelsOrdered[i];
     const promise = getElementCount(model.modelId, region).then(count => {
       // Update detail view
       const detailCountElement = document.getElementById(`detail-element-count-${i}`);
@@ -561,8 +571,8 @@ export async function displayModels(container, models, facilityURN, region) {
   // Track current view type for each model (default to 'category')
   const currentViewTypes = new Map();
   
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
+  for (let i = 0; i < modelsOrdered.length; i++) {
+    const model = modelsOrdered[i];
     const toggleBtn = document.getElementById(`toggle-breakdown-${i}`);
     const breakdownContainer = document.getElementById(`breakdown-container-${i}`);
     const breakdownTable = document.getElementById(`breakdown-table-${i}`);
@@ -671,8 +681,8 @@ export async function displayModels(container, models, facilityURN, region) {
   }
   
   // Fetch model properties asynchronously for each model (skip default models)
-  for (let i = 0; i < models.length; i++) {
-    const model = models[i];
+  for (let i = 0; i < modelsOrdered.length; i++) {
+    const model = modelsOrdered[i];
     const isDefault = isDefaultModel(facilityURN, model.modelId);
     
     // Skip fetching properties for default model

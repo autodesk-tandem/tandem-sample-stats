@@ -709,8 +709,7 @@ export async function getTickets(facilityURN, region) {
         ColumnFamilies.Refs,
         ColumnFamilies.Xrefs
       ],
-      includeHistory: false,
-      skipArrays: true
+      includeHistory: false
     });
     
     const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
