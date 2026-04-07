@@ -33,6 +33,24 @@ export function getDataTypeName(typeCode) {
   return AttributeType[typeCode] || `Type ${typeCode}`;
 }
 
+const AttributeContextLabels = { e: 'Element', t: 'Type', s: 'Space', f: 'Facility' };
+
+/**
+ * Get human-readable label for an attribute context string.
+ * Context is a combination of single-character codes: "e" (Element), "t" (Type),
+ * "s" (Space), "f" (Facility). An empty/missing context defaults to Element.
+ * @param {string} context - Context string from schema attribute (e.g. "e", "t", "et")
+ * @returns {string} Human-readable label
+ */
+export function getContextLabel(context) {
+  if (!context) return 'Element';
+  const parts = [];
+  for (const c of context) {
+    if (AttributeContextLabels[c]) parts.push(AttributeContextLabels[c]);
+  }
+  return parts.length > 0 ? parts.join(', ') : 'Element';
+}
+
 /**
  * Parse qualified column ID into family and property (e.g. "n:n" -> { family: "n", property: "n" }).
  * @param {string} id - Qualified column ID (family:property)

@@ -1,4 +1,4 @@
-import { getDataTypeName, isDefaultModel, compareQualifiedColumnIds } from '../utils.js';
+import { getDataTypeName, getContextLabel, isDefaultModel, compareQualifiedColumnIds } from '../utils.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { 
@@ -75,10 +75,11 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   let tableHtml = `
     <table class="min-w-full text-xs table-fixed">
       <colgroup>
-        <col style="width: 20%;">
-        <col style="width: 25%;">
-        <col style="width: 35%;">
-        <col style="width: 20%;">
+        <col style="width: 15%;">
+        <col style="width: 22%;">
+        <col style="width: 30%;">
+        <col style="width: 18%;">
+        <col style="width: 15%;">
       </colgroup>
       <thead class="bg-dark-bg/50">
         <tr>
@@ -110,6 +111,13 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
               ${sortColumn === 'dataType' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
             </div>
           </th>
+          <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
+              data-model="${modelId}" data-column="context" data-direction="${sortColumn === 'context' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}">
+            <div class="flex items-center gap-1">
+              <span>Context</span>
+              ${sortColumn === 'context' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+            </div>
+          </th>
         </tr>
       </thead>
       <tbody class="divide-y divide-dark-border">
@@ -121,6 +129,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   for (let j = 0; j < displayCount; j++) {
     const attr = sortedAttributes[j];
     const dataTypeName = getDataTypeName(attr.dataType);
+    const contextLabel = getContextLabel(attr.context);
     const attrIdEscaped = (attr.id || '').replace(/"/g, '&quot;');
     tableHtml += `
       <tr class="hover:bg-dark-bg/30" data-attr-id="${attrIdEscaped}">
@@ -128,6 +137,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
         <td class="px-3 py-2 text-dark-text">${attr.category || ''}</td>
         <td class="px-3 py-2 text-dark-text">${attr.name || ''}</td>
         <td class="px-3 py-2 text-dark-text-secondary">${dataTypeName}</td>
+        <td class="px-3 py-2 text-dark-text-secondary">${contextLabel}</td>
       </tr>
     `;
   }
@@ -135,7 +145,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   if (sortedAttributes.length > 20 && !showAll) {
     tableHtml += `
       <tr>
-        <td colspan="4" class="px-3 py-2 text-center">
+        <td colspan="5" class="px-3 py-2 text-center">
           <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
                   data-model="${modelId}" data-show-all="true">
             ... and ${sortedAttributes.length - 20} more attributes (click to show all)
@@ -148,7 +158,7 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
   if (sortedAttributes.length > 20 && showAll) {
     tableHtml += `
       <tr>
-        <td colspan="4" class="px-3 py-2 text-center border-t border-dark-border">
+        <td colspan="5" class="px-3 py-2 text-center border-t border-dark-border">
           <button class="text-tandem-blue hover:text-blue-700 font-medium text-sm cursor-pointer"
                   data-model="${modelId}" data-show-less="true">
             Show first 20 only
@@ -413,12 +423,14 @@ function generateSchemaSearchResultsHTML(query, resultsByModel) {
     let rowsHtml = '';
     for (const attr of matches) {
       const dataTypeName = getDataTypeName(attr.dataType);
+      const contextLabel = getContextLabel(attr.context);
       rowsHtml += `
         <tr>
           <td class="cell-id">${escape(attr.id)}</td>
           <td class="cell-cat">${escape(attr.category)}</td>
           <td class="cell-name">${escape(attr.name)}</td>
           <td class="cell-type">${escape(dataTypeName)}</td>
+          <td class="cell-ctx">${escape(contextLabel)}</td>
         </tr>`;
     }
     sectionsHtml += `
@@ -430,10 +442,11 @@ function generateSchemaSearchResultsHTML(query, resultsByModel) {
         </div>
         <table class="schema-results-table">
           <colgroup>
-            <col style="width: 20%;">
-            <col style="width: 25%;">
-            <col style="width: 35%;">
-            <col style="width: 20%;">
+            <col style="width: 15%;">
+            <col style="width: 22%;">
+            <col style="width: 30%;">
+            <col style="width: 18%;">
+            <col style="width: 15%;">
           </colgroup>
           <thead>
             <tr>
@@ -441,6 +454,7 @@ function generateSchemaSearchResultsHTML(query, resultsByModel) {
               <th class="sortable" data-column="category">Category <span class="sort-icon"></span></th>
               <th class="sortable" data-column="name">Name <span class="sort-icon"></span></th>
               <th class="sortable" data-column="dataType">Data Type <span class="sort-icon"></span></th>
+              <th class="sortable" data-column="context">Context <span class="sort-icon"></span></th>
             </tr>
           </thead>
           <tbody>${rowsHtml}</tbody>
@@ -513,6 +527,7 @@ function generateSchemaSearchResultsHTML(query, resultsByModel) {
     td { padding: 10px 14px; font-size: 13px; border-bottom: 1px solid #404040; overflow: hidden; text-overflow: ellipsis; }
     .cell-id { font-family: monospace; color: #a0a0a0; }
     .cell-type { color: #a0a0a0; }
+    .cell-ctx { color: #a0a0a0; }
   </style>
 </head>
 <body>
@@ -554,7 +569,7 @@ function generateSchemaSearchResultsHTML(query, resultsByModel) {
             });
             th.classList.add(state.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
             var rows = Array.from(tbody.querySelectorAll('tr'));
-            var idx = ['id','category','name','dataType'].indexOf(col);
+            var idx = ['id','category','name','dataType','context'].indexOf(col);
             if (idx === -1) return;
             rows.sort(function(ra, rb) {
               var a = getCellText(ra, idx);
@@ -600,7 +615,7 @@ async function exportSchemaToExcel(models, schemaCache, facilityURN) {
 
       // Prepare sheet data
       const sheetData = [
-        ['ID', 'Category', 'Name', 'Data Type'] // Header row
+        ['ID', 'Category', 'Name', 'Data Type', 'Context'] // Header row
       ];
 
       // Add all attributes
@@ -609,7 +624,8 @@ async function exportSchemaToExcel(models, schemaCache, facilityURN) {
           attr.id || '',
           attr.category || '',
           attr.name || '',
-          getDataTypeName(attr.dataType)
+          getDataTypeName(attr.dataType),
+          getContextLabel(attr.context)
         ]);
       });
 
@@ -617,7 +633,7 @@ async function exportSchemaToExcel(models, schemaCache, facilityURN) {
       const ws = XLSX.utils.aoa_to_sheet(sheetData);
 
       // Style the header row
-      const columns = getColumnLetters(4); // 4 columns: ID, Category, Name, Data Type
+      const columns = getColumnLetters(5); // 5 columns: ID, Category, Name, Data Type, Context
       styleHeaderRow(ws, 1, columns);
 
       // Set column widths
@@ -625,7 +641,8 @@ async function exportSchemaToExcel(models, schemaCache, facilityURN) {
         { wch: 35 }, // ID
         { wch: 20 }, // Category
         { wch: 30 }, // Name
-        { wch: 15 }  // Data Type
+        { wch: 15 }, // Data Type
+        { wch: 12 }  // Context
       ];
 
       // Sanitize and make unique sheet name
