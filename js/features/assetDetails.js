@@ -5,6 +5,24 @@ import { getCategoryName, compareQualifiedColumnIds } from '../utils.js';
 import { makeXrefKey, toFullKey, toShortKey, decodeXref } from '../../tandem/keys.js';
 
 /**
+ * Ensure a key is a short key (20 bytes). History returns full keys (24 bytes
+ * with a 4-byte flag prefix); the scan endpoint expects short keys.
+ */
+function ensureShortKey(key) {
+  try {
+    let standardB64 = key.replace(/-/g, '+').replace(/_/g, '/');
+    while (standardB64.length % 4) standardB64 += '=';
+    const byteLength = atob(standardB64).length;
+    if (byteLength === kElementIdWithFlagsSize) {
+      return toShortKey(key);
+    }
+    return key;
+  } catch {
+    return key;
+  }
+}
+
+/**
  * Generate HTML page for asset details
  * @param {Array<{modelURN: string, modelName: string, keys: Array<string>}>} elementsByModel - Elements grouped by model
  * @param {string} title - Page title
@@ -12,8 +30,12 @@ import { makeXrefKey, toFullKey, toShortKey, decodeXref } from '../../tandem/key
  * @returns {string} HTML page content
  */
 function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, showLinks = true) {
-  // Embed all data as JSON for client-side processing
-  const dataJSON = JSON.stringify(elementsByModel).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+  // Normalize keys: history may pass full keys (24 bytes with flag prefix); scan needs short keys
+  const normalizedData = elementsByModel.map(group => ({
+    ...group,
+    keys: group.keys.map(key => ensureShortKey(key))
+  }));
+  const dataJSON = JSON.stringify(normalizedData).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
   const tokenValue = window.sessionStorage.token || '';
   const regionValue = region || 'US';
   const showLinksValue = showLinks ? 'true' : 'false';
@@ -232,6 +254,15 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       font-weight: 500;
       background: linear-gradient(to right, rgba(34, 197, 94, 0.3), rgba(22, 163, 74, 0.3));
       color: #86efac;
+      border-radius: 4px;
+    }
+    .type-badge {
+      display: inline-block;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      background: linear-gradient(to right, rgba(251, 146, 60, 0.3), rgba(234, 88, 12, 0.3));
+      color: #fdba74;
       border-radius: 4px;
     }
     .element-key {
@@ -602,6 +633,21 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       opacity: 0.6;
       flex-shrink: 0;
     }
+    .prop-history-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #4fc3f7;
+      padding: 2px 4px;
+      border-radius: 3px;
+      vertical-align: middle;
+      margin-left: 6px;
+      transition: color 0.15s, background 0.15s;
+    }
+    .prop-history-btn:hover {
+      color: #81d4fa;
+      background: rgba(79, 195, 247, 0.18);
+    }
     /* Ref detail modal */
     #ref-modal {
       display: none;
@@ -765,6 +811,49 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     
     // Track which elements have loaded details
     const loadedDetails = new Map();
+
+    // Cache parsed property history (keyed by "modelURN|scanKey|propId")
+    const propHistoryCache = new Map();
+
+    /**
+     * Separate history data from element properties returned with includeHistory.
+     * Each property value is [val, ts, val, ts, ...]. We extract the current
+     * value (first entry) for display and record which properties have >1 version.
+     * Returns { cleanElement, propsWithHistory: Set<propId>, parsedHistory: Map<propId, entries[]> }
+     */
+    function extractHistoryFromElement(element) {
+      const cleanElement = {};
+      const propsWithHistory = new Set();
+      const parsedHistory = new Map();
+
+      for (const [key, value] of Object.entries(element)) {
+        if (key === 'k' || !key.includes(':')) {
+          cleanElement[key] = value;
+          continue;
+        }
+        if (!Array.isArray(value) || value.length === 0) {
+          cleanElement[key] = value;
+          continue;
+        }
+        // With includeHistory, arrays are [value, timestamp_ms, value, timestamp_ms, ...]
+        // Current value is the first entry; each pair is value + timestamp
+        cleanElement[key] = [value[0]];
+
+        if (value.length > 2) {
+          propsWithHistory.add(key);
+        }
+
+        // Parse all version entries for the cache
+        const entries = [];
+        for (let i = 0; i < value.length - 1; i += 2) {
+          entries.push({ value: value[i], timestamp: value[i + 1] });
+        }
+        entries.sort((a, b) => b.timestamp - a.timestamp);
+        parsedHistory.set(key, entries);
+      }
+
+      return { cleanElement, propsWithHistory, parsedHistory };
+    }
     
     // Helper function for URL-safe base64 (required by makeXrefKey and toFullKey)
     function makeWebsafe(urn) {
@@ -813,7 +902,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       const payload = JSON.stringify({
         families: ['n', 'l', 'x', 'r', 'z'],
         keys: elementKeys,
-        includeHistory: false
+        includeHistory: true
       });
       
       const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
@@ -837,7 +926,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     
     async function fetchElementNames(modelURN, elementKeys) {
       const payload = JSON.stringify({
-        qualifiedColumns: ['n:c', 'n:!n', 'n:n', 'n:!v', 'n:v'],
+        qualifiedColumns: ['n:a', 'n:c', 'n:!n', 'n:n', 'n:!v', 'n:v'],
         keys: elementKeys,
         includeHistory: false
       });
@@ -1111,6 +1200,13 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       0xffffffff: 'Unknown'
     };
 
+    const FAMILY_TYPE_FLAG = 0x01000000;
+
+    function isFamilyType(element) {
+      const flags = element['n:a']?.[0];
+      return flags !== undefined && (parseInt(flags) >>> 0) === FAMILY_TYPE_FLAG;
+    }
+
     const SystemClassNames = [
       'Supply Air', 'Return Air', 'Exhaust Air', 'Hydronic Supply', 'Hydronic Return',
       'Domestic Hot Water', 'Domestic Cold Water', 'Sanitary', 'Power', 'Vent',
@@ -1169,7 +1265,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     }
 
     // Build a sortable properties table HTML string from an array of property objects
-    function buildPropertiesTable(properties) {
+    function buildPropertiesTable(properties, propsWithHistory) {
       let html = '<table class="properties-table">';
       html += '<thead><tr>';
       html += '<th data-sort="id">ID</th>';
@@ -1184,6 +1280,15 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         const categoryEscaped = escapeHtml(prop.category);
         const nameEscaped = escapeHtml(prop.name);
         const valueEscaped = escapeHtml(prop.value);
+        const hasHist = propsWithHistory && propsWithHistory.has(prop.id);
+        const historyBtn = hasHist
+          ? '<button class="prop-history-btn has-history" data-prop-id="' + prop.id.replace(/"/g, '&quot;') + '"'
+            + ' data-prop-name="' + (prop.category ? prop.category + '.' : '') + prop.name.replace(/"/g, '&quot;') + '"'
+            + ' title="View property change history">'
+            + '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+            + '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'
+            + '</svg></button>'
+          : '';
 
         html += '<tr data-id="' + prop.id.replace(/"/g, '&quot;') + '" data-category="' + prop.category.replace(/"/g, '&quot;') + '" data-name="' + prop.name.replace(/"/g, '&quot;') + '" data-value="' + prop.value.replace(/"/g, '&quot;') + '">';
         html += '<td class="property-id">' + idEscaped + '</td>';
@@ -1203,16 +1308,16 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
             + valueEscaped
             + '<span class="ref-arrow">&#x2197;</span>'
             + '</button>'
-            + hintSpan + '</td>';
+            + hintSpan + historyBtn + '</td>';
         } else if (prop.isJsonBlob && prop.jsonBlobRawValue) {
           const rawEsc = String(prop.jsonBlobRawValue).replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
           html += '<td class="property-value">'
             + '<button class="json-view-btn" data-raw-value="' + rawEsc + '" title="View decoded JSON">'
             + 'View JSON'
             + '</button>'
-            + hintSpan + '</td>';
+            + hintSpan + historyBtn + '</td>';
         } else {
-          html += '<td class="property-value">' + valueEscaped + hintSpan + '</td>';
+          html += '<td class="property-value">' + valueEscaped + hintSpan + historyBtn + '</td>';
         }
         html += '</tr>';
       });
@@ -1286,6 +1391,90 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           openJsonBlob(this.getAttribute('data-raw-value'));
         });
       });
+    }
+
+    function attachHistoryHandlers(container) {
+      container.querySelectorAll('.prop-history-btn').forEach(btn => {
+        btn.addEventListener('click', async function(e) {
+          e.stopPropagation();
+          const propId = this.getAttribute('data-prop-id');
+          const propName = this.getAttribute('data-prop-name');
+          const section = this.closest('.props-section');
+          const modelURN = section?.getAttribute('data-model-urn');
+          const scanKey = section?.getAttribute('data-scan-key');
+
+          if (!modelURN || !scanKey) {
+            console.warn('Missing model URN or scan key for history lookup');
+            return;
+          }
+          await showPropertyHistory(modelURN, scanKey, propId, propName);
+        });
+      });
+    }
+
+    async function showPropertyHistory(modelURN, scanKey, qualifiedColumn, displayName) {
+      const titleEl = document.getElementById('ref-modal-title');
+      const subtitleEl = document.getElementById('ref-modal-subtitle');
+      const bodyEl = document.getElementById('ref-modal-body');
+
+      titleEl.innerHTML = '<span>Property History</span>'
+        + '<span class="category-badge">' + escapeHtml(qualifiedColumn) + '</span>';
+      subtitleEl.textContent = escapeHtml(displayName);
+
+      // Check pre-fetched cache first
+      const cacheKey = modelURN + '|' + scanKey + '|' + qualifiedColumn;
+      const cached = propHistoryCache.get(cacheKey);
+
+      if (!cached) {
+        bodyEl.innerHTML = '<div style="padding:20px;color:#808080">Loading history\u2026</div>';
+      }
+      showRefModal();
+
+      try {
+        const history = cached || await fetchPropertyHistory(modelURN, scanKey, qualifiedColumn);
+
+        if (history.length === 0) {
+          bodyEl.innerHTML = '<div style="padding:20px;color:#808080">No history available for this property.</div>';
+          return;
+        }
+
+        let html = '<table class="properties-table">';
+        html += '<thead><tr>';
+        html += '<th>#</th>';
+        html += '<th>Timestamp</th>';
+        html += '<th>Value</th>';
+        html += '</tr></thead>';
+        html += '<tbody class="properties-tbody">';
+
+        history.forEach((entry, index) => {
+          const date = new Date(entry.timestamp);
+          const dateStr = date.toLocaleString('en-US', {
+            year: 'numeric', month: 'short', day: 'numeric',
+            hour: 'numeric', minute: '2-digit', second: '2-digit',
+            hour12: true
+          });
+          const valueStr = entry.value === null || entry.value === undefined
+            ? '-' : escapeHtml(String(entry.value));
+          const isCurrent = index === 0;
+
+          html += '<tr' + (isCurrent ? ' style="background:rgba(6,150,215,0.08)"' : '') + '>';
+          html += '<td class="property-id">' + (index + 1) + '</td>';
+          html += '<td class="property-category">' + escapeHtml(dateStr) + '</td>';
+          html += '<td class="property-value">' + valueStr
+            + (isCurrent ? ' <span class="prop-hint">(current)</span>' : '')
+            + '</td>';
+          html += '</tr>';
+        });
+
+        html += '</tbody></table>';
+        html += '<div style="padding:8px 12px;font-size:11px;color:#808080">'
+          + history.length + ' version' + (history.length !== 1 ? 's' : '')
+          + '</div>';
+        bodyEl.innerHTML = html;
+      } catch (err) {
+        console.error('Error fetching property history:', err);
+        bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Error: ' + escapeHtml(err.message) + '</div>';
+      }
     }
 
     // Syntax-highlight a JSON string for display in the modal
@@ -1422,11 +1611,13 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           return;
         }
 
-        const element = elements[0];
-        const name = element['n:!n']?.[0] || element['n:n']?.[0] || 'Unnamed Element';
-        const categoryId = element['n:c']?.[0];
+        const rawElement = elements[0];
+        const { cleanElement, propsWithHistory } = extractHistoryFromElement(rawElement);
+
+        const name = cleanElement['n:!n']?.[0] || cleanElement['n:n']?.[0] || 'Unnamed Element';
+        const categoryId = cleanElement['n:c']?.[0];
         const categoryName = categoryId !== undefined ? getCategoryName(categoryId) : null;
-        const classification = element['n:!v']?.[0] || element['n:v']?.[0];
+        const classification = cleanElement['n:!v']?.[0] || cleanElement['n:v']?.[0];
 
         let titleHTML = '<span>' + escapeHtml(name) + '</span>';
         if (categoryName) {
@@ -1439,16 +1630,17 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         document.getElementById('ref-modal-subtitle').textContent =
           targetModelURN + '  ·  ' + elementKey;
 
-        const properties = organizeProperties(element, targetModelURN);
-        const tableHTML = buildPropertiesTable(properties);
+        const properties = organizeProperties(cleanElement, targetModelURN);
+        const tableHTML = buildPropertiesTable(properties, propsWithHistory);
 
-        bodyEl.innerHTML = tableHTML;
+        bodyEl.innerHTML = '<div class="props-section" data-model-urn="' + targetModelURN.replace(/"/g, '&quot;') + '" data-scan-key="' + elementKey.replace(/"/g, '&quot;') + '">' + tableHTML + '</div>';
 
         const table = bodyEl.querySelector('.properties-table');
         if (table) {
           attachTableSorting(table);
           attachRefDrillHandlers(table);
           attachJsonViewHandlers(table);
+          attachHistoryHandlers(table);
         }
       } catch (err) {
         console.error('Error fetching referenced element:', err);
@@ -1456,12 +1648,52 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       }
     }
 
-    // Fetch type/family element properties by type key (l:t value)
+    async function fetchPropertyHistory(modelURN, scanKey, qualifiedColumn) {
+      const payload = JSON.stringify({
+        qualifiedColumns: [qualifiedColumn],
+        keys: [scanKey],
+        includeHistory: true
+      });
+
+      const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
+        method: 'POST',
+        headers: {
+          'Authorization': 'Bearer ' + TOKEN,
+          'Content-Type': 'application/json',
+          'Region': REGION
+        },
+        body: payload
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch property history: ' + response.statusText);
+      }
+
+      const data = await response.json();
+      const elements = data.filter(item => typeof item === 'object' && item !== null && item['k']);
+      if (elements.length === 0) return [];
+
+      const values = elements[0][qualifiedColumn];
+      if (!Array.isArray(values) || values.length === 0) return [];
+
+      // Parse interleaved [value, timestamp_ms, value, timestamp_ms, ...] pairs
+      const history = [];
+      for (let i = 0; i < values.length - 1; i += 2) {
+        history.push({ value: values[i], timestamp: values[i + 1] });
+      }
+      history.sort((a, b) => b.timestamp - a.timestamp);
+      return history;
+    }
+
+    // Fetch type/family element properties by type key (l:t value).
+    // Use a full key with logical flags so the scan endpoint looks up the
+    // FamilyType row directly, bypassing the physical-first dual-pass.
     async function fetchTypeProperties(modelURN, typeKey) {
+      const fullTypeKey = toFullKey(typeKey, true);
       const payload = JSON.stringify({
         families: ['n', 'l', 'x', 'r', 'z'],
-        keys: [typeKey],
-        includeHistory: false
+        keys: [fullTypeKey],
+        includeHistory: true
       });
 
       const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
@@ -1483,7 +1715,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     }
 
 
-    async function toggleElementDetails(modelURN, elementKey, button, detailsDiv) {
+    async function toggleElementDetails(modelURN, elementKey, button, detailsDiv, isType) {
       if (detailsDiv.classList.contains('visible')) {
         detailsDiv.classList.remove('visible');
         button.textContent = 'Show Details';
@@ -1501,7 +1733,11 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       button.disabled = true;
 
       try {
-        const elements = await fetchElementDetails(modelURN, [elementKey]);
+        // For Type elements, use a full key with logical flags so the scan
+        // endpoint looks up the logical row directly (avoids the physical-first
+        // dual-pass that can miss Type data).
+        const scanKey = isType ? toFullKey(elementKey, true) : elementKey;
+        const elements = await fetchElementDetails(modelURN, [scanKey]);
         if (elements.length === 0) {
           detailsDiv.innerHTML = '<div class="error-message">No details found</div>';
           detailsDiv.classList.add('visible');
@@ -1509,8 +1745,17 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           return;
         }
 
-        const element = elements[0];
-        const properties = organizeProperties(element, modelURN);
+        const rawElement = elements[0];
+        const { cleanElement, propsWithHistory, parsedHistory } = extractHistoryFromElement(rawElement);
+
+        // Cache parsed history for this element's properties
+        const cachePrefix = modelURN + '|' + scanKey + '|';
+        for (const [propId, entries] of parsedHistory) {
+          propHistoryCache.set(cachePrefix + propId, entries);
+        }
+
+        const elementIsType = isType || isFamilyType(cleanElement);
+        const properties = organizeProperties(cleanElement, modelURN);
 
         properties.sort((a, b) => {
           const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
@@ -1518,51 +1763,73 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
         });
 
-        // Check for a type reference: l:t (QC.FamilyType = Refs family + 't' column)
-        const typeKey = element['l:t']?.[0];
-        let typeProperties = [];
-        let typeName = null;
+        let html = '';
 
-        if (typeKey) {
-          try {
-            const typeElements = await fetchTypeProperties(modelURN, typeKey);
-            if (typeElements.length > 0) {
-              const typeElement = typeElements[0];
-              typeName = typeElement['n:n']?.[0] || null;
-              typeProperties = organizeProperties(typeElement, modelURN);
-              typeProperties.sort((a, b) => {
-                const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
-                if (cc !== 0) return cc;
-                return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-              });
-            }
-          } catch (typeError) {
-            console.warn('Could not fetch type properties:', typeError);
-          }
-        }
+        const urnAttr = ' data-model-urn="' + modelURN.replace(/"/g, '&quot;') + '"';
 
-        // Render Element Properties section
-        let html = '<div class="props-section">';
-        html += '<div class="props-section-label">Element Properties</div>';
-        html += buildPropertiesTable(properties);
-        html += '</div>';
-
-        // Render Type Properties section (only when a type element was found)
-        if (typeProperties.length > 0) {
+        if (elementIsType) {
+          // Element is a FamilyType — show only Type Properties
+          const typeName = cleanElement['n:!n']?.[0] || cleanElement['n:n']?.[0] || null;
           const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
-          html += '<div class="props-section props-section-type">';
+          html += '<div class="props-section props-section-type"' + urnAttr + ' data-scan-key="' + scanKey.replace(/"/g, '&quot;') + '">';
           html += '<div class="props-section-label">' + typeLabel + '</div>';
-          html += buildPropertiesTable(typeProperties);
+          html += buildPropertiesTable(properties, propsWithHistory);
           html += '</div>';
+        } else {
+          // Physical/instance element — show Element Properties, then look up Type
+          html += '<div class="props-section"' + urnAttr + ' data-scan-key="' + elementKey.replace(/"/g, '&quot;') + '">';
+          html += '<div class="props-section-label">Element Properties</div>';
+          html += buildPropertiesTable(properties, propsWithHistory);
+          html += '</div>';
+
+          // Check for a type reference: l:t (QC.FamilyType = Refs family + 't' column)
+          const typeKey = cleanElement['l:t']?.[0];
+          let typeProperties = [];
+          let typePropsWithHistory = new Set();
+          let typeName = null;
+
+          if (typeKey) {
+            try {
+              const typeElements = await fetchTypeProperties(modelURN, typeKey);
+              if (typeElements.length > 0) {
+                const rawTypeElement = typeElements[0];
+                const typeHist = extractHistoryFromElement(rawTypeElement);
+                const typeCachePrefix = modelURN + '|' + typeKey + '|';
+                for (const [propId, entries] of typeHist.parsedHistory) {
+                  propHistoryCache.set(typeCachePrefix + propId, entries);
+                }
+
+                typeName = typeHist.cleanElement['n:!n']?.[0] || typeHist.cleanElement['n:n']?.[0] || null;
+                typeProperties = organizeProperties(typeHist.cleanElement, modelURN);
+                typePropsWithHistory = typeHist.propsWithHistory;
+                typeProperties.sort((a, b) => {
+                  const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+                  if (cc !== 0) return cc;
+                  return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+                });
+              }
+            } catch (typeError) {
+              console.warn('Could not fetch type properties:', typeError);
+            }
+          }
+
+          if (typeProperties.length > 0) {
+            const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
+            html += '<div class="props-section props-section-type"' + urnAttr + ' data-scan-key="' + typeKey.replace(/"/g, '&quot;') + '">';
+            html += '<div class="props-section-label">' + typeLabel + '</div>';
+            html += buildPropertiesTable(typeProperties, typePropsWithHistory);
+            html += '</div>';
+          }
         }
 
         detailsDiv.innerHTML = html;
 
-        // Wire up sorting, ref drill-down, and JSON viewer for every table rendered
+        // Wire up sorting, ref drill-down, JSON viewer, and history for every table rendered
         detailsDiv.querySelectorAll('.properties-table').forEach(table => {
           attachTableSorting(table);
           attachRefDrillHandlers(table);
           attachJsonViewHandlers(table);
+          attachHistoryHandlers(table);
         });
 
         detailsDiv.classList.add('visible');
@@ -1826,12 +2093,16 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
             const categoryId = element['n:c']?.[0];
             const categoryName = categoryId ? getCategoryName(categoryId) : 'Unknown';
             const classification = element['n:!v']?.[0] || element['n:v']?.[0];
+            const elementIsType = isFamilyType(element);
             
             html += '<div class="element-item">';
             html += '<div class="element-header">';
             html += '<div class="element-basic-info">';
             html += '<div class="element-name">';
             html += '<span>' + escapeHtml(name) + '</span>';
+            if (elementIsType) {
+              html += '<span class="type-badge">Type</span>';
+            }
             html += '<span class="category-badge">' + escapeHtml(categoryName) + '</span>';
             if (classification) {
               html += '<span class="classification-badge">' + escapeHtml(classification) + '</span>';
@@ -1843,7 +2114,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
               html += '<button class="copy-link-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Copy link to asset">🔗</button>';
             }
             html += '<button class="bbox-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Show bounding box"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg></button>';
-            html += '<button class="element-toggle" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '">Show Details</button>';
+            html += '<button class="element-toggle" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '"' + (elementIsType ? ' data-is-type="true"' : '') + '>Show Details</button>';
             html += '</div>';
             html += '<div class="element-details"></div>';
             html += '</div>';
@@ -1861,9 +2132,10 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           button.addEventListener('click', async function() {
             const modelURN = this.getAttribute('data-model-urn');
             const elementKey = this.getAttribute('data-element-key');
+            const isType = this.getAttribute('data-is-type') === 'true';
             const detailsDiv = this.closest('.element-item').querySelector('.element-details');
             
-            await toggleElementDetails(modelURN, elementKey, this, detailsDiv);
+            await toggleElementDetails(modelURN, elementKey, this, detailsDiv, isType);
           });
         });
         
