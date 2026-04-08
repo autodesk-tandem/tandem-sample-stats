@@ -2108,7 +2108,8 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
               html += '<span class="classification-badge">' + escapeHtml(classification) + '</span>';
             }
             html += '</div>';
-            html += '<div class="element-key">' + escapeHtml(key) + '</div>';
+            const fullKey = toFullKey(key, elementIsType);
+            html += '<div class="element-key">' + escapeHtml(key) + '  <span style="color:#606060;">|</span>  <span title="Full key (with flags)" style="color:#6a6a6a;">' + escapeHtml(fullKey) + '</span></div>';
             html += '</div>';
             if (SHOW_LINKS) {
               html += '<button class="copy-link-btn" data-model-urn="' + modelData.modelURN.replace(/"/g, '&quot;') + '" data-element-key="' + key.replace(/"/g, '&quot;') + '" title="Copy link to asset">🔗</button>';
