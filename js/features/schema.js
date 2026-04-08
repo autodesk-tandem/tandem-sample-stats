@@ -220,6 +220,35 @@ function renderSchemaTable(modelId, attributes, sortColumn = 'category', sortDir
 }
 
 /**
+ * Build a matcher function for schema search based on match mode.
+ * @param {string} query - The search term
+ * @param {string} mode - 'partial', 'exact', or 'regex'
+ * @returns {function(string): boolean}
+ */
+function buildSchemaMatcher(query, mode) {
+  if (mode === 'exact') {
+    const lowerQ = query.toLowerCase();
+    return (value) => value.toLowerCase() === lowerQ;
+  }
+  if (mode === 'regex') {
+    let pattern = query;
+    if (!pattern.startsWith('^') && !pattern.includes('[') && !pattern.includes('(')) {
+      pattern = pattern.replace(/\*/g, '.*').replace(/\?/g, '.');
+    }
+    try {
+      const regex = new RegExp(pattern, 'i');
+      return (value) => regex.test(value);
+    } catch {
+      const lowerQ = query.toLowerCase();
+      return (value) => value.toLowerCase().includes(lowerQ);
+    }
+  }
+  // partial (default)
+  const lowerQ = query.toLowerCase();
+  return (value) => value.toLowerCase().includes(lowerQ);
+}
+
+/**
  * Display schema for all models
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} models - Array of model objects
@@ -273,11 +302,28 @@ export async function displaySchema(container, models, facilityURN) {
         </button>
       </div>
     </div>
-    <div class="flex items-center gap-2 mb-3 flex-wrap">
+    <div class="flex items-center gap-2 mb-1 flex-wrap">
       <label for="schema-search-input" class="text-sm text-dark-text-secondary whitespace-nowrap">Find property</label>
-      <input id="schema-search-input" type="text" placeholder="ID or name (e.g. n:n, Temperature)" 
-             class="flex-1 min-w-[120px] max-w-[240px] px-2 py-1.5 text-sm bg-dark-bg border border-dark-border rounded text-dark-text placeholder-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-tandem-blue"
-             aria-label="Find property by ID or name">
+      <input id="schema-search-input" type="text" placeholder="Name or Category.Name (e.g. Temperature, JMA Test.*)" 
+             class="flex-1 min-w-[160px] max-w-[280px] px-2 py-1.5 text-sm bg-dark-bg border border-dark-border rounded text-dark-text placeholder-dark-text-secondary focus:outline-none focus:ring-1 focus:ring-tandem-blue"
+             aria-label="Find property by name or Category.Name">
+      <div class="flex items-center gap-2">
+        <label class="flex items-center cursor-pointer">
+          <input type="radio" name="schema-match-mode" value="partial" checked
+                 class="mr-1 text-tandem-blue focus:ring-tandem-blue" style="width:12px;height:12px;">
+          <span class="text-xs text-dark-text">Partial</span>
+        </label>
+        <label class="flex items-center cursor-pointer">
+          <input type="radio" name="schema-match-mode" value="exact"
+                 class="mr-1 text-tandem-blue focus:ring-tandem-blue" style="width:12px;height:12px;">
+          <span class="text-xs text-dark-text">Exact</span>
+        </label>
+        <label class="flex items-center cursor-pointer">
+          <input type="radio" name="schema-match-mode" value="regex"
+                 class="mr-1 text-tandem-blue focus:ring-tandem-blue" style="width:12px;height:12px;">
+          <span class="text-xs text-dark-text">Regex</span>
+        </label>
+      </div>
       <button id="schema-search-btn" type="button"
               class="px-3 py-1.5 text-xs font-medium rounded border border-tandem-blue text-tandem-blue hover:bg-tandem-blue hover:text-white transition">
         Find
@@ -351,20 +397,40 @@ export async function displaySchema(container, models, facilityURN) {
   const searchMessage = document.getElementById('schema-search-message');
   if (searchInput && searchBtn && searchMessage) {
     const runSearch = () => {
-      const q = (searchInput.value || '').trim().toLowerCase();
+      const rawQuery = (searchInput.value || '').trim();
       searchMessage.classList.add('hidden');
       searchMessage.textContent = '';
-      if (!q) return;
+      if (!rawQuery) return;
+
+      const matchMode = (document.querySelector('input[name="schema-match-mode"]:checked')?.value) || 'partial';
+
+      const dotIndex = rawQuery.indexOf('.');
+      let categoryQuery = null;
+      let nameQuery = rawQuery;
+      if (dotIndex >= 0) {
+        categoryQuery = rawQuery.substring(0, dotIndex);
+        nameQuery = rawQuery.substring(dotIndex + 1);
+      }
+
+      const isWildcard = (s) => s === '*' || s === '.*' || s === '';
+
+      const categoryMatcher = categoryQuery !== null ? buildSchemaMatcher(categoryQuery, matchMode) : null;
+      const nameMatcher = isWildcard(nameQuery) ? null : buildSchemaMatcher(nameQuery, matchMode);
 
       const resultsByModel = [];
       for (const model of models) {
         const schema = schemaCache[model.modelId];
         if (!schema?.attributes?.length) continue;
-        const matches = schema.attributes.filter(
-          (attr) =>
-            (attr.id && attr.id.toLowerCase().includes(q)) ||
-            ((attr.name || '').toString().toLowerCase().includes(q))
-        );
+        const matches = schema.attributes.filter((attr) => {
+          const attrName = (attr.name || '').toString();
+          const attrCategory = (attr.category || '').toString();
+
+          if (categoryMatcher) {
+            if (!categoryMatcher(attrCategory)) return false;
+            return nameMatcher ? nameMatcher(attrName) : true;
+          }
+          return nameMatcher ? nameMatcher(attrName) : false;
+        });
         if (matches.length === 0) continue;
         const isDefault = isDefaultModel(facilityURN, model.modelId);
         const modelName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
@@ -382,7 +448,7 @@ export async function displaySchema(container, models, facilityURN) {
         return;
       }
 
-      const htmlContent = generateSchemaSearchResultsHTML(q, resultsByModel);
+      const htmlContent = generateSchemaSearchResultsHTML(rawQuery, resultsByModel, matchMode);
       const newWindow = window.open('', '_blank');
       if (!newWindow) {
         searchMessage.textContent = 'Please allow pop-ups to open search results';
@@ -414,9 +480,10 @@ export async function displaySchema(container, models, facilityURN) {
  * Generate HTML for schema search results (new tab): matches grouped by model with section headers.
  * @param {string} query - Search query used
  * @param {Array<{ model: { modelId: string, label?: string }, modelName: string, matches: Array<{ id: string, category: string, name: string, dataType: number }> }>} resultsByModel - Matches per model
+ * @param {string} [matchMode='partial'] - Match mode used ('partial', 'exact', 'regex')
  * @returns {string} Full HTML document
  */
-function generateSchemaSearchResultsHTML(query, resultsByModel) {
+function generateSchemaSearchResultsHTML(query, resultsByModel, matchMode = 'partial') {
   const escape = (s) => (s == null ? '' : String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'));
   let sectionsHtml = '';
   for (const { modelName, modelId, matches } of resultsByModel) {
@@ -534,7 +601,7 @@ function generateSchemaSearchResultsHTML(query, resultsByModel) {
   <div class="container">
     <div class="page-header">
       <h1>Schema search results</h1>
-      <div class="query">Query: "${escape(query)}"</div>
+      <div class="query">Query: "${escape(query)}" <span style="color:#666;font-size:12px;margin-left:8px;">(${escape(matchMode)} match)</span></div>
       <div class="total">${totalMatches} match${totalMatches !== 1 ? 'es' : ''} across ${resultsByModel.length} model${resultsByModel.length !== 1 ? 's' : ''}</div>
     </div>
     ${sectionsHtml}
