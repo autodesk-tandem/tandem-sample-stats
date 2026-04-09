@@ -17,8 +17,9 @@ const toggleLevelsDetail = createToggleFunction({
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} levels - Array of level objects
  * @param {string} facilityURN - Facility URN for link generation
- * @param {string} sortColumn - Sort by 'name' or 'elevation' (default: null for no sorting)
- * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
+ * @param {string} [region] - Optional region identifier
+ * @param {string} [sortColumn] - Sort by 'name' or 'elevation' (default: null for no sorting)
+ * @param {string} [sortDirection='asc'] - 'asc' or 'desc'
  */
 export async function displayLevels(container, levels, facilityURN, region, sortColumn = null, sortDirection = 'asc') {
   if (!levels || levels.length === 0) {

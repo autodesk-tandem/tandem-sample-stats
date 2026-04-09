@@ -22,6 +22,7 @@ const toggleSystemsDetail = createToggleFunction({
  * @param {HTMLElement} container - Container element to display systems in
  * @param {Array} systems - Array of system objects
  * @param {string} facilityURN - Facility URN for context
+ * @param {string} [region] - Optional region identifier
  */
 export async function displaySystems(container, systems, facilityURN, region) {
   try {

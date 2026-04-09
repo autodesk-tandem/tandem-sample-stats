@@ -18,7 +18,7 @@ This directory contains reusable utilities for working with the Autodesk Tandem 
 
 **Example:**
 ```javascript
-import { ColumnFamilies, ColumnNames, ElementFlags, QC } from './tandem/dt-schema.js';
+import { ColumnFamilies, ColumnNames, ElementFlags, QC } from './tandem/constants.js';
 
 // Method 1: Build column names dynamically
 const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;  // "n:n"
@@ -90,7 +90,7 @@ Xrefs link elements across different models:
 **Common xref columns:**
 - `x:p` = `QC.XParent` - Parent (use this first!)
 - `x:r` = `QC.XRooms` - Room
-- `x:!r` = `QC.XORooms` - Room override
+- `x:!r` = `QC.OXRooms` - Room override
 
 ### Column Families
 
@@ -118,11 +118,11 @@ const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
 ### Pattern 2: Decode Stream Host
 
 ```javascript
-import { ColumnFamilies, ColumnNames, QC } from './tandem/dt-schema.js';
+import { QC } from './tandem/constants.js';
 import { decodeXref } from './tandem/keys.js';
 
-// Get host reference (priority: parent > room)
-const hostXref = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
+// Get host reference (priority: parent > override room > room)
+const hostXref = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
 
 if (hostXref) {
   // Decode xref to get model and element
@@ -140,7 +140,7 @@ if (hostXref) {
 ### Pattern 3: Batch Process Elements by Model
 
 ```javascript
-import { QC } from './tandem/dt-schema.js';
+import { QC } from './tandem/constants.js';
 import { decodeXref } from './tandem/keys.js';
 
 // Group xrefs by model URN

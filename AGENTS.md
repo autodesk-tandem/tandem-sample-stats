@@ -439,7 +439,7 @@ const token = await getAccessToken();
 // Use token in API calls
 ```
 
-### Pattern 2: API Wrapper with Headers
+### Pattern 3: API Wrapper with Headers
 
 **Location:** `js/api.js`
 
@@ -466,7 +466,7 @@ async function makeAuthenticatedRequest(url, options = {}) {
 }
 ```
 
-### Pattern 3: Batch Element Queries
+### Pattern 4: Batch Element Queries
 
 **Problem:** Need to fetch many elements efficiently.
 
@@ -493,7 +493,7 @@ for (const [modelURN, items] of elementsByModel.entries()) {
 }
 ```
 
-### Pattern 4: Schema Caching
+### Pattern 5: Schema Caching
 
 **Location:** `js/state/schemaCache.js`
 
@@ -524,7 +524,7 @@ export function clearSchemaCache() {
 }
 ```
 
-### Pattern 5: Converting Stream Data
+### Pattern 6: Converting Stream Data
 
 **Location:** `js/utils.js`
 
@@ -557,7 +557,7 @@ export function convertLongKeysToShortKeys(data) {
 
 **Usage:**
 ```javascript
-import { ColumnFamilies, ColumnNames, ElementFlags, QC } from '../tandem/constantsa.js';
+import { ColumnFamilies, ColumnNames, ElementFlags, QC } from '../tandem/constants.js';
 
 // Method 1: Build dynamically
 const nameCol = `${ColumnFamilies.Standard}:${ColumnNames.Name}`;
@@ -607,29 +607,49 @@ tandem-sample-stats/
 ├── index.html                  # Main HTML entry point
 ├── tandem/                     # Reusable utilities (COPY THIS TO NEW PROJECTS)
 │   ├── constants.js            # Column families, names, element flags
-│   └── keys.js                 # Key/xref conversion utilities
+│   ├── keys.js                 # Key/xref conversion utilities
+│   └── README.md               # Tandem utilities guide
 ├── js/
 │   ├── config.js               # Environment configuration (prod/stg)
 │   ├── auth.js                 # OAuth 3-legged PKCE flow
 │   ├── api.js                  # Tandem API wrappers
 │   ├── app.js                  # ⭐ Main app logic - includes account/facility switching pattern
 │   ├── utils.js                # General utilities (unit formatting, type names)
+│   ├── utils/
+│   │   └── excelUtils.js       # Excel export helpers (xlsx-js-style)
 │   ├── state/
 │   │   └── schemaCache.js      # Schema caching pattern
 │   ├── components/
-│   │   └── toggleHeader.js     # Reusable toggle component
+│   │   ├── toggleHeader.js     # Reusable toggle/collapse component
+│   │   ├── elementListModal.js # Element list modal component
+│   │   └── streamConfigModal.js # Stream configuration modal
 │   └── features/               # Feature-specific code
+│       ├── assetDetails.js     # Asset details drilldown (standalone page)
 │       ├── diagnostics.js      # Schema diagnostics
 │       ├── documents.js        # Document listing
+│       ├── facilityHistory.js  # Facility change history
+│       ├── facilityUsers.js    # Facility users/permissions
+│       ├── facilityViews.js    # Saved facility views
 │       ├── levels.js           # Level listing
-│       ├── models.js           # Model listing
+│       ├── models.js           # Model listing and history
+│       ├── roomBarChart.js     # Room statistics chart
 │       ├── rooms.js            # Room statistics
-│       ├── schema.js           # Schema viewer
+│       ├── schema.js           # Schema viewer with search
+│       ├── search.js           # Property value search
 │       ├── streams.js          # Stream monitoring with charts
-│       └── taggedAssets.js     # Tagged assets
-├── AGENTS.md                   # This file
+│       ├── systems.js          # MEP systems
+│       ├── taggedAssets.js     # Tagged assets
+│       ├── tickets.js          # Support tickets
+│       └── userResources.js    # User resources/permissions
+├── docs/
+│   └── logical-element-scan-fix.md  # Deep dive: physical vs logical key scanning
+├── AGENTS.md                   # This file (AI agent guide)
 ├── README.md                   # User documentation
-└── QUICKSTART.md               # Quick setup guide
+├── QUICKSTART.md               # Quick setup guide
+├── CODE_ORGANIZATION.md        # Shared components and patterns
+├── BADGE_REFERENCE.md          # Stream config badge guide
+├── TROUBLESHOOTING.md          # Troubleshooting guide
+└── THIRD_PARTY_LICENSES.md     # Third-party library licenses
 ```
 
 ### What to Reuse in New Projects

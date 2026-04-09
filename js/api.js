@@ -7,6 +7,23 @@ const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;
 
 /**
+ * API Error Contract
+ * ------------------
+ * Functions in this module catch errors internally and return sentinel values
+ * rather than throwing. This keeps the dashboard resilient (one failed card
+ * doesn't crash the page), but callers cannot distinguish "no data" from
+ * "API error" without checking the console.
+ *
+ * Return conventions on failure:
+ *  - Functions returning a single object  -> return null
+ *  - Functions returning an array         -> return []
+ *  - Functions returning a count/number   -> return 0
+ *  - Functions returning a map/object     -> return {}
+ *
+ * All failures are logged via console.error before returning the sentinel.
+ */
+
+/**
  * Create request options for GET requests
  * @param {string} [region] - Optional region header
  * @returns {object} Request options
@@ -1230,11 +1247,12 @@ function isAssetCandidate(flags) {
  * For older elements that predate this field, the fallback is: eligible element type
  * AND has at least one z: (user-defined) property.
  * @param {string} facilityURN - Facility URN
+ * @param {string} [region] - Optional region identifier
  * @returns {Promise<number>} Count of tagged assets
  */
-export async function getTaggedAssetsCount(facilityURN) {
+export async function getTaggedAssetsCount(facilityURN, region) {
   try {
-    const details = await getTaggedAssetsDetails(facilityURN);
+    const details = await getTaggedAssetsDetails(facilityURN, region);
     return details.totalCount;
   } catch (error) {
     console.error('Error fetching tagged assets count:', error);
@@ -1620,7 +1638,7 @@ export async function getFacilityViews(facilityURN, region) {
 export async function getModelProperties(modelURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/models/${modelURN}/props`;
-    const response = await fetch(requestPath, makeRequestOptionsGET(region, region));
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch model properties: ${response.statusText}`);

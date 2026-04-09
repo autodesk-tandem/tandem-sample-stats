@@ -231,7 +231,7 @@ function writeInt32BE(array, value, offset = 0) {
   array[offset] = (value >> 24) & 0xff;
   array[offset + 1] = (value >> 16) & 0xff;
   array[offset + 2] = (value >> 8) & 0xff;
-  array[offset + 3] = (value >> 8) & 0xff;
+  array[offset + 3] = value & 0xff;
 }
 
 /**

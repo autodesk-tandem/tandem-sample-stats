@@ -707,9 +707,9 @@ export async function displayStreams(container, streams, facilityURN, region) {
   // Decode all xrefs and group by model
   
   for (const stream of streams) {
-    // Host reference priority: x:p (parent) > x:r (room)
+    // Host reference priority: x:p (parent) > x:!r (room override) > x:r (room)
     // Tandem UI uses x:p as the primary host reference
-    const hostRef = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
+    const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
     if (hostRef) {
       const decoded = decodeXref(hostRef);
       if (decoded) {
@@ -766,8 +766,8 @@ export async function displayStreams(container, streams, facilityURN, region) {
     // Classification: Use override if present, otherwise standard
     const classification = stream[QC.OClassification]?.[0] || stream[QC.Classification]?.[0];
 
-    // Host information: Priority x:p (parent) > x:r (room)
-    const hostRef = stream[QC.XParent]?.[0] || stream[QC.XRooms]?.[0];
+    // Host information: Priority x:p (parent) > x:!r (room override) > x:r (room)
+    const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
     const hostInfo = hostRef ? hostInfoMap.get(hostRef) : null;
     
     // Get configuration for this stream

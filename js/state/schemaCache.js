@@ -6,6 +6,7 @@ const schemaCache = {};
 /**
  * Load and cache schema for a model
  * @param {string} modelURN - Model URN
+ * @param {string} [region] - Optional region identifier (passed to API)
  * @returns {Promise<Object>} Schema object with attributes array and lookup map
  */
 export async function loadSchemaForModel(modelURN, region) {
@@ -13,7 +14,7 @@ export async function loadSchemaForModel(modelURN, region) {
     return schemaCache[modelURN];
   }
   
-  const schema = await getSchema(modelURN);
+  const schema = await getSchema(modelURN, region);
   
   // Create a lookup map for quick property lookups
   const lookup = new Map();
