@@ -33,6 +33,7 @@ import { viewUserResources } from './features/userResources.js';
 import { viewFacilityHistory } from './features/facilityHistory.js';
 import { viewFacilityUsers } from './features/facilityUsers.js';
 import { viewFacilityViews } from './features/facilityViews.js';
+import { viewFacilityParameters } from './features/facilityParameters.js';
 import { RegionLabelMap, SchemaVersion } from '../tandem/constants.js';
 
 // DOM Elements
@@ -50,6 +51,7 @@ const viewUserResourcesBtn = document.getElementById('viewUserResourcesBtn');
 const viewFacilityHistoryBtn = document.getElementById('viewFacilityHistoryBtn');
 const viewFacilityUsersBtn = document.getElementById('viewFacilityUsersBtn');
 const viewFacilityViewsBtn = document.getElementById('viewFacilityViewsBtn');
+const viewFacilityParametersBtn = document.getElementById('viewFacilityParametersBtn');
 const modelsList = document.getElementById('modelsList');
 const streamsList = document.getElementById('streamsList');
 const ticketsList = document.getElementById('ticketsList');
@@ -497,6 +499,7 @@ async function loadFacility(facilityURN) {
   viewFacilityHistoryBtn.classList.add('hidden');
   viewFacilityUsersBtn.classList.add('hidden');
   viewFacilityViewsBtn.classList.add('hidden');
+  viewFacilityParametersBtn.classList.add('hidden');
   
   toggleLoading(true);
   
@@ -584,11 +587,13 @@ async function loadFacility(facilityURN) {
       viewFacilityHistoryBtn.classList.remove('hidden');
       viewFacilityUsersBtn.classList.remove('hidden');
       viewFacilityViewsBtn.classList.remove('hidden');
+      viewFacilityParametersBtn.classList.remove('hidden');
 
       // Set up per-facility button handlers (need facilityURN, region, and name)
       viewFacilityHistoryBtn.onclick = () => viewFacilityHistory(facilityURN, region, buildingName);
       viewFacilityUsersBtn.onclick = () => viewFacilityUsers(facilityURN, region, buildingName);
       viewFacilityViewsBtn.onclick = () => viewFacilityViews(facilityURN, region, buildingName);
+      viewFacilityParametersBtn.onclick = () => viewFacilityParameters(facilityURN, currentFacilityRegion, buildingName);
       
       // Check schema version - API only supports version 2
       if (schemaVersion < SchemaVersion) {
@@ -640,6 +645,7 @@ async function loadFacility(facilityURN) {
     viewFacilityHistoryBtn.classList.add('hidden');
     viewFacilityUsersBtn.classList.add('hidden');
     viewFacilityViewsBtn.classList.add('hidden');
+    viewFacilityParametersBtn.classList.add('hidden');
   } finally {
     toggleLoading(false);
   }

@@ -636,6 +636,91 @@ export function getDefaultModelURN(facilityURN) {
 }
 
 /**
+ * Get facility parameters from the root element of the default model.
+ *
+ * Facility parameters are DtProperties stored on the DocumentRoot element
+ * (ElementFlags 0x01000002) of the default model. The root element is
+ * created automatically when a default model exists.
+ *
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @returns {Promise<Array>} Array of { id, category, name, value, dataType, forgeUnit }
+ */
+export async function getFacilityParameters(facilityURN, region) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+
+    const payload = JSON.stringify({
+      families: [ColumnFamilies.Standard, ColumnFamilies.DtProperties],
+      includeHistory: false
+    });
+
+    const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.log('No default model found — facility parameters not available');
+        return [];
+      }
+      throw new Error(`Failed to fetch default model elements: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rootElement = data.find(
+      row => row[QC.ElementFlags]?.[0] === ElementFlags.DocumentRoot
+    );
+
+    if (!rootElement) {
+      return [];
+    }
+
+    const schemaPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/schema`;
+    const schemaResp = await fetch(schemaPath, makeRequestOptionsGET(region));
+
+    if (!schemaResp.ok) {
+      throw new Error(`Failed to fetch schema: ${schemaResp.statusText}`);
+    }
+
+    const schema = await schemaResp.json();
+    const attrLookup = new Map();
+    for (const attr of (schema.attributes || [])) {
+      attrLookup.set(attr.id, attr);
+    }
+
+    const parameters = [];
+    for (const [id, value] of Object.entries(rootElement)) {
+      if (!id.startsWith(`${ColumnFamilies.DtProperties}:`)) {
+        continue;
+      }
+      const attr = attrLookup.get(id);
+      if (!attr) {
+        continue;
+      }
+      parameters.push({
+        id,
+        category: attr.category || '',
+        name: attr.name || '',
+        value: Array.isArray(value) ? value[0] : value,
+        dataType: attr.dataType,
+        forgeUnit: attr.forgeUnit || '',
+        context: attr.context || ''
+      });
+    }
+
+    parameters.sort((a, b) => {
+      const cat = a.category.localeCompare(b.category);
+      return cat !== 0 ? cat : a.name.localeCompare(b.name);
+    });
+
+    return parameters;
+  } catch (error) {
+    console.error('Error fetching facility parameters:', error);
+    return [];
+  }
+}
+
+/**
  * Get streams from the default model
  * Streams only exist in the default model
  * @param {string} facilityURN - Facility URN
