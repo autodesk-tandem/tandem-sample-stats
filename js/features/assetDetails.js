@@ -1,3 +1,23 @@
+/**
+ * Asset Details — standalone drilldown page.
+ *
+ * ARCHITECTURE NOTE: This module generates a **self-contained HTML page** that
+ * is opened in a new browser tab via window.open() + document.write(). Because
+ * the new tab has no access to ES module imports, this file must:
+ *
+ *  1. Serialize key utility functions (toFullKey, toShortKey, decodeXref,
+ *     makeXrefKey) via .toString() and embed them in the page's <script>.
+ *  2. Duplicate some helpers that exist in utils.js (getCategoryName,
+ *     compareQualifiedColumnIds, escapeHtml) as inline functions.
+ *  3. Use hardcoded qualified column strings ('n:n', 'l:t', etc.) instead of
+ *     QC constants, since the constants module cannot be imported at runtime
+ *     in the detached page.
+ *  4. Embed all CSS inline (~660 lines) since there is no external stylesheet.
+ *
+ * This means the file does NOT follow the project's normal best practices
+ * (use QC constants, import from api.js, etc.). If you are looking for
+ * canonical API usage patterns, refer to other feature files or AGENTS.md.
+ */
 import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
 import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';

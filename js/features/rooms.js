@@ -33,8 +33,9 @@ const toggleRoomsDetail = createToggleFunction({
  * @param {HTMLElement} container - DOM element to render into
  * @param {Array} rooms - Array of room objects
  * @param {string} facilityURN - Facility URN for link generation
- * @param {string} sortColumn - Sort by 'name', 'type', 'area', or 'volume' (default: null for no sorting)
- * @param {string} sortDirection - 'asc' or 'desc' (default: 'asc')
+ * @param {string} [region] - Optional region identifier
+ * @param {string} [sortColumn] - Sort by 'name', 'type', 'area', or 'volume' (default: null for no sorting)
+ * @param {string} [sortDirection='asc'] - 'asc' or 'desc'
  */
 export async function displayRooms(container, rooms, facilityURN, region, sortColumn = null, sortDirection = 'asc') {
   if (!rooms || rooms.length === 0) {

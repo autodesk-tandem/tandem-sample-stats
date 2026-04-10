@@ -60,6 +60,19 @@ The security of PKCE comes from:
 
 **For your own deployment:** You can create your own APS Client ID and commit it to your repository. Just ensure your redirect URIs are properly configured in your APS app settings.
 
+## Documentation Map
+
+| Document | Purpose |
+|----------|---------|
+| [`AGENTS.md`](./AGENTS.md) | Comprehensive AI/developer guide: Tandem API concepts, pitfalls, reusable patterns |
+| [`QUICKSTART.md`](./QUICKSTART.md) | Minimal setup steps to get running |
+| [`CODE_ORGANIZATION.md`](./CODE_ORGANIZATION.md) | Shared components, API layer, and architectural patterns |
+| [`BADGE_REFERENCE.md`](./BADGE_REFERENCE.md) | Stream configuration badge types and display logic |
+| [`TROUBLESHOOTING.md`](./TROUBLESHOOTING.md) | Troubleshooting guide for common issues |
+| [`tandem/README.md`](./tandem/README.md) | Tandem utilities guide (constants, key helpers, usage patterns) |
+| [`docs/logical-element-scan-fix.md`](./docs/logical-element-scan-fix.md) | Deep dive: physical vs logical key scanning on the server |
+| [`THIRD_PARTY_LICENSES.md`](./THIRD_PARTY_LICENSES.md) | Third-party library licenses |
+
 ## Prerequisites
 
 - A valid Autodesk APS (Platform Services) application with Client ID
@@ -118,34 +131,51 @@ For production deployment or customization:
 ```
 tandem-sample-stats/
 ├── index.html                    # Main HTML page
-├── AGENTS.md                     # 📚 Comprehensive guide for AI-assisted development
 ├── tandem/                       # 🔧 Reusable utilities (copy to new projects!)
-│   ├── README.md                 # Documentation and usage examples
 │   ├── constants.js              # Column families, names, element flags
-│   └── keys.js                   # Key/xref conversion utilities
+│   ├── keys.js                   # Key/xref conversion utilities
+│   └── README.md                 # Utilities guide and usage patterns
 ├── js/
 │   ├── app.js                    # Main application logic
 │   ├── auth.js                   # OAuth 3-legged PKCE flow
 │   ├── api.js                    # Tandem API wrapper
 │   ├── config.js                 # Environment configuration
 │   ├── utils.js                  # General utilities
-│   ├── state/                    # State management
+│   ├── utils/
+│   │   └── excelUtils.js         # Excel export helpers (xlsx-js-style)
+│   ├── state/
 │   │   └── schemaCache.js        # Schema caching pattern
-│   ├── components/               # Reusable UI components
-│   │   └── toggleHeader.js       # Collapsible sections
+│   ├── components/
+│   │   ├── toggleHeader.js       # Collapsible sections
+│   │   ├── elementListModal.js   # Element list modal
+│   │   └── streamConfigModal.js  # Stream configuration modal
 │   └── features/                 # Feature-specific modules
+│       ├── assetDetails.js       # Asset details drilldown (standalone page)
 │       ├── diagnostics.js        # Schema diagnostics
 │       ├── documents.js          # Document listing
-│       ├── facilityHistory.js    # Facility access history
+│       ├── facilityHistory.js    # Facility change history
+│       ├── facilityUsers.js      # Facility users/permissions
+│       ├── facilityViews.js      # Saved facility views
 │       ├── levels.js             # Level listing
-│       ├── models.js             # Model listing
+│       ├── models.js             # Model listing and history
+│       ├── roomBarChart.js       # Room statistics chart
 │       ├── rooms.js              # Room statistics
-│       ├── schema.js             # Schema viewer
+│       ├── schema.js             # Schema viewer with search
+│       ├── search.js             # Property value search
 │       ├── streams.js            # Stream monitoring & charts
+│       ├── systems.js            # MEP systems
 │       ├── taggedAssets.js       # Tagged assets
-│       └── userResources.js      # Global resources view
-├── README.md                     # User documentation
-└── QUICKSTART.md                 # Quick setup guide
+│       ├── tickets.js            # Support tickets
+│       └── userResources.js      # User resources/permissions
+├── docs/
+│   └── logical-element-scan-fix.md  # Physical vs logical key scanning
+├── AGENTS.md                     # 📚 AI/developer guide
+├── README.md                     # This file
+├── QUICKSTART.md                 # Quick setup guide
+├── CODE_ORGANIZATION.md          # Shared components and patterns
+├── BADGE_REFERENCE.md            # Stream config badge guide
+├── TROUBLESHOOTING.md            # Troubleshooting guide
+└── THIRD_PARTY_LICENSES.md       # Third-party licenses
 ```
 
 ## Configuration

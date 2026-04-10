@@ -7,6 +7,23 @@ const env = getEnv();
 export const tandemBaseURL = env.tandemDbBaseURL;
 
 /**
+ * API Error Contract
+ * ------------------
+ * Functions in this module catch errors internally and return sentinel values
+ * rather than throwing. This keeps the dashboard resilient (one failed card
+ * doesn't crash the page), but callers cannot distinguish "no data" from
+ * "API error" without checking the console.
+ *
+ * Return conventions on failure:
+ *  - Functions returning a single object  -> return null
+ *  - Functions returning an array         -> return []
+ *  - Functions returning a count/number   -> return 0
+ *  - Functions returning a map/object     -> return {}
+ *
+ * All failures are logged via console.error before returning the sentinel.
+ */
+
+/**
  * Create request options for GET requests
  * @param {string} [region] - Optional region header
  * @returns {object} Request options
@@ -616,6 +633,91 @@ export function cleanupThumbnailURLs() {
  */
 export function getDefaultModelURN(facilityURN) {
   return facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
+}
+
+/**
+ * Get facility parameters from the root element of the default model.
+ *
+ * Facility parameters are DtProperties stored on the DocumentRoot element
+ * (ElementFlags 0x01000002) of the default model. The root element is
+ * created automatically when a default model exists.
+ *
+ * @param {string} facilityURN - Facility URN
+ * @param {string} region - Region identifier
+ * @returns {Promise<Array>} Array of { id, category, name, value, dataType, forgeUnit }
+ */
+export async function getFacilityParameters(facilityURN, region) {
+  try {
+    const defaultModelURN = getDefaultModelURN(facilityURN);
+
+    const payload = JSON.stringify({
+      families: [ColumnFamilies.Standard, ColumnFamilies.DtProperties],
+      includeHistory: false
+    });
+
+    const requestPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/scan`;
+    const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+
+    if (!response.ok) {
+      if (response.status === 403) {
+        console.log('No default model found — facility parameters not available');
+        return [];
+      }
+      throw new Error(`Failed to fetch default model elements: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const rootElement = data.find(
+      row => row[QC.ElementFlags]?.[0] === ElementFlags.DocumentRoot
+    );
+
+    if (!rootElement) {
+      return [];
+    }
+
+    const schemaPath = `${tandemBaseURL}/modeldata/${defaultModelURN}/schema`;
+    const schemaResp = await fetch(schemaPath, makeRequestOptionsGET(region));
+
+    if (!schemaResp.ok) {
+      throw new Error(`Failed to fetch schema: ${schemaResp.statusText}`);
+    }
+
+    const schema = await schemaResp.json();
+    const attrLookup = new Map();
+    for (const attr of (schema.attributes || [])) {
+      attrLookup.set(attr.id, attr);
+    }
+
+    const parameters = [];
+    for (const [id, value] of Object.entries(rootElement)) {
+      if (!id.startsWith(`${ColumnFamilies.DtProperties}:`)) {
+        continue;
+      }
+      const attr = attrLookup.get(id);
+      if (!attr) {
+        continue;
+      }
+      parameters.push({
+        id,
+        category: attr.category || '',
+        name: attr.name || '',
+        value: Array.isArray(value) ? value[0] : value,
+        dataType: attr.dataType,
+        forgeUnit: attr.forgeUnit || '',
+        context: attr.context || ''
+      });
+    }
+
+    parameters.sort((a, b) => {
+      const cat = a.category.localeCompare(b.category);
+      return cat !== 0 ? cat : a.name.localeCompare(b.name);
+    });
+
+    return parameters;
+  } catch (error) {
+    console.error('Error fetching facility parameters:', error);
+    return [];
+  }
 }
 
 /**
@@ -1230,11 +1332,12 @@ function isAssetCandidate(flags) {
  * For older elements that predate this field, the fallback is: eligible element type
  * AND has at least one z: (user-defined) property.
  * @param {string} facilityURN - Facility URN
+ * @param {string} [region] - Optional region identifier
  * @returns {Promise<number>} Count of tagged assets
  */
-export async function getTaggedAssetsCount(facilityURN) {
+export async function getTaggedAssetsCount(facilityURN, region) {
   try {
-    const details = await getTaggedAssetsDetails(facilityURN);
+    const details = await getTaggedAssetsDetails(facilityURN, region);
     return details.totalCount;
   } catch (error) {
     console.error('Error fetching tagged assets count:', error);
@@ -1620,7 +1723,7 @@ export async function getFacilityViews(facilityURN, region) {
 export async function getModelProperties(modelURN, region) {
   try {
     const requestPath = `${tandemBaseURL}/models/${modelURN}/props`;
-    const response = await fetch(requestPath, makeRequestOptionsGET(region, region));
+    const response = await fetch(requestPath, makeRequestOptionsGET(region));
     
     if (!response.ok) {
       throw new Error(`Failed to fetch model properties: ${response.statusText}`);
