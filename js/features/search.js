@@ -594,22 +594,28 @@ async function executeSearch(facilityURN, region, models, propertyName, searchOp
   try {
     // Get schema cache to map property names to qualified columns
     const schemaCache = getSchemaCache();
-    
+
     // Track which models have the property and which don't
     const modelsWithProperty = [];
     const modelsWithoutProperty = [];
     const allResults = [];
-    
+
+    // ── Phase 1 (CPU-only): resolve qualifiedColumn for each model ──────────
+    // Schema lookups are pure in-memory operations — no network involved.
+    // We do this first, in model order, so modelsWithProperty / modelsWithoutProperty
+    // lists are built correctly regardless of which fetch mode we use below.
+    const modelSearchPlan = []; // { model, qualifiedColumn }
+
     for (const model of models) {
       const schema = schemaCache[model.modelId];
       if (!schema) {
         modelsWithoutProperty.push(model.label || model.modelId);
         continue;
       }
-      
+
       // Try to find the qualified column for this property name
       let qualifiedColumn = null;
-      
+
       // Search through attributes array
       if (schema.attributes) {
         for (const attr of schema.attributes) {
@@ -620,26 +626,36 @@ async function executeSearch(facilityURN, region, models, propertyName, searchOp
           }
         }
       }
-      
+
       if (!qualifiedColumn) {
         // Try exact match with QC format (e.g., "z:LQ")
         if (propertyName.includes(':')) {
           qualifiedColumn = propertyName;
         }
       }
-      
+
       if (!qualifiedColumn) {
         console.log(`Property "${propertyName}" not found in model ${model.label || model.modelId}`);
         modelsWithoutProperty.push(model.label || model.modelId);
         continue;
       }
-      
+
       modelsWithProperty.push(model.label || model.modelId);
-      console.log(`Searching model ${model.label || model.modelId} for property ${qualifiedColumn}`, searchOptions);
-      
-      // Fetch elements with this property
-      const elements = await searchElementsByProperty(model.modelId, region, qualifiedColumn, searchOptions);
-      
+      modelSearchPlan.push({ model, qualifiedColumn });
+    }
+
+    // ── Phase 2 (network): search all qualifying models simultaneously ───────
+    // Promise.all preserves array order, so results arrive in the same model
+    // sequence as the original models array — display order is unchanged.
+    const searchResults = await Promise.all(
+      modelSearchPlan.map(async ({ model, qualifiedColumn }) => {
+        console.log(`Searching model ${model.label || model.modelId} for property ${qualifiedColumn}`, searchOptions);
+        const elements = await searchElementsByProperty(model.modelId, region, qualifiedColumn, searchOptions);
+        return { model, qualifiedColumn, elements };
+      })
+    );
+
+    for (const { model, qualifiedColumn, elements } of searchResults) {
       if (elements.length > 0) {
         allResults.push({
           modelURN: model.modelId,
@@ -649,7 +665,7 @@ async function executeSearch(facilityURN, region, models, propertyName, searchOp
         });
       }
     }
-    
+
     // Display results with context about property availability
     displaySearchResults(facilityURN, allResults, propertyName, searchOptions, modelsWithProperty, modelsWithoutProperty, resultsContent, region);
     

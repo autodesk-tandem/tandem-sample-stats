@@ -727,29 +727,31 @@ export async function displayStreams(container, streams, facilityURN, region) {
     }
   }
   
-  // Fetch host elements using short keys from source models
-  for (const [modelURN, items] of xrefsByModel.entries()) {
-    const shortKeys = items.map(item => item.shortKey);
-    
-    try {
-      const elements = await getElementsByKeys(modelURN, region, shortKeys);
-      
-      // Map elements back to xrefs using short key matching
-      for (let i = 0; i < items.length; i++) {
-        const item = items[i];
-        const element = elements.find(e => e[QC.Key] === item.shortKey);
-        
-        if (element) {
+  // Fetch host elements for all models simultaneously, then merge into map
+  const hostResults = await Promise.all(
+    Array.from(xrefsByModel.entries()).map(async ([modelURN, items]) => {
+      const shortKeys = items.map(item => item.shortKey);
+      try {
+        const elements = await getElementsByKeys(modelURN, region, shortKeys);
+        return items.map(item => {
+          const element = elements.find(e => e[QC.Key] === item.shortKey);
+          if (!element) return null;
           // Name: Use override if present, otherwise standard
           const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
           const categoryId = element[QC.CategoryId]?.[0];
           const type = CATEGORY_NAMES[categoryId] || `Category ${categoryId}`;
-          
-          hostInfoMap.set(item.xref, { name, type });
-        }
+          return { xref: item.xref, name, type };
+        }).filter(Boolean);
+      } catch (error) {
+        console.error(`Error fetching host elements from model ${modelURN}:`, error);
+        return [];
       }
-    } catch (error) {
-      console.error(`Error fetching host elements from model ${modelURN}:`, error);
+    })
+  );
+
+  for (const entries of hostResults) {
+    for (const { xref, name, type } of entries) {
+      hostInfoMap.set(xref, { name, type });
     }
   }
 
