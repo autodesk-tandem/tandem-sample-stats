@@ -85,6 +85,28 @@ export async function getGroups() {
 }
 
 /**
+ * Get detailed information about a specific group (account/team).
+ * Returns the group definition including name, settings, and user list.
+ * @param {string} groupURN - Group URN
+ * @returns {Promise<object|null>} Group details object, or null on error
+ */
+export async function getGroupDetails(groupURN) {
+  try {
+    const requestPath = `${tandemBaseURL}/groups/${groupURN}`;
+    const response = await fetch(requestPath, makeRequestOptionsGET());
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch group details: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('Error fetching group details:', error);
+    return null;
+  }
+}
+
+/**
  * Get list of facilities for a specific group
  * @param {string} groupURN - Group URN
  * @returns {Promise<object>} Facilities object
@@ -208,27 +230,6 @@ export async function getDocuments(facilityURN, region) {
   }
 }
 
-/**
- * Get detailed information about a specific model
- * @param {string} modelURN - Model URN
- * @param {string} region - Region identifier
- * @returns {Promise<object>} Model details
- */
-export async function getModelDetails(modelURN, region) {
-  try {
-    const requestPath = `${tandemBaseURL}/modeldata/${modelURN}`;
-    const response = await fetch(requestPath, makeRequestOptionsGET(region));
-    
-    if (!response.ok) {
-      throw new Error(`Failed to fetch model details: ${response.statusText}`);
-    }
-    
-    return await response.json();
-  } catch (error) {
-    console.error('Error fetching model details:', error);
-    return null;
-  }
-}
 
 /**
  * Get element count for a model
@@ -907,14 +908,17 @@ export async function getElementsByKeys(modelURN, region, keys) {
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @param {Array<string>} streamKeys - Array of stream keys
+ * @param {boolean} [roundToSeconds=false] - If true, timestamps in the response are in seconds
+ *   (instead of the default milliseconds). Useful when displaying human-readable times.
  * @returns {Promise<Object>} Object with stream keys as keys and their last seen values
  */
-export async function getLastSeenStreamValues(facilityURN, region, streamKeys) {
+export async function getLastSeenStreamValues(facilityURN, region, streamKeys, roundToSeconds = false) {
   try {
     const defaultModelURN = getDefaultModelURN(facilityURN);
     
     const payload = JSON.stringify({
-      keys: streamKeys
+      keys: streamKeys,
+      roundToSeconds: roundToSeconds
     });
     
     const requestPath = `${tandemBaseURL}/timeseries/models/${defaultModelURN}/streams`;
