@@ -994,8 +994,9 @@ export async function getSchema(modelURN, region) {
 }
 
 /**
- * Get levels from all models in a facility
- * Uses ElementFlags.Level (0x01000001) to identify levels
+ * Get levels from all models in a facility.
+ * Uses ElementFlags.Level (0x01000001) to identify levels.
+ * Fetches all models in parallel with Promise.all() for maximum speed.
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @returns {Promise<Array>} Array of level objects with modelId, key, name, and elevation
@@ -1003,40 +1004,38 @@ export async function getSchema(modelURN, region) {
 export async function getLevels(facilityURN, region) {
   try {
     const models = await getModels(facilityURN, region);
-    const allLevels = [];
-    
-    for (const model of models) {
-      const payload = JSON.stringify({
-        qualifiedColumns: [QC.ElementFlags, QC.Name, QC.Elevation], // ElementFlags, Name, Elevation
-        includeHistory: false
-      });
-      
-      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch elements for model ${model.modelId}`);
-        continue;
-      }
-      
-      const elements = await response.json();
-      
-      // Filter for levels using ElementFlags.Level (0x01000001)
-      const levels = elements.filter(row => row[QC.ElementFlags]?.[0] === ElementFlags.Level);
-      
-      // Add model info to each level
-      levels.forEach(level => {
-        allLevels.push({
-          modelId: model.modelId,
-          modelName: model.label,
-          key: level[QC.Key],
-          name: level[QC.Name]?.[0] || 'Unnamed Level',
-          elevation: level[QC.Elevation]?.[0] // Elevation value
+
+    const perModelResults = await Promise.all(
+      models.map(async (model) => {
+        const payload = JSON.stringify({
+          qualifiedColumns: [QC.ElementFlags, QC.Name, QC.Elevation],
+          includeHistory: false
         });
-      });
-    }
-    
-    return allLevels;
+
+        const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+        const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+
+        if (!response.ok) {
+          console.error(`getLevels: failed to fetch model ${model.modelId}`);
+          return []; // return empty array so Promise.all can still complete
+        }
+
+        const elements = await response.json();
+
+        // Filter for levels and map to a clean output shape
+        return elements
+          .filter(row => row[QC.ElementFlags]?.[0] === ElementFlags.Level)
+          .map(level => ({
+            modelId:   model.modelId,
+            modelName: model.label,
+            key:       level[QC.Key],
+            name:      level[QC.Name]?.[0] || 'Unnamed Level',
+            elevation: level[QC.Elevation]?.[0]
+          }));
+      })
+    );
+
+    return perModelResults.flat();
   } catch (error) {
     console.error('Error fetching levels:', error);
     return [];
@@ -1055,78 +1054,59 @@ export async function getLevels(facilityURN, region) {
 export async function getRooms(facilityURN, region, schemaCache = null) {
   try {
     const models = await getModels(facilityURN, region);
-    const allRooms = [];
-    
-    for (const model of models) {
-      // Get schema from cache if available, otherwise fetch it
-      const schema = schemaCache && schemaCache[model.modelId] 
-        ? schemaCache[model.modelId] 
-        : await getSchema(model.modelId);
-      
-      // Find the Area property (Category="Dimensions", Name="Area")
-      const areaAttr = schema.attributes?.find(attr => 
-        attr.category === 'Dimensions' && attr.name === 'Area'
-      );
-      
-      // Find the Volume property (Category="Dimensions", Name="Volume")
-      const volumeAttr = schema.attributes?.find(attr => 
-        attr.category === 'Dimensions' && attr.name === 'Volume'
-      );
-      
-      const areaQualifiedProp = areaAttr?.id;
-      const areaUnit = areaAttr?.forgeUnit || 'square feet'; // Default to square feet if not specified
-      const volumeQualifiedProp = volumeAttr?.id;
-      const volumeUnit = volumeAttr?.forgeUnit || 'cubic feet'; // Default to cubic feet if not specified
-      
-      // Build the list of qualified columns to fetch
-      // ElementFlags.Room matches both rooms and spaces; CategoryId differentiates them
-      const qualifiedColumns = [QC.ElementFlags, QC.CategoryId, QC.Name];
-      if (areaQualifiedProp) {
-        qualifiedColumns.push(areaQualifiedProp); // Add the Area qualified property
-      }
-      if (volumeQualifiedProp) {
-        qualifiedColumns.push(volumeQualifiedProp); // Add the Volume qualified property
-      }
-      
-      const payload = JSON.stringify({
-        qualifiedColumns: qualifiedColumns,
-        includeHistory: false
-      });
-      
-      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch elements for model ${model.modelId}`);
-        continue;
-      }
-      
-      const elements = await response.json();
-      
-      // Filter using ElementFlags.Room - this matches both rooms (CategoryId 160) and spaces (CategoryId 3600)
-      const roomElements = elements.filter(row => row[QC.ElementFlags]?.[0] === ElementFlags.Room);
-      
-      // Process each room element and differentiate by CategoryId
-      roomElements.forEach(element => {
-        const categoryId = element[QC.CategoryId]?.[0];
-        const type = categoryId === 3600 ? 'Space' : 'Room';
-        const defaultName = categoryId === 3600 ? 'Unnamed Space' : 'Unnamed Room';
-        
-        allRooms.push({
-          modelId: model.modelId,
-          modelName: model.label,
-          key: element[QC.Key],
-          name: element[QC.Name]?.[0] || defaultName,
-          area: areaQualifiedProp ? element[areaQualifiedProp]?.[0] : null,
-          areaUnit: areaUnit,
-          volume: volumeQualifiedProp ? element[volumeQualifiedProp]?.[0] : null,
-          volumeUnit: volumeUnit,
-          type: type
-        });
-      });
-    }
-    
-    return allRooms;
+
+    // Each model independently resolves its schema (cache hit if pre-loaded)
+    // then fires its scan. All models run their schema→scan pipeline concurrently.
+    const perModelResults = await Promise.all(
+      models.map(async (model) => {
+        const schema = schemaCache && schemaCache[model.modelId]
+          ? schemaCache[model.modelId]
+          : await getSchema(model.modelId);
+
+        const areaAttr   = schema.attributes?.find(a => a.category === 'Dimensions' && a.name === 'Area');
+        const volumeAttr = schema.attributes?.find(a => a.category === 'Dimensions' && a.name === 'Volume');
+        const areaQualifiedProp   = areaAttr?.id;
+        const areaUnit            = areaAttr?.forgeUnit   || 'square feet';
+        const volumeQualifiedProp = volumeAttr?.id;
+        const volumeUnit          = volumeAttr?.forgeUnit || 'cubic feet';
+
+        // ElementFlags.Room matches both rooms (CategoryId 160) and spaces (CategoryId 3600)
+        const qualifiedColumns = [QC.ElementFlags, QC.CategoryId, QC.Name];
+        if (areaQualifiedProp)   qualifiedColumns.push(areaQualifiedProp);
+        if (volumeQualifiedProp) qualifiedColumns.push(volumeQualifiedProp);
+
+        const payload = JSON.stringify({ qualifiedColumns, includeHistory: false });
+        const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+        const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+
+        if (!response.ok) {
+          console.error(`getRooms: failed to fetch model ${model.modelId}`);
+          return [];
+        }
+
+        const elements = await response.json();
+        return elements
+          .filter(row => row[QC.ElementFlags]?.[0] === ElementFlags.Room)
+          .map(element => {
+            const categoryId  = element[QC.CategoryId]?.[0];
+            const type        = categoryId === 3600 ? 'Space' : 'Room';
+            const defaultName = categoryId === 3600 ? 'Unnamed Space' : 'Unnamed Room';
+            return {
+              modelId:   model.modelId,
+              modelName: model.label,
+              key:       element[QC.Key],
+              name:      element[QC.Name]?.[0] || defaultName,
+              area:      areaQualifiedProp   ? element[areaQualifiedProp]?.[0]   : null,
+              areaUnit,
+              volume:    volumeQualifiedProp ? element[volumeQualifiedProp]?.[0] : null,
+              volumeUnit,
+              type
+            };
+          });
+      })
+    );
+
+    return perModelResults.flat();
   } catch (error) {
     console.error('Error fetching rooms:', error);
     return [];
@@ -1221,23 +1201,29 @@ export async function getSystems(facilityURN, region, models) {
     const systemElementsMap = {};
     const systemClassMap = {};
 
-    for (const model of models) {
-      const payload = JSON.stringify({
-        families: [
-          ColumnFamilies.Standard,
-          ColumnFamilies.Systems
-        ],
-        includeHistory: false
-      });
-      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+    // ── Fetch all model element data in parallel ──────────────────────────
+    // All model scans fire simultaneously; processing of shared state
+    // (systemMap, systemElementsMap) happens sequentially after all fetches
+    // complete, so there are no shared-accumulator race conditions.
+    const modelDataList = await Promise.all(
+      models.map(async (model) => {
+        const payload = JSON.stringify({
+          families: [ColumnFamilies.Standard, ColumnFamilies.Systems],
+          includeHistory: false
+        });
+        const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+        const response    = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
 
-      if (!response.ok) {
-        console.error(`Failed to fetch elements for model ${model.modelId}`);
-        continue;
-      }
-      const data = await response.json();
+        if (!response.ok) {
+          console.error(`getSystems: failed to fetch model ${model.modelId}`);
+          return { model, data: [] };
+        }
+        return { model, data: await response.json() };
+      })
+    );
 
+    // ── Process fetched data (sequential — pure CPU, no network) ─────────
+    for (const { model, data } of modelDataList) {
       for (const element of data) {
         const key = element[QC.Key];
 
@@ -1359,107 +1345,99 @@ export async function getTaggedAssetsCount(facilityURN, region) {
 export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = false) {
   try {
     const models = await getModels(facilityURN, region);
-    let totalTaggedAssets = 0;
-    // Map of modelId -> { modelName, props: { propId -> count } }
-    const propertyUsageByModel = {};
-    const elementsByModel = []; // Array of {modelURN, modelName, keys}
-    
-    for (const model of models) {
-      // Scan for elements with Standard and DtProperties families
-      // IMPORTANT: Must include Standard family to get IsAsset flag
-      const payload = JSON.stringify({
-        families: [
-          ColumnFamilies.Standard,  // Need this for IsAsset flag
-          ColumnFamilies.DtProperties
-        ],
-        includeHistory: false,
-        skipArrays: true
-      });
-      
-      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch tagged assets for model ${model.modelId}`);
-        continue;
+    const t0 = performance.now();
+
+    // ── Helper: classify a single element as tagged asset or not ──────────
+    // Extracted so both implementations share the same logic.
+    function classifyElement(element) {
+      const isAssetFlag    = element[QC.IsAsset];
+      const hasIsAssetField = isAssetFlag !== undefined && isAssetFlag !== null;
+      if (hasIsAssetField) {
+        // n:ia present: its value is the authoritative answer. The field is set
+        // automatically when a z: property is first written and persists even if
+        // those properties are later removed.
+        return !!isAssetFlag;
       }
-      
-      const rawData = await response.json();
-      // Filter out the leading version string and any non-element entries
-      const elements = rawData.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
+      // n:ia absent (older elements): fall back to eligible element type AND has z: properties.
+      const flags     = element[QC.ElementFlags];
+      const hasZProps = Object.keys(element).some(k => k.startsWith(`${ColumnFamilies.DtProperties}:`));
+      return isAssetCandidate(flags) && hasZProps;
+    }
+
+    // ── Helper: build a per-model result object from raw scan data ────────
+    function processModelElements(model, rawData) {
+      const elements  = rawData.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
       const modelKeys = [];
-      
-      // Determine which elements are tagged assets using the same two-method logic as the server.
+      let   count     = 0;
+      const props     = {}; // propId -> count
+
       elements.forEach(element => {
-        const isAssetFlag = element[QC.IsAsset];
-        const hasIsAssetField = isAssetFlag !== undefined && isAssetFlag !== null;
-        let isTaggedAsset;
+        if (!classifyElement(element)) return;
+        count++;
+        if (includeKeys && element[QC.Key]) modelKeys.push(element[QC.Key]);
 
-        if (hasIsAssetField) {
-          // n:ia present: its value is the authoritative answer. The field is set automatically
-          // when a z: property is first written and persists even if those properties are later removed.
-          isTaggedAsset = !!isAssetFlag;
-        } else {
-          // n:ia absent (older elements): fall back to eligible element type AND has z: properties.
-          const flags = element[QC.ElementFlags];
-          const hasZProps = Object.keys(element).some(k => k.startsWith(`${ColumnFamilies.DtProperties}:`));
-          isTaggedAsset = isAssetCandidate(flags) && hasZProps;
-        }
-
-        if (!isTaggedAsset) return;
-
-        totalTaggedAssets++;
-
-        // Collect element key if requested
-        if (includeKeys && element[QC.Key]) {
-          modelKeys.push(element[QC.Key]);
-        }
-
-        // Track z: property usage per model for the property breakdown table.
-        // Separate from asset counting — an asset may have no z: props if they were cleared
-        // after the n:ia flag was set.
-        const zProperties = Object.keys(element).filter(key => key.startsWith(`${ColumnFamilies.DtProperties}:`));
-        if (zProperties.length > 0) {
-          if (!propertyUsageByModel[model.modelId]) {
-            propertyUsageByModel[model.modelId] = {
-              modelName: model.label || '',
-              props: {}
-            };
-          }
-          zProperties.forEach(prop => {
-            propertyUsageByModel[model.modelId].props[prop] =
-              (propertyUsageByModel[model.modelId].props[prop] || 0) + 1;
-          });
-        }
+        // Track z: property usage (separate from asset counting)
+        Object.keys(element)
+          .filter(k => k.startsWith(`${ColumnFamilies.DtProperties}:`))
+          .forEach(prop => { props[prop] = (props[prop] || 0) + 1; });
       });
-      
-      // Add model to results if it has tagged assets
+
+      return { model, count, modelKeys, props };
+    }
+
+    // ── Fetch all models in parallel ─────────────────────────────────────
+    // Each model scan returns a plain result object via processModelElements.
+    // Shared accumulators are only written after all fetches complete, so
+    // there are no race conditions when merging results below.
+    // IMPORTANT: Must include Standard family to get the IsAsset flag.
+    const perModelResults = await Promise.all(
+      models.map(async (model) => {
+        const payload = JSON.stringify({
+          families: [ColumnFamilies.Standard, ColumnFamilies.DtProperties],
+          includeHistory: false,
+          skipArrays: true
+        });
+        const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+        const response    = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+
+        if (!response.ok) {
+          console.error(`getTaggedAssetsDetails: failed to fetch model ${model.modelId}`);
+          return { model, count: 0, modelKeys: [], props: {} };
+        }
+
+        const rawData = await response.json();
+        return processModelElements(model, rawData);
+      })
+    );
+
+    // ── Merge results ─────────────────────────────────────────────────────
+    let totalTaggedAssets    = 0;
+    const propertyUsageByModel = {};
+    const elementsByModel      = [];
+
+    for (const { model, count, modelKeys, props } of perModelResults) {
+      totalTaggedAssets += count;
+
+      if (Object.keys(props).length > 0) {
+        propertyUsageByModel[model.modelId] = { modelName: model.label || '', props };
+      }
+
       if (includeKeys && modelKeys.length > 0) {
         elementsByModel.push({
-          modelURN: model.modelId,
+          modelURN:  model.modelId,
           modelName: model.label || 'Unknown Model',
-          keys: modelKeys
+          keys:      modelKeys
         });
       }
     }
-    
-    const result = {
-      totalCount: totalTaggedAssets,
-      propertyUsageByModel: propertyUsageByModel
-    };
-    
-    if (includeKeys) {
-      result.elementsByModel = elementsByModel;
-    }
-    
+
+    const result = { totalCount: totalTaggedAssets, propertyUsageByModel };
+    if (includeKeys) result.elementsByModel = elementsByModel;
     return result;
+
   } catch (error) {
     console.error('Error fetching tagged assets details:', error);
-    return {
-      totalCount: 0,
-      propertyUsage: {},
-      elementsByModel: includeKeys ? [] : undefined
-    };
+    return { totalCount: 0, propertyUsage: {}, elementsByModel: includeKeys ? [] : undefined };
   }
 }
 
@@ -1473,61 +1451,46 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
  */
 export async function getElementsByProperty(facilityURN, region, qualifiedProp, modelIdFilter = null) {
   try {
-    const models = await getModels(facilityURN, region);
+    const models       = await getModels(facilityURN, region);
     const modelsToScan = modelIdFilter
       ? models.filter(m => m.modelId === modelIdFilter)
       : models;
-    const resultsByModel = [];
-
-    const [family] = qualifiedProp.split(':');
-    const families = family === ColumnFamilies.DtProperties
-      ? [ColumnFamilies.Standard, ColumnFamilies.DtProperties]
-      : [family];
 
     // Use same scan shape as getTaggedAssetsDetails (no qualifiedColumns) so the server
     // returns all columns in the requested families; we filter client-side for the property.
     // This avoids server omitting or normalizing the column id when requested explicitly.
-    for (const model of modelsToScan) {
-      const payload = JSON.stringify({
-        families,
-        includeHistory: false,
-        skipArrays: true
-      });
+    const [family] = qualifiedProp.split(':');
+    const families  = family === ColumnFamilies.DtProperties
+      ? [ColumnFamilies.Standard, ColumnFamilies.DtProperties]
+      : [family];
 
-      const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
-      const response = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
+    const perModelResults = await Promise.all(
+      modelsToScan.map(async (model) => {
+        const payload     = JSON.stringify({ families, includeHistory: false, skipArrays: true });
+        const requestPath = `${tandemBaseURL}/modeldata/${model.modelId}/scan`;
+        const response    = await fetch(requestPath, makeRequestOptionsPOST(payload, region));
 
-      if (!response.ok) {
-        console.error(`Failed to fetch elements for model ${model.modelId}`);
-        continue;
-      }
-
-      const rawData = await response.json();
-      const elements = rawData.filter(item => typeof item === 'object' && item !== null && item[QC.Key]);
-      const elementKeys = [];
-
-      elements.forEach(element => {
-        // Include if the property key is present (even if value is null/empty/0)
-        if (Object.prototype.hasOwnProperty.call(element, qualifiedProp)) {
-          elementKeys.push(element[QC.Key]);
+        if (!response.ok) {
+          console.error(`getElementsByProperty: failed to fetch model ${model.modelId}`);
+          return null;
         }
-      });
-      
-      // Only include models that have elements with this property
-      if (elementKeys.length > 0) {
-        // Determine model name
+
+        const rawData     = await response.json();
+        const elementKeys = rawData
+          .filter(item => typeof item === 'object' && item !== null && item[QC.Key])
+          .filter(element => Object.prototype.hasOwnProperty.call(element, qualifiedProp))
+          .map(element => element[QC.Key]);
+
+        if (elementKeys.length === 0) return null;
+
         const isDefault = isDefaultModel(facilityURN, model.modelId);
         const modelName = model.label || (isDefault ? '** Default Model **' : 'Untitled Model');
-        
-        resultsByModel.push({
-          modelURN: model.modelId,
-          modelName: modelName,
-          keys: elementKeys
-        });
-      }
-    }
-    
-    return resultsByModel;
+        return { modelURN: model.modelId, modelName, keys: elementKeys };
+      })
+    );
+
+    // Filter out nulls (models with no matching elements)
+    return perModelResults.filter(Boolean);
   } catch (error) {
     console.error('Error fetching elements by property:', error);
     return [];

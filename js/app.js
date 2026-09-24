@@ -667,53 +667,74 @@ async function loadStats(facilityURN, region) {
     // Get models
     const models = await getModels(facilityURN, region);
     
-    // Pre-load and cache schemas for all models FIRST
-    // This ensures we only call /schema once per model
-    for (const model of models) {
-      await loadSchemaForModel(model.modelId, region);
-    }
+    // Pre-load and cache schemas for all models FIRST.
+    // This ensures we only call /schema once per model per session.
+    // All fetches fire simultaneously so total time ≈ the slowest single model.
+    await Promise.all(models.map(model => loadSchemaForModel(model.modelId, region)));
     
     // Get schema cache for passing to downstream functions
     const schemaCache = getSchemaCache();
     
-    // Display all sections using feature modules
-    await displayModels(modelsList, models, facilityURN, region);
-    
-    // Check if default model exists before fetching streams
-    // Streams only exist in the default model
+    // Check if default model exists before fetching streams/tickets.
+    // Streams and tickets only exist in the default model.
     const defaultModelURN = facilityURN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:');
     const hasDefaultModel = models.some(m => m.modelId === defaultModelURN);
-    
-    const streams = hasDefaultModel ? await getStreams(facilityURN, region) : [];
-    await displayStreams(streamsList, streams, facilityURN, region);
-    
-    // Get and display tickets (only if default model exists)
-    const tickets = hasDefaultModel ? await getTickets(facilityURN, region) : [];
-    await displayTickets(ticketsList, tickets, facilityURN, region);
-    
-    // Display search interface
-    await displaySearch(searchContainer, facilityURN, region, models);
-    
-    // Get and display systems (only if default model exists)
-    const systems = hasDefaultModel ? await getSystems(facilityURN, region, models) : [];
-    await displaySystems(systemsList, systems, facilityURN, region);
-    
-    // Display tagged assets
-    await displayTaggedAssets(taggedAssetsList, facilityURN, models, region);
-    
-    const levels = await getLevels(facilityURN, region);
-    await displayLevels(levelsList, levels, facilityURN, region);
-    
-    const rooms = await getRooms(facilityURN, region, schemaCache);
-    await displayRooms(roomsList, rooms, facilityURN, region);
-    
-    const documents = await getDocuments(facilityURN, region);
-    await displayDocuments(documentsList, documents);
-    
-    await displaySchema(schemaList, models, facilityURN);
-    
-    // Display diagnostics (must be after schema is loaded)
-    await displayDiagnostics(diagnosticsList, facilityURN, models);
+
+    // Display all cards concurrently — each is fully independent and only
+    // needs facilityURN, region, models, and the already-cached schemaCache.
+    // Total load time ≈ max(individual card times) rather than their sum.
+    await Promise.all([
+      // Models card (data already in hand — no additional fetch needed)
+      displayModels(modelsList, models, facilityURN, region),
+
+      // Streams card (default model only)
+      (async () => {
+        const streams = hasDefaultModel ? await getStreams(facilityURN, region) : [];
+        await displayStreams(streamsList, streams, facilityURN, region);
+      })(),
+
+      // Tickets card (default model only)
+      (async () => {
+        const tickets = hasDefaultModel ? await getTickets(facilityURN, region) : [];
+        await displayTickets(ticketsList, tickets, facilityURN, region);
+      })(),
+
+      // Search interface
+      displaySearch(searchContainer, facilityURN, region, models),
+
+      // Systems card (default model only)
+      (async () => {
+        const systems = hasDefaultModel ? await getSystems(facilityURN, region, models) : [];
+        await displaySystems(systemsList, systems, facilityURN, region);
+      })(),
+
+      // Tagged assets card
+      displayTaggedAssets(taggedAssetsList, facilityURN, models, region),
+
+      // Levels card
+      (async () => {
+        const levels = await getLevels(facilityURN, region);
+        await displayLevels(levelsList, levels, facilityURN, region);
+      })(),
+
+      // Rooms card
+      (async () => {
+        const rooms = await getRooms(facilityURN, region, schemaCache);
+        await displayRooms(roomsList, rooms, facilityURN, region);
+      })(),
+
+      // Documents card
+      (async () => {
+        const documents = await getDocuments(facilityURN, region);
+        await displayDocuments(documentsList, documents);
+      })(),
+
+      // Schema card (CPU-only — reads cached schemas, no network)
+      displaySchema(schemaList, models, facilityURN),
+
+      // Diagnostics card (CPU-only — reads cached schemas, no network)
+      displayDiagnostics(diagnosticsList, facilityURN, models),
+    ]);
     
   } catch (error) {
     console.error('Error loading stats:', error);
@@ -773,6 +794,49 @@ async function initialize() {
     
     if (accounts && accounts.length > 0) {
       await populateAccountsDropdown(accounts);
+
+      // ── BACKGROUND PRE-FETCH: facilities for all remaining accounts ─────
+      // populateAccountsDropdown already loaded the initially selected account's
+      // facilities. Here we fire off fetches for every OTHER account in parallel
+      // so that subsequent account switches in the dropdown are instant.
+      //
+      // This is fire-and-forget (no await) so it never blocks the UI.
+      // Sort order is NOT affected — populateFacilitiesDropdown always sorts
+      // at render time, independent of when the data was fetched.
+      // "** SHARED DIRECTLY **" (id: '@me') follows the normal code path via
+      // getFacilitiesForGroup('@me'), same as if the user had clicked it.
+      //
+      // Race condition note: if the user switches accounts before the pre-fetch
+      // for that account completes, populateFacilitiesDropdown will start its
+      // own fetch (because account.facilities is still null). Both fetches return
+      // the same data; the last write wins. This is benign.
+      // Background pre-fetch: fire facility lookups for all accounts not yet
+      // loaded. This is fire-and-forget (no await) so it never blocks the UI.
+      // When the user switches accounts the data is already cached → instant.
+      // Sort order is unaffected: populateFacilitiesDropdown always sorts at
+      // render time, independent of when the data was fetched.
+      const unfetched = accounts.filter(a => a.facilities === null);
+      if (unfetched.length > 0) {
+        Promise.all(
+          unfetched.map(async (account) => {
+            try {
+              const facilitiesObj = await getFacilitiesForGroup(account.id);
+              // Same name-extraction logic as populateFacilitiesDropdown
+              account.facilities = facilitiesObj
+                ? Object.entries(facilitiesObj).map(([urn, settings]) => ({
+                    urn,
+                    name: settings?.props?.['Identity Data']?.['Building Name'] || 'Unnamed Facility',
+                    region: settings?.region || 'us'
+                  }))
+                : [];
+            } catch (err) {
+              console.warn(`Background pre-fetch failed for account "${account.name}":`, err);
+              account.facilities = []; // populateFacilitiesDropdown will retry on selection
+            }
+          })
+        );
+      }
+
     } else {
       facilityInfo.innerHTML = '<p class="text-red-600">No accounts or facilities found. Please ensure you have access to at least one Tandem facility.</p>';
     }

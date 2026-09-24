@@ -93,21 +93,30 @@ async function buildParentInfoMap(tickets, region) {
     }
   }
 
-  for (const [modelURN, items] of xrefsByModel.entries()) {
-    const shortKeys = items.map(item => item.shortKey);
-    try {
-      const elements = await getElementsByKeys(modelURN, region, shortKeys);
-      for (const item of items) {
-        const element = elements.find(e => e[QC.Key] === item.shortKey);
-        if (element) {
+  // Fetch element details for all models simultaneously, then merge into map
+  const results = await Promise.all(
+    Array.from(xrefsByModel.entries()).map(async ([modelURN, items]) => {
+      const shortKeys = items.map(item => item.shortKey);
+      try {
+        const elements = await getElementsByKeys(modelURN, region, shortKeys);
+        return items.map(item => {
+          const element = elements.find(e => e[QC.Key] === item.shortKey);
+          if (!element) return null;
           const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
           const categoryId = element[QC.CategoryId]?.[0];
           const type = CATEGORY_NAMES[categoryId] || 'Asset';
-          parentInfoMap.set(item.xref, { name, type });
-        }
+          return { xref: item.xref, name, type };
+        }).filter(Boolean);
+      } catch (error) {
+        console.error(`Error fetching parent assets from model ${modelURN}:`, error);
+        return [];
       }
-    } catch (error) {
-      console.error(`Error fetching parent assets from model ${modelURN}:`, error);
+    })
+  );
+
+  for (const entries of results) {
+    for (const { xref, name, type } of entries) {
+      parentInfoMap.set(xref, { name, type });
     }
   }
 
