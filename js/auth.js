@@ -163,10 +163,27 @@ function clearCookie(name) {
 }
 
 export async function checkLogin() {
-  // ── Shared-token from companion app ───────────────────────────────────────
+  // ── Hash-based deeplink params (cross-origin punch-out) ───────────────────
+  // tandem-sample-portfolio passes account + facility as hash params:
+  //   https://…/tandem-sample-stats/#account=NAME&facility=URN
+  // We save them to sessionStorage NOW, before any OAuth redirect fires,
+  // because sessionStorage survives same-tab redirects but the hash does not.
+  // app.js reads them after login completes.
+  {
+    const _h = new URLSearchParams(window.location.hash.slice(1));
+    if (_h.get('account'))  sessionStorage.setItem('tandem_deeplink_account',  _h.get('account'));
+    if (_h.get('facility')) sessionStorage.setItem('tandem_deeplink_facility', _h.get('facility'));
+    // Strip the hash so a page reload doesn't re-trigger the deeplink
+    if (_h.get('account') || _h.get('facility')) {
+      window.history.replaceState({}, '', window.location.pathname + window.location.search);
+    }
+  }
+
+  // ── Shared-token from companion app (localhost only) ──────────────────────
   // Cookies on localhost are shared across ports.  tandem-sample-portfolio
   // (port 8001) writes 'tandem_shared_token' so stats (port 8000) can reuse
   // the same session without forcing the user to log in again.
+  // This has no effect on cross-origin deployments (cookie not readable).
   if (!window.sessionStorage.token) {
     const sharedToken = readCookie('tandem_shared_token');
     if (sharedToken) {

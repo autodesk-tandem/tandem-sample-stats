@@ -807,11 +807,19 @@ async function initialize() {
           document.cookie = `${name}=; path=/; max-age=0`;
         }
 
-        const urlParams    = new URLSearchParams(window.location.search);
-        const paramAccount = _readCookie('tandem_deeplink_account') || urlParams.get('account');
-        const paramFacility= _readCookie('tandem_deeplink_facility') || urlParams.get('facility');
+        // Priority: cookie (localhost) → sessionStorage (cross-origin, saved by auth.js
+        // before OAuth redirect) → hash direct (already logged in, no redirect needed).
+        const urlHash      = new URLSearchParams(window.location.hash.slice(1));
+        const paramAccount = _readCookie('tandem_deeplink_account')
+            || sessionStorage.getItem('tandem_deeplink_account')
+            || urlHash.get('account');
+        const paramFacility = _readCookie('tandem_deeplink_facility')
+            || sessionStorage.getItem('tandem_deeplink_facility')
+            || urlHash.get('facility');
         _clearCookie('tandem_deeplink_account');
         _clearCookie('tandem_deeplink_facility');
+        sessionStorage.removeItem('tandem_deeplink_account');
+        sessionStorage.removeItem('tandem_deeplink_facility');
 
         if (paramAccount && paramFacility) {
           const matchedAccount = accounts.find(a => a.name === paramAccount);
