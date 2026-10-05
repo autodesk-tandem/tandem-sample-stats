@@ -795,6 +795,42 @@ async function initialize() {
     if (accounts && accounts.length > 0) {
       await populateAccountsDropdown(accounts);
 
+      // ── DEEP-LINK: pre-select account + facility ─────────────────────────
+      // Cookies (written by tandem-sample-portfolio) take priority; URL params
+      // work as a fallback when stats is already logged in and no redirect occurs.
+      {
+        function _readCookie(name) {
+          const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+          return m ? decodeURIComponent(m[1]) : null;
+        }
+        function _clearCookie(name) {
+          document.cookie = `${name}=; path=/; max-age=0`;
+        }
+
+        const urlParams    = new URLSearchParams(window.location.search);
+        const paramAccount = _readCookie('tandem_deeplink_account') || urlParams.get('account');
+        const paramFacility= _readCookie('tandem_deeplink_facility') || urlParams.get('facility');
+        _clearCookie('tandem_deeplink_account');
+        _clearCookie('tandem_deeplink_facility');
+
+        if (paramAccount && paramFacility) {
+          const matchedAccount = accounts.find(a => a.name === paramAccount);
+          if (matchedAccount) {
+            accountSelect.value = paramAccount;
+            window.localStorage.setItem('tandem-sample-stats-last-account', paramAccount);
+
+            await populateFacilitiesDropdown(accounts, paramAccount);
+
+            if (matchedAccount.facilities?.some(f => f.urn === paramFacility)) {
+              facilitySelect.value = paramFacility;
+              loadFacility(paramFacility);
+            }
+          }
+          // Clean up URL so Back/Reload doesn't re-trigger
+          window.history.replaceState({}, '', window.location.pathname);
+        }
+      }
+
       // ── BACKGROUND PRE-FETCH: facilities for all remaining accounts ─────
       // populateAccountsDropdown already loaded the initially selected account's
       // facilities. Here we fire off fetches for every OTHER account in parallel

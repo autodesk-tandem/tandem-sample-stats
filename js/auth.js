@@ -151,7 +151,30 @@ async function refreshToken() {
  * Check login status and handle OAuth callback
  * @returns {Promise<boolean>} True if logged in, false otherwise
  */
+/** Read a cookie value by name (returns null if absent). */
+function readCookie(name) {
+  const m = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Clear a cookie by name. */
+function clearCookie(name) {
+  document.cookie = `${name}=; path=/; max-age=0`;
+}
+
 export async function checkLogin() {
+  // ── Shared-token from companion app ───────────────────────────────────────
+  // Cookies on localhost are shared across ports.  tandem-sample-portfolio
+  // (port 8001) writes 'tandem_shared_token' so stats (port 8000) can reuse
+  // the same session without forcing the user to log in again.
+  if (!window.sessionStorage.token) {
+    const sharedToken = readCookie('tandem_shared_token');
+    if (sharedToken) {
+      window.sessionStorage.token = sharedToken;
+      clearCookie('tandem_shared_token');
+    }
+  }
+
   const url = new URL(location);
 
   // Handle OAuth callback
