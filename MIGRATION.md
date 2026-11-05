@@ -85,7 +85,7 @@ js/
 ### Constants and key utilities (`tandem/`)
 - `tandem/constants.js` is Jan's `tutorial-rest/common/constants.js`. It adds `Location`, `FamilyTypeV2/V3`, `StreamV2/V3`, `BimElmOfAsset`, `HostOfAsset`, the Status family (`Deleted`, `ODeleted`), `TC` (Tandem categories), `RC` and `SchemaVersion`. The old `ElementFlags.Stream` is now `StreamV2` (V3: `StreamV3`).
 - One addition on top of Jan's file: `AttributeContext.Facility: 'f'`, which this app uses and his file does not have. Please add it upstream so the files stay identical.
-- `tandem/keys.js` gained `getKeyFlags(fullKey)`, which reads the 4 flag bytes of a 24-byte key. Because V3 keys carry the real `ElementFlags`, the type of a scan row can be read from its key alone.
+- `tandem/keys.js` gained `getElementFlags(fullKey)` (the same name and behaviour as `Encoding.getElementFlags` in `tutorial-rest`), which reads the 4 flag bytes of a 24-byte key and returns `ElementFlags.Unknown` (0xffffffff, also added to the constants) for a missing or invalid key. Because V3 keys carry the real `ElementFlags`, the type of a scan row can be read from its key alone, and `n:a` no longer has to be requested for that.
 - Jan's predicates (`isLevel`, `isRoom`, `isStream`, ...) check against a global `SchemaVersion` and expect scalar values (his client scans with `skipArrays`). This app's scans return arrays (`row[QC.X]?.[0]`) and must serve both versions at once, so the version-specific checks are inline in `v2/api.js` and `v3/api.js`.
 
 ---
@@ -104,6 +104,9 @@ js/
 | Assets | BIM elements with `z:` properties (`n:ia` decides) | `ElementFlags.GenericAsset` elements in the default model with their own id, linked to the BIM element | `v3/api.js` `getTaggedAssetsDetails` |
 | Deleted | `n:a` flag handling as before | Status family: `s:e` (`QC.Deleted`), overridden by `s:!e` (`QC.ODeleted`); the override wins | `isDeleted` in `v3/api.js` |
 | Systems | System id from the element key | `toSystemId(key)` directly; membership is scanned across all models | `v3/api.js` |
+
+### Counting assets
+An asset is an element of the **default model** whose key flags are `ElementFlags.GenericAsset` (0x01000005), read from the key with `getElementFlags`. It no longer matters whether the element has `z:` properties. Request the Standard family with the scan (see problem 9 below).
 
 ### Asset <-> BIM element links
 - The asset in the default model holds the user-defined `z:` properties and points to the Revit element with **`x:be`** (`QC.BimElmOfAsset`).
@@ -131,7 +134,9 @@ These cost the most time. Check for them first in your own migration.
 6. **Double HTML escaping in the asset details page** (V2 and V3). Property values were escaped when the list was built and again when it was drawn, so Revit values such as `<0' - 1 1/2">` showed as `&lt;0' - 1 1/2"&gt;` and landed in the Excel export that way. Values are now kept as plain text and escaped once, at render time.
 7. **Flag values are reused between versions.** `0x01000000` is a family type in V2 and a stream in V3. Never compare against a flag without knowing the version. Keep version-specific flags in `v2/` or `v3/`.
 8. **Redirect port.** The callback follows the page's port. Serve on the port that is registered (8000).
-9. **`getModels` returns `facilityInfo.links`**, which can be `null`. Guard it (`models?.find`).
+9. **A scan with a family list only returns rows that have data in those families.** The first V3 asset count was 0 because the scan asked for `z:` and Status only, so assets without custom properties were skipped. The count was still too low afterwards (5 where the Tandem UI and Jan's migrated sample show 16): an asset does not need a name or custom properties, it can consist only of links to its BIM element (`x:be`) and location. Request every family that can carry data of such a row (`n`, `z`, `l`, `x`, as `getTaggedAssets` in tutorial-rest does) when you filter rows by key flags, or leave the family list out.
+10. **`getModels` returns `facilityInfo.links`**, which can be `null`. Guard it (`models?.find`).
+11. **`l:l` (Level) on an element of the default model points into a source model.** The value is a plain 24-byte key (flag `Level`, 0x01000001), but the level is in the BIM model the element came from, not in the default model, so looking in the same model gives "Referenced element not found". A same-model `l:` reference carries no model id. The asset details page therefore searches the other models of the facility when an `l:` key is not found in its own model, and shows the model it was found in. The `Location` links (`x:loc`) are real xrefs and do not have this problem. A `Location` value can hold several xrefs (for example a room and a level) joined in one string; the asset details page shows one clickable entry per xref, labelled with the element name. It is not yet known whether the server intends `l:l` to stay a bare key on default-model elements; worth asking.
 
 ---
 
@@ -149,6 +154,11 @@ These cost the most time. Check for them first in your own migration.
 - The date shown in the deleted banner is the time the delete was written (history timestamp of the Status column).
 - The V2 side was only regression-tested lightly after the restructure (module loading and the switch with mocked data, and a real PROD login and facility load).
 
+**Learned from the latest `tutorial-rest` changes, implemented here but not yet checked against real V3 data:**
+- An asset's room or level is in `QC.OLocation` ?? `QC.Location` (an array of xrefs into the default model). It replaces `QC.Rooms` / `QC.XRooms`. In the asset details page the `Location` property is a link (it opens the first location only); there is no separate Location section.
+- The asset details page shows only what is stored in the model of the element being viewed. For a tagged asset that is its own properties and its own family type (`l:t`, in the default model). Source (`r:`) properties and the BIM family type are reached by following the `BIM Element of Asset` link, which shows the BIM element like any element of a source model.
+- The streams card finds a stream's host with `XParent`, `OXRooms`, `XRooms`, and then `OLocation` / `Location` (`getHostRef` in `shared/features/streams.js`). Locations are labelled Room or Level from their Tandem category.
+
 **Open questions for the Tandem team:**
 - Why a link to a soft-deleted source room needed `includeDeleted: true` in our setup: confirm this is the intended way to follow it.
 - The staging user-profile endpoint (avatar), if there is one.
@@ -157,10 +167,10 @@ These cost the most time. Check for them first in your own migration.
 
 ## 6. Checklist for migrating another app
 
-1. Copy `tandem/constants.js` and `tandem/keys.js` from this project (they include Jan's constants plus `getKeyFlags`), and keep them identical across samples.
+1. Copy `tandem/constants.js` and `tandem/keys.js` from this project (they include Jan's constants plus `getElementFlags`), and keep them identical across samples.
 2. Decide how the app learns the schema version of a facility (the twin list returns `schemaVersion`) and whether it needs a switch like this one or only one version.
 3. Move everything that touches element flags, key handling, or where logical elements live behind a small per-version module. Do not branch on the version inside feature code.
-4. Replace key conversions with the single V3 key (`getKeyFlags` instead of `toShortKey`/`toFullKey`).
+4. Replace key conversions with the single V3 key (`getElementFlags` instead of `toShortKey`/`toFullKey`).
 5. Read levels, rooms, streams, tickets and assets from the **default model** in V3. Take room area and volume from the source element.
 6. Follow cross-model references by decoding the xref (`decodeXref`), choose the model, and scan with `includeDeleted: true` when the target may be soft-deleted.
 7. Point staging at `developer-stg.api.autodesk.com`, make regions failure-tolerant, and make non-essential calls (profile) non-fatal.

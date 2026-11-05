@@ -127,6 +127,7 @@ const elements = await getElementsByKeys(decoded.modelURN, [decoded.elementKey])
 1. `QC.XParent` (Parent) - **Use this first** (matches Tandem UI behavior)
 2. `QC.OXRooms` (Room override)
 3. `QC.XRooms` (Room)
+4. `QC.OLocation` / `QC.Location` (V3 location, an array of xrefs - use the first)
 
 ### 3. Column Families and Names
 
@@ -220,7 +221,7 @@ Duplicated code between `v2/` and `v3/` is fine when the schemas differ; code th
 
 | Topic | V2 | V3 |
 |-------|----|----|
-| Keys | Scan rows use 20-byte short keys, other APIs return 24-byte long keys (`toShortKey` / `toFullKey` convert) | One kind of key: the 24-byte key, first 4 bytes are the `ElementFlags`. Never convert (`getKeyFlags` reads the flags) |
+| Keys | Scan rows use 20-byte short keys, other APIs return 24-byte long keys (`toShortKey` / `toFullKey` convert) | One kind of key: the 24-byte key, first 4 bytes are the `ElementFlags`. Never convert (`getElementFlags` reads the flags) |
 | Xrefs | 16-byte model id + 24-byte key | Same |
 | Where logical elements live | Per model (levels, rooms) and default model (streams, tickets, systems) | All in the default model |
 | Stream flag | `ElementFlags.StreamV2` (0x01000003) | `ElementFlags.StreamV3` (0x01000000) |

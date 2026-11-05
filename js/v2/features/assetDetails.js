@@ -648,6 +648,11 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       border-color: rgba(79, 195, 247, 0.3);
       color: #81d4fa;
     }
+    .ref-list { list-style: none; margin: 0; padding: 0; }
+    .ref-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 4px; }
+    .ref-list li:last-child { margin-bottom: 0; }
+    .ref-name { color: #e0e0e0; font-size: 12px; }
+    .ref-name:empty { display: none; }
     .ref-drill-btn .ref-arrow {
       font-size: 10px;
       opacity: 0.6;
@@ -944,11 +949,12 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return data.filter(item => typeof item === 'object' && item !== null && item['k']);
     }
     
-    async function fetchElementNames(modelURN, elementKeys) {
+    async function fetchElementNames(modelURN, elementKeys, includeDeleted) {
       const payload = JSON.stringify({
         qualifiedColumns: ['n:a', 'n:c', 'n:!n', 'n:n', 'n:!v', 'n:v'],
         keys: elementKeys,
-        includeHistory: false
+        includeHistory: false,
+        includeDeleted: includeDeleted === true
       });
       
       const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
@@ -1319,7 +1325,22 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         const hintSpan = prop.hint
           ? ' <span class="prop-hint">(' + escapeHtml(prop.hint) + ')</span>'
           : '';
-        if (prop.isRef && prop.rawValue) {
+        const refXrefs = (prop.isRef && prop.refFamily === 'x' && prop.rawValue) ? parseXrefBlob(prop.rawValue) : [];
+
+        if (refXrefs.length > 0) {
+          // x: value: one or more xrefs in one string. One clickable entry per xref, labelled with the element name.
+          html += '<td class="property-value"><ul class="ref-list">';
+          for (const xref of refXrefs) {
+            const xrefEsc = xref.replace(/"/g, '&quot;');
+            html += '<li>'
+              + '<span class="ref-name" data-xref="' + xrefEsc + '"></span>'
+              + '<button class="ref-drill-btn" data-ref-family="x"'
+              + ' data-model-urn="' + prop.refModelURN.replace(/"/g, '&quot;') + '"'
+              + ' data-raw-value="' + xrefEsc + '" title="View referenced element">'
+              + xrefEsc + '<span class="ref-arrow">&#x2197;</span></button></li>';
+          }
+          html += '</ul>' + hintSpan + historyBtn + '</td>';
+        } else if (prop.isRef && prop.rawValue) {
           const rawEsc = prop.rawValue.replace(/"/g, '&quot;');
           html += '<td class="property-value">'
             + '<button class="ref-drill-btn"'
@@ -1392,8 +1413,54 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       });
     }
 
+    // Names of referenced elements, keyed by modelURN|elementKey.
+    const refLabelCache = new Map();
+
+    // Fill the .ref-name spans of a container with the names of the elements their xrefs point to.
+    async function resolveRefLabels(container) {
+      const spans = Array.from(container.querySelectorAll('.ref-name[data-xref]'));
+      const keysByModel = new Map();
+
+      for (const span of spans) {
+        const decoded = decodeXref(span.getAttribute('data-xref'));
+
+        if (!decoded) continue;
+        // V2 scans are queried (and answered) with the short key
+        const shortKey = toShortKey(decoded.elementKey);
+
+        span._refId = decoded.modelURN + '|' + shortKey;
+        if (refLabelCache.has(span._refId)) continue;
+        const keys = keysByModel.get(decoded.modelURN) || new Set();
+
+        keys.add(shortKey);
+        keysByModel.set(decoded.modelURN, keys);
+      }
+      await Promise.all(Array.from(keysByModel.entries()).map(async ([modelURN, keys]) => {
+        try {
+          // includeDeleted: source rooms and levels are soft-deleted once they are mirrored as Locations
+          const rows = await fetchElementNames(modelURN, Array.from(keys), true);
+
+          for (const row of rows) {
+            const name = row['n:!n']?.[0] || row['n:n']?.[0];
+            const categoryId = row['n:c']?.[0];
+            const category = categoryId !== undefined ? getCategoryName(categoryId) : null;
+
+            refLabelCache.set(modelURN + '|' + row['k'], name ? (category ? name + ' (' + category + ')' : name) : '');
+          }
+        } catch (e) {
+          console.warn('Could not read the names of referenced elements:', e);
+        }
+      }));
+      for (const span of spans) {
+        if (span._refId && refLabelCache.get(span._refId)) {
+          span.textContent = refLabelCache.get(span._refId);
+        }
+      }
+    }
+
     // Attach click handlers to .ref-drill-btn elements inside a container
     function attachRefDrillHandlers(container) {
+      resolveRefLabels(container);
       container.querySelectorAll('.ref-drill-btn').forEach(btn => {
         btn.addEventListener('click', function(e) {
           e.stopPropagation();

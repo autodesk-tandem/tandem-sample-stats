@@ -22,7 +22,7 @@ import {
   makeRequestOptionsPOST
 } from '../shared/api.js';
 import { ColumnFamilies, ElementFlags, QC, SystemClassNames, TC } from '../../tandem/constants.js';
-import { decodeXref, getKeyFlags, toSystemId } from '../../tandem/keys.js';
+import { decodeXref, getElementFlags, toSystemId } from '../../tandem/keys.js';
 
 // ── Scan helpers ───────────────────────────────────────────────────────────────
 
@@ -111,7 +111,7 @@ function scanDefaultModel(facilityURN, region, scanOptions) {
  * @returns {number|undefined}
  */
 function flagsOf(row) {
-  return getKeyFlags(row[QC.Key]);
+  return getElementFlags(row[QC.Key]);
 }
 
 /**
@@ -531,7 +531,16 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
   try {
     const [rows, modelName] = await Promise.all([
       scanDefaultModel(facilityURN, region, {
-        families: [ColumnFamilies.DtProperties, ColumnFamilies.Status]
+        // A scan only returns rows that have data in the requested families. An asset can have no name and
+        // no custom properties and still be an asset (it only links to its BIM element and location), so the
+        // reference families are needed too. Same list as tutorial-rest getTaggedAssets.
+        families: [
+          ColumnFamilies.Standard,
+          ColumnFamilies.DtProperties,
+          ColumnFamilies.Refs,
+          ColumnFamilies.Xrefs,
+          ColumnFamilies.Status
+        ]
       }),
       getDefaultModelLabel(facilityURN, region)
     ]);

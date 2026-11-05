@@ -4,6 +4,7 @@
  */
 
 import {
+  ElementFlags,
   kElementFlagsSize,
   kElementIdSize,
   kElementIdWithFlagsSize,
@@ -52,9 +53,12 @@ export function toShortKey(fullKey) {
  * In schema V3 these are the element's real ElementFlags value, so a scan row's type can be
  * determined from its key alone.
  * @param {string} fullKey - Full element key with flags (URL-safe base64)
- * @returns {number|undefined} Element flags, or undefined if the key is not a full key
+ * @returns {number} Element flags, or ElementFlags.Unknown if the key is missing or not a full key (same as Encoding.getElementFlags in tutorial-rest)
  */
-export function getKeyFlags(fullKey) {
+export function getElementFlags(fullKey) {
+  if (!fullKey) {
+    return ElementFlags.Unknown;
+  }
   try {
     let standardB64 = fullKey.replace(/-/g, '+').replace(/_/g, '/');
     while (standardB64.length % 4) {
@@ -63,11 +67,11 @@ export function getKeyFlags(fullKey) {
     const bytes = atob(standardB64);
 
     if (bytes.length !== kElementIdWithFlagsSize) {
-      return undefined;
+      return ElementFlags.Unknown;
     }
     return ((bytes.charCodeAt(0) << 24) | (bytes.charCodeAt(1) << 16) | (bytes.charCodeAt(2) << 8) | bytes.charCodeAt(3)) >>> 0;
   } catch {
-    return undefined;
+    return ElementFlags.Unknown;
   }
 }
 

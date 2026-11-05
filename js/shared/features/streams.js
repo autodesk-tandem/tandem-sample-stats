@@ -3,8 +3,23 @@ import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { showStreamConfigModal } from '../components/streamConfigModal.js';
 import { viewAssetDetails, toRowKey } from '../version.js';
-import { QC } from '../../../tandem/constants.js';
+import { QC, TC } from '../../../tandem/constants.js';
 import { decodeXref } from '../../../tandem/keys.js';
+
+/**
+ * Find the xref of the element a stream is attached to.
+ * Priority: x:p (parent, the primary host reference of the Tandem UI), x:!r / x:r (room, V2),
+ * then the location (V3: override first), whose value is an array of xrefs, the first one is used.
+ * @param {object} stream - Stream row
+ * @returns {string|undefined} Xref
+ */
+function getHostRef(stream) {
+  return stream[QC.XParent]?.[0]
+    || stream[QC.OXRooms]?.[0]
+    || stream[QC.XRooms]?.[0]
+    || stream[QC.OLocation]?.[0]
+    || stream[QC.Location]?.[0];
+}
 
 /**
  * Category ID to type name mapping
@@ -707,9 +722,7 @@ export async function displayStreams(container, streams, facilityURN, region) {
   // Decode all xrefs and group by model
   
   for (const stream of streams) {
-    // Host reference priority: x:p (parent) > x:!r (room override) > x:r (room)
-    // Tandem UI uses x:p as the primary host reference
-    const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
+    const hostRef = getHostRef(stream);
     if (hostRef) {
       const decoded = decodeXref(hostRef);
       if (decoded) {
@@ -739,7 +752,11 @@ export async function displayStreams(container, streams, facilityURN, region) {
           // Name: Use override if present, otherwise standard
           const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
           const categoryId = element[QC.CategoryId]?.[0];
-          const type = CATEGORY_NAMES[categoryId] || `Category ${categoryId}`;
+          // V3 locations (levels, rooms) have no Revit category, so use the Tandem category
+          const tandemCategory = element[QC.OTandemCategory]?.[0] ?? element[QC.TandemCategory]?.[0];
+          const type = tandemCategory === TC.Rooms ? 'Room'
+            : tandemCategory === TC.Levels ? 'Level'
+            : (CATEGORY_NAMES[categoryId] || `Category ${categoryId}`);
           return { xref: item.xref, name, type };
         }).filter(Boolean);
       } catch (error) {
@@ -768,8 +785,8 @@ export async function displayStreams(container, streams, facilityURN, region) {
     // Classification: Use override if present, otherwise standard
     const classification = stream[QC.OClassification]?.[0] || stream[QC.Classification]?.[0];
 
-    // Host information: Priority x:p (parent) > x:!r (room override) > x:r (room)
-    const hostRef = stream[QC.XParent]?.[0] || stream[QC.OXRooms]?.[0] || stream[QC.XRooms]?.[0];
+    // Host information
+    const hostRef = getHostRef(stream);
     const hostInfo = hostRef ? hostInfoMap.get(hostRef) : null;
     
     // Get configuration for this stream

@@ -646,6 +646,11 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       border-color: rgba(79, 195, 247, 0.3);
       color: #81d4fa;
     }
+    .ref-list { list-style: none; margin: 0; padding: 0; }
+    .ref-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; margin-bottom: 4px; }
+    .ref-list li:last-child { margin-bottom: 0; }
+    .ref-name { color: #e0e0e0; font-size: 12px; }
+    .ref-name:empty { display: none; }
     .ref-drill-btn .ref-arrow {
       font-size: 10px;
       opacity: 0.6;
@@ -715,6 +720,10 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       flex-wrap: wrap;
       align-items: center;
       gap: 8px;
+    }
+    #ref-modal .ref-modal-model-name {
+      font-size: 13px;
+      color: #b0b0b0;
     }
     #ref-modal .ref-modal-subtitle {
       font-size: 11px;
@@ -800,6 +809,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       <div class="ref-modal-header">
         <div class="ref-modal-header-left">
           <h2 class="ref-modal-title" id="ref-modal-title">Referenced Element</h2>
+          <div class="ref-modal-model-name" id="ref-modal-model-name"></div>
           <div class="ref-modal-subtitle" id="ref-modal-subtitle"></div>
         </div>
         <button class="ref-modal-close" id="ref-modal-close">&times;</button>
@@ -935,11 +945,12 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return data.filter(item => typeof item === 'object' && item !== null && item['k']);
     }
     
-    async function fetchElementNames(modelURN, elementKeys) {
+    async function fetchElementNames(modelURN, elementKeys, includeDeleted) {
       const payload = JSON.stringify({
         qualifiedColumns: ['n:a', 'n:c', 'n:!n', 'n:n', 'n:!v', 'n:v'],
         keys: elementKeys,
-        includeHistory: false
+        includeHistory: false,
+        includeDeleted: includeDeleted === true
       });
       
       const response = await fetch(API_BASE + '/modeldata/' + modelURN + '/scan', {
@@ -1344,7 +1355,22 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         const hintSpan = prop.hint
           ? ' <span class="prop-hint">(' + escapeHtml(prop.hint) + ')</span>'
           : '';
-        if (prop.isRef && prop.rawValue) {
+        const refXrefs = (prop.isRef && prop.refFamily === 'x' && prop.rawValue) ? parseXrefBlob(prop.rawValue) : [];
+
+        if (refXrefs.length > 0) {
+          // x: value: one or more xrefs in one string. One clickable entry per xref, labelled with the element name.
+          html += '<td class="property-value"><ul class="ref-list">';
+          for (const xref of refXrefs) {
+            const xrefEsc = xref.replace(/"/g, '&quot;');
+            html += '<li>'
+              + '<span class="ref-name" data-xref="' + xrefEsc + '"></span>'
+              + '<button class="ref-drill-btn" data-ref-family="x"'
+              + ' data-model-urn="' + prop.refModelURN.replace(/"/g, '&quot;') + '"'
+              + ' data-raw-value="' + xrefEsc + '" title="View referenced element">'
+              + xrefEsc + '<span class="ref-arrow">&#x2197;</span></button></li>';
+          }
+          html += '</ul>' + hintSpan + historyBtn + '</td>';
+        } else if (prop.isRef && prop.rawValue) {
           const rawEsc = prop.rawValue.replace(/"/g, '&quot;');
           html += '<td class="property-value">'
             + '<button class="ref-drill-btn"'
@@ -1417,8 +1443,51 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       });
     }
 
+    // Names of referenced elements, keyed by modelURN|elementKey.
+    const refLabelCache = new Map();
+
+    // Fill the .ref-name spans of a container with the names of the elements their xrefs point to.
+    async function resolveRefLabels(container) {
+      const spans = Array.from(container.querySelectorAll('.ref-name[data-xref]'));
+      const keysByModel = new Map();
+
+      for (const span of spans) {
+        const decoded = decodeXref(span.getAttribute('data-xref'));
+
+        if (!decoded) continue;
+        span._refId = decoded.modelURN + '|' + decoded.elementKey;
+        if (refLabelCache.has(span._refId)) continue;
+        const keys = keysByModel.get(decoded.modelURN) || new Set();
+
+        keys.add(decoded.elementKey);
+        keysByModel.set(decoded.modelURN, keys);
+      }
+      await Promise.all(Array.from(keysByModel.entries()).map(async ([modelURN, keys]) => {
+        try {
+          // includeDeleted: source rooms and levels are soft-deleted once they are mirrored as Locations
+          const rows = await fetchElementNames(modelURN, Array.from(keys), true);
+
+          for (const row of rows) {
+            const name = row['n:!n']?.[0] || row['n:n']?.[0];
+            const categoryId = row['n:c']?.[0];
+            const category = categoryId !== undefined ? getCategoryName(categoryId) : null;
+
+            refLabelCache.set(modelURN + '|' + row['k'], name ? (category ? name + ' (' + category + ')' : name) : '');
+          }
+        } catch (e) {
+          console.warn('Could not read the names of referenced elements:', e);
+        }
+      }));
+      for (const span of spans) {
+        if (span._refId && refLabelCache.get(span._refId)) {
+          span.textContent = refLabelCache.get(span._refId);
+        }
+      }
+    }
+
     // Attach click handlers to .ref-drill-btn elements inside a container
     function attachRefDrillHandlers(container) {
+      resolveRefLabels(container);
       container.querySelectorAll('.ref-drill-btn').forEach(btn => {
         btn.addEventListener('click', function(e) {
           e.stopPropagation();
@@ -1614,12 +1683,37 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       } catch (e) { return []; }
     }
 
+    // Models of the facility (modelId, label), fetched once.
+    let facilityModelsPromise = null;
+
+    function getFacilityModels() {
+      if (!facilityModelsPromise) {
+        facilityModelsPromise = !FACILITY_URN ? Promise.resolve([]) : fetch(API_BASE + '/twins/' + FACILITY_URN, {
+          headers: { 'Authorization': 'Bearer ' + TOKEN, 'Region': REGION }
+        }).then(r => r.ok ? r.json() : null).then(twin => twin?.links || []).catch(() => []);
+      }
+      return facilityModelsPromise;
+    }
+
+    // Name of a model for display: the name the page was opened with, else the label from the facility's model list.
+    async function getModelName(modelURN) {
+      const known = DATA.find(group => group.modelURN === modelURN);
+
+      if (known && known.modelName) return known.modelName;
+      const links = await getFacilityModels();
+      const link = links.find(l => l.modelId === modelURN);
+
+      if (link && link.label) return link.label;
+      return FACILITY_URN && modelURN === FACILITY_URN.replace('urn:adsk.dtt:', 'urn:adsk.dtm:') ? 'Default Model' : null;
+    }
+
     async function openRefElement(refFamily, modelURN, rawValue) {
       const titleEl = document.getElementById('ref-modal-title');
       const bodyEl = document.getElementById('ref-modal-body');
 
       titleEl.innerHTML = '<span>Loading\u2026</span>';
       document.getElementById('ref-modal-subtitle').textContent = '';
+      document.getElementById('ref-modal-model-name').textContent = '';
       bodyEl.innerHTML = '<div style="text-align:center;padding:30px;color:#4fc3f7">Loading referenced element\u2026</div>';
       showRefModal();
 
@@ -1651,16 +1745,36 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           elementKey = refKeys[0];
         }
 
-        const elements = await fetchElementDetails(targetModelURN, [elementKey], true);
+        let elements = await fetchElementDetails(targetModelURN, [elementKey], true);
+
+        if ((!elements || elements.length === 0) && refFamily !== 'x') {
+          // An l: reference should be in the same model. When it is not (for example a level key copied
+          // from a BIM model onto an element of the default model), look for it in the other models of the facility.
+          const models = await getFacilityModels();
+
+          for (const m of models) {
+            if (m.modelId === targetModelURN) continue;
+            const found = await fetchElementDetails(m.modelId, [elementKey], true).catch(() => []);
+
+            if (found.length > 0) {
+              console.warn('Reference ' + elementKey + ' was not in ' + targetModelURN + ', found in ' + m.modelId);
+              targetModelURN = m.modelId;
+              elements = found;
+              break;
+            }
+          }
+        }
 
         if (!elements || elements.length === 0) {
+          console.warn('Referenced element not found', { modelURN: targetModelURN, elementKey });
           bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Referenced element not found in model.</div>';
+          document.getElementById('ref-modal-subtitle').textContent = targetModelURN + '  \u00b7  ' + elementKey;
           return;
         }
 
         const rawElement = elements[0];
         const deletedInfo = getDeletedInfo(rawElement);
-        const { cleanElement, propsWithHistory } = extractHistoryFromElement(rawElement);
+        const { cleanElement } = extractHistoryFromElement(rawElement);
 
         const name = cleanElement['n:!n']?.[0] || cleanElement['n:n']?.[0] || 'Unnamed Element';
         const categoryId = cleanElement['n:c']?.[0];
@@ -1679,20 +1793,18 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
         }
         titleEl.innerHTML = titleHTML;
         document.getElementById('ref-modal-subtitle').textContent =
-          targetModelURN + '  ·  ' + elementKey;
+          targetModelURN + '  \u00b7  ' + elementKey;
+        const modelLabel = await getModelName(targetModelURN);
+        document.getElementById('ref-modal-model-name').textContent = modelLabel || '';
 
-        const properties = organizeProperties(cleanElement, targetModelURN);
-        const tableHTML = buildPropertiesTable(properties, propsWithHistory);
+        bodyEl.innerHTML = await buildElementDetailsHtml(targetModelURN, elementKey, rawElement, false);
 
-        bodyEl.innerHTML = buildDeletedBanner(deletedInfo) + '<div class="props-section" data-model-urn="' + targetModelURN.replace(/"/g, '&quot;') + '" data-scan-key="' + elementKey.replace(/"/g, '&quot;') + '">' + tableHTML + '</div>';
-
-        const table = bodyEl.querySelector('.properties-table');
-        if (table) {
+        bodyEl.querySelectorAll('.properties-table').forEach(table => {
           attachTableSorting(table);
           attachRefDrillHandlers(table);
           attachJsonViewHandlers(table);
           attachHistoryHandlers(table);
-        }
+        });
       } catch (err) {
         console.error('Error fetching referenced element:', err);
         bodyEl.innerHTML = '<div style="color:#ff6b6b;padding:20px">Error: ' + escapeHtml(err.message) + '</div>';
@@ -1763,6 +1875,91 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
     }
 
 
+    // Element Properties (blue) followed by the Type Properties (purple) of the element's own l:t type,
+    // read from the same model. A FamilyType element shows only its Type Properties.
+    // Used by the details of the list and by the drill-down modal, so both look the same.
+    async function buildElementDetailsHtml(modelURN, elementKey, rawElement, isType) {
+      const { cleanElement, propsWithHistory, parsedHistory } = extractHistoryFromElement(rawElement);
+
+      // Cache parsed history for this element's properties
+      const cachePrefix = modelURN + '|' + elementKey + '|';
+      for (const [propId, entries] of parsedHistory) {
+        propHistoryCache.set(cachePrefix + propId, entries);
+      }
+
+      const elementIsType = isType || isFamilyType(cleanElement);
+      const properties = organizeProperties(cleanElement, modelURN);
+
+      properties.sort((a, b) => {
+        const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+        if (cc !== 0) return cc;
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+      });
+
+      let html = buildDeletedBanner(getDeletedInfo(rawElement));
+
+      const urnAttr = ' data-model-urn="' + modelURN.replace(/"/g, '&quot;') + '"';
+
+      if (elementIsType) {
+        // Element is a FamilyType — show only Type Properties
+        const typeName = cleanElement['n:!n']?.[0] || cleanElement['n:n']?.[0] || null;
+        const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
+        html += '<div class="props-section props-section-type"' + urnAttr + ' data-scan-key="' + elementKey.replace(/"/g, '&quot;') + '">';
+        html += '<div class="props-section-label">' + typeLabel + '</div>';
+        html += buildPropertiesTable(properties, propsWithHistory);
+        html += '</div>';
+      } else {
+        // Physical/instance element — show Element Properties, then look up Type
+        html += '<div class="props-section"' + urnAttr + ' data-scan-key="' + elementKey.replace(/"/g, '&quot;') + '">';
+        html += '<div class="props-section-label">Element Properties</div>';
+        html += buildPropertiesTable(properties, propsWithHistory);
+        html += '</div>';
+
+        // Type reference: l:t (QC.FamilyType = Refs family + 't' column), in the same model as the element.
+        // A tagged asset only shows what is stored in the default model; the BIM element it was created
+        // from (x:be) is reached through its link and shows its own Element and Type properties.
+        const typeModelURN = modelURN;
+        const typeKey = cleanElement['l:t']?.[0];
+        let typeProperties = [];
+        let typePropsWithHistory = new Set();
+        let typeName = null;
+
+        if (typeKey) {
+          try {
+            const typeElements = await fetchTypeProperties(typeModelURN, typeKey);
+            if (typeElements.length > 0) {
+              const rawTypeElement = typeElements[0];
+              const typeHist = extractHistoryFromElement(rawTypeElement);
+              const typeCachePrefix = typeModelURN + '|' + typeKey + '|';
+              for (const [propId, entries] of typeHist.parsedHistory) {
+                propHistoryCache.set(typeCachePrefix + propId, entries);
+              }
+
+              typeName = typeHist.cleanElement['n:!n']?.[0] || typeHist.cleanElement['n:n']?.[0] || null;
+              typeProperties = organizeProperties(typeHist.cleanElement, typeModelURN);
+              typePropsWithHistory = typeHist.propsWithHistory;
+              typeProperties.sort((a, b) => {
+                const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
+                if (cc !== 0) return cc;
+                return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
+              });
+            }
+          } catch (typeError) {
+            console.warn('Could not fetch type properties:', typeError);
+          }
+        }
+
+        if (typeProperties.length > 0) {
+          const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
+          html += '<div class="props-section props-section-type" data-model-urn="' + typeModelURN.replace(/"/g, '&quot;') + '" data-scan-key="' + typeKey.replace(/"/g, '&quot;') + '">';
+          html += '<div class="props-section-label">' + typeLabel + '</div>';
+          html += buildPropertiesTable(typeProperties, typePropsWithHistory);
+          html += '</div>';
+        }
+      }
+      return html;
+    }
+
     async function toggleElementDetails(modelURN, elementKey, button, detailsDiv, isType) {
       if (detailsDiv.classList.contains('visible')) {
         detailsDiv.classList.remove('visible');
@@ -1790,82 +1987,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
           return;
         }
 
-        const rawElement = elements[0];
-        const { cleanElement, propsWithHistory, parsedHistory } = extractHistoryFromElement(rawElement);
-
-        // Cache parsed history for this element's properties
-        const cachePrefix = modelURN + '|' + scanKey + '|';
-        for (const [propId, entries] of parsedHistory) {
-          propHistoryCache.set(cachePrefix + propId, entries);
-        }
-
-        const elementIsType = isType || isFamilyType(cleanElement);
-        const properties = organizeProperties(cleanElement, modelURN);
-
-        properties.sort((a, b) => {
-          const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
-          if (cc !== 0) return cc;
-          return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-        });
-
-        let html = buildDeletedBanner(getDeletedInfo(rawElement));
-
-        const urnAttr = ' data-model-urn="' + modelURN.replace(/"/g, '&quot;') + '"';
-
-        if (elementIsType) {
-          // Element is a FamilyType — show only Type Properties
-          const typeName = cleanElement['n:!n']?.[0] || cleanElement['n:n']?.[0] || null;
-          const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
-          html += '<div class="props-section props-section-type"' + urnAttr + ' data-scan-key="' + scanKey.replace(/"/g, '&quot;') + '">';
-          html += '<div class="props-section-label">' + typeLabel + '</div>';
-          html += buildPropertiesTable(properties, propsWithHistory);
-          html += '</div>';
-        } else {
-          // Physical/instance element — show Element Properties, then look up Type
-          html += '<div class="props-section"' + urnAttr + ' data-scan-key="' + elementKey.replace(/"/g, '&quot;') + '">';
-          html += '<div class="props-section-label">Element Properties</div>';
-          html += buildPropertiesTable(properties, propsWithHistory);
-          html += '</div>';
-
-          // Check for a type reference: l:t (QC.FamilyType = Refs family + 't' column)
-          const typeKey = cleanElement['l:t']?.[0];
-          let typeProperties = [];
-          let typePropsWithHistory = new Set();
-          let typeName = null;
-
-          if (typeKey) {
-            try {
-              const typeElements = await fetchTypeProperties(modelURN, typeKey);
-              if (typeElements.length > 0) {
-                const rawTypeElement = typeElements[0];
-                const typeHist = extractHistoryFromElement(rawTypeElement);
-                const typeCachePrefix = modelURN + '|' + typeKey + '|';
-                for (const [propId, entries] of typeHist.parsedHistory) {
-                  propHistoryCache.set(typeCachePrefix + propId, entries);
-                }
-
-                typeName = typeHist.cleanElement['n:!n']?.[0] || typeHist.cleanElement['n:n']?.[0] || null;
-                typeProperties = organizeProperties(typeHist.cleanElement, modelURN);
-                typePropsWithHistory = typeHist.propsWithHistory;
-                typeProperties.sort((a, b) => {
-                  const cc = a.category.toLowerCase().localeCompare(b.category.toLowerCase());
-                  if (cc !== 0) return cc;
-                  return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
-                });
-              }
-            } catch (typeError) {
-              console.warn('Could not fetch type properties:', typeError);
-            }
-          }
-
-          if (typeProperties.length > 0) {
-            const typeLabel = typeName ? 'Type Properties \u2014 ' + escapeHtml(typeName) : 'Type Properties';
-            html += '<div class="props-section props-section-type"' + urnAttr + ' data-scan-key="' + typeKey.replace(/"/g, '&quot;') + '">';
-            html += '<div class="props-section-label">' + typeLabel + '</div>';
-            html += buildPropertiesTable(typeProperties, typePropsWithHistory);
-            html += '</div>';
-          }
-        }
+        const html = await buildElementDetailsHtml(modelURN, scanKey, elements[0], isType);
 
         detailsDiv.innerHTML = html;
 
