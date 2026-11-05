@@ -18,11 +18,11 @@
  * (use QC constants, import from api.js, etc.). If you are looking for
  * canonical API usage patterns, refer to other feature files or AGENTS.md.
  */
-import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
-import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../tandem/constants.js';
-import { getSchemaCache } from '../state/schemaCache.js';
-import { getCategoryName, compareQualifiedColumnIds } from '../utils.js';
-import { makeXrefKey, toFullKey, toShortKey, decodeXref } from '../../tandem/keys.js';
+import { tandemBaseURL, makeRequestOptionsPOST } from '../../shared/api.js';
+import { QC, ColumnFamilies, KeyFlags, kElementFlagsSize, kElementIdWithFlagsSize } from '../../../tandem/constants.js';
+import { getSchemaCache } from '../../shared/state/schemaCache.js';
+import { getCategoryName, compareQualifiedColumnIds } from '../../shared/utils.js';
+import { makeXrefKey, toFullKey, toShortKey, decodeXref } from '../../../tandem/keys.js';
 
 /**
  * Ensure a key is a short key (20 bytes). History returns full keys (24 bytes
@@ -976,14 +976,16 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
       return div.innerHTML;
     }
     
+    // Returns plain text. HTML escaping happens once, when the value is rendered (buildPropertiesTable);
+    // escaping here as well would show "<" as "&lt;" and put escaped text into the Excel export.
     function formatPropertyValue(value) {
       if (value === null || value === undefined) return '-';
       if (Array.isArray(value)) {
         if (value.length === 0) return '-';
-        if (value.length === 1) return escapeHtml(String(value[0]));
-        return escapeHtml(value.join(', '));
+        if (value.length === 1) return String(value[0]);
+        return value.join(', ');
       }
-      return escapeHtml(String(value));
+      return String(value);
     }
     
     function organizeProperties(element, modelURN) {
@@ -1310,7 +1312,7 @@ function generateAssetDetailsHTML(elementsByModel, title, facilityURN, region, s
             + '</svg></button>'
           : '';
 
-        html += '<tr data-id="' + prop.id.replace(/"/g, '&quot;') + '" data-category="' + prop.category.replace(/"/g, '&quot;') + '" data-name="' + prop.name.replace(/"/g, '&quot;') + '" data-value="' + prop.value.replace(/"/g, '&quot;') + '">';
+        html += '<tr data-id="' + prop.id.replace(/"/g, '&quot;') + '" data-category="' + prop.category.replace(/"/g, '&quot;') + '" data-name="' + prop.name.replace(/"/g, '&quot;') + '" data-value="' + valueEscaped.replace(/"/g, '&quot;') + '">';
         html += '<td class="property-id">' + idEscaped + '</td>';
         html += '<td class="property-category">' + categoryEscaped + '</td>';
         html += '<td class="property-name">' + nameEscaped + '</td>';

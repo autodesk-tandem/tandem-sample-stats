@@ -22,7 +22,7 @@ import { ElementFlags, QC } from '../tandem/constants.js';
 
 const streams = data.filter(row => {
   const flags = row[QC.ElementFlags];
-  return flags && flags[0] === ElementFlags.Stream;
+  return flags && flags[0] === ElementFlags.StreamV2; // V3 uses ElementFlags.StreamV3 - keep version-specific flags in js/v2 or js/v3
 });
 
 ```

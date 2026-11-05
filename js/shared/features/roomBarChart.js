@@ -1,5 +1,5 @@
 import { formatUnitName } from '../utils.js';
-import { viewAssetDetails } from './assetDetails.js';
+import { viewAssetDetails } from '../version.js';
 
 /**
  * Generate and open the Room Bar Chart visualization page

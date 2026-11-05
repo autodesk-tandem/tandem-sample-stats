@@ -19,7 +19,7 @@ Look for errors. Common issues:
 **❌ What indicates a problem:**
 ```javascript
 // Import error - file not found
-Failed to load resource: js/components/streamConfigModal.js
+Failed to load resource: js/shared/components/streamConfigModal.js
 
 // Function error - code didn't update
 getStreamConfigs is not a function
@@ -35,7 +35,7 @@ Open the browser console and paste these **one at a time**:
 #### Test 1: Check if new functions exist
 ```javascript
 console.log('Checking imports...');
-import('../js/api.js').then(api => {
+import('../js/shared/api.js').then(api => {
   console.log('✅ getStreamConfigs exists:', typeof api.getStreamConfigs === 'function');
   console.log('✅ getStreamConfig exists:', typeof api.getStreamConfig === 'function');
 });
@@ -49,7 +49,7 @@ import('../js/api.js').then(api => {
 
 #### Test 2: Check if modal component loads
 ```javascript
-import('../js/components/streamConfigModal.js').then(modal => {
+import('../js/shared/components/streamConfigModal.js').then(modal => {
   console.log('✅ Modal component loaded:', typeof modal.showStreamConfigModal === 'function');
 });
 ```
@@ -61,7 +61,7 @@ import('../js/components/streamConfigModal.js').then(modal => {
 
 #### Test 3: Check if streams module has new code
 ```javascript
-import('../js/features/streams.js').then(module => {
+import('../js/shared/features/streams.js').then(module => {
   console.log('✅ Streams module loaded successfully');
   console.log('Module exports:', Object.keys(module));
 });
@@ -125,7 +125,7 @@ Your streams might not have configurations yet
 ```bash
 # Verify file was saved correctly
 cd /Users/awej/dev/tandem/tandem-sample-stats
-cat js/api.js | grep -A 5 "getStreamConfigs"
+cat js/shared/api.js | grep -A 5 "getStreamConfigs"
 ```
 
 #### Issue: Modal doesn't open
@@ -182,8 +182,8 @@ Make sure all files are saved:
 ```bash
 cd /Users/awej/dev/tandem/tandem-sample-stats
 git status
-git diff js/api.js
-git diff js/features/streams.js
+git diff js/shared/api.js
+git diff js/shared/features/streams.js
 ```
 
 ### 10. Nuclear Option: Clear Everything

@@ -2,7 +2,7 @@
 
 ## Step 1: Configure Your APS Client ID
 
-1. Open `js/config.js`
+1. Open `js/shared/config.js`
 2. Replace the empty string with your APS Client ID:
 
 ```javascript
@@ -12,7 +12,7 @@ apsKey: "YOUR_CLIENT_ID_HERE",
 ## Step 2: Configure OAuth Redirect
 
 Make sure your APS application has this redirect URI configured:
-- `http://localhost:8000`
+- `http://localhost:8000` (or the port you serve the app on - the redirect URI is derived from the page's port)
 
 ## Step 3: Start Local Server
 

@@ -1,7 +1,7 @@
 import { getElementCount, getElementCountByCategoryAndClassification, getElementsByCategory, getElementsByTandemCategory, getElementsByClassification, getElementsByNameOverride, getElementsByClassificationOverride, getHistory, getModelProperties } from '../api.js';
 import { isDefaultModel, getCategoryName } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { viewAssetDetails } from './assetDetails.js';
+import { viewAssetDetails } from '../version.js';
 
 /**
  * Toggle models detail view

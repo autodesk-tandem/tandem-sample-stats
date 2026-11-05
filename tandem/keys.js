@@ -47,6 +47,30 @@ export function toShortKey(fullKey) {
   return makeWebsafe(btoa(String.fromCharCode.apply(null, shortKey)));
 }
 
+/**
+ * Read the element flags stored in the first 4 bytes of a full key (24 bytes).
+ * In schema V3 these are the element's real ElementFlags value, so a scan row's type can be
+ * determined from its key alone.
+ * @param {string} fullKey - Full element key with flags (URL-safe base64)
+ * @returns {number|undefined} Element flags, or undefined if the key is not a full key
+ */
+export function getKeyFlags(fullKey) {
+  try {
+    let standardB64 = fullKey.replace(/-/g, '+').replace(/_/g, '/');
+    while (standardB64.length % 4) {
+      standardB64 += '=';
+    }
+    const bytes = atob(standardB64);
+
+    if (bytes.length !== kElementIdWithFlagsSize) {
+      return undefined;
+    }
+    return ((bytes.charCodeAt(0) << 24) | (bytes.charCodeAt(1) << 16) | (bytes.charCodeAt(2) << 8) | bytes.charCodeAt(3)) >>> 0;
+  } catch {
+    return undefined;
+  }
+}
+
 export function toFullKey(shortKey, isLogical) {
   const tmp = shortKey.replace(/-/g, '+').replace(/_/g, '/');
   let standardB64 = tmp;

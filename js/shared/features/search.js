@@ -1,8 +1,8 @@
 import { tandemBaseURL, makeRequestOptionsPOST } from '../api.js';
-import { QC, AttributeType } from '../../tandem/constants.js';
+import { QC, AttributeType } from '../../../tandem/constants.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { getDataTypeName } from '../utils.js';
-import { viewAssetDetails } from './assetDetails.js';
+import { viewAssetDetails } from '../version.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 
 /**

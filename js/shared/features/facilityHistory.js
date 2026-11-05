@@ -1,5 +1,5 @@
 import { getTwinHistory } from '../api.js';
-import { HC } from '../../tandem/constants.js';
+import { HC } from '../../../tandem/constants.js';
 
 /**
  * View facility ACL history in a new window

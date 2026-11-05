@@ -1,5 +1,5 @@
 import { getUserResources, getFacilityInfo, getGroupHistory, getGroupDetails } from '../api.js';
-import { Region, HC } from '../../tandem/constants.js';
+import { Region, HC } from '../../../tandem/constants.js';
 
 /**
  * Get access level display name

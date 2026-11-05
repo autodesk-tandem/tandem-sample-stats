@@ -1,5 +1,5 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { viewAssetDetails } from './assetDetails.js';
+import { viewAssetDetails } from '../version.js';
 
 /**
  * Toggle levels detail view

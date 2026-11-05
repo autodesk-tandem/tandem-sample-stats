@@ -1,8 +1,8 @@
 import { getElementsByKeys } from '../api.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { viewAssetDetails } from './assetDetails.js';
-import { QC } from '../../tandem/constants.js';
-import { decodeXref, toShortKey } from '../../tandem/keys.js';
+import { viewAssetDetails, toRowKey } from '../version.js';
+import { QC } from '../../../tandem/constants.js';
+import { decodeXref } from '../../../tandem/keys.js';
 
 /**
  * Category ID to type name mapping
@@ -84,11 +84,11 @@ async function buildParentInfoMap(tickets, region) {
     if (parentRef) {
       const decoded = decodeXref(parentRef);
       if (decoded) {
-        const shortKey = toShortKey(decoded.elementKey);
+        const rowKey = toRowKey(decoded.elementKey);
         if (!xrefsByModel.has(decoded.modelURN)) {
           xrefsByModel.set(decoded.modelURN, []);
         }
-        xrefsByModel.get(decoded.modelURN).push({ xref: parentRef, shortKey });
+        xrefsByModel.get(decoded.modelURN).push({ xref: parentRef, rowKey });
       }
     }
   }
@@ -96,11 +96,11 @@ async function buildParentInfoMap(tickets, region) {
   // Fetch element details for all models simultaneously, then merge into map
   const results = await Promise.all(
     Array.from(xrefsByModel.entries()).map(async ([modelURN, items]) => {
-      const shortKeys = items.map(item => item.shortKey);
+      const rowKeys = items.map(item => item.rowKey);
       try {
-        const elements = await getElementsByKeys(modelURN, region, shortKeys);
+        const elements = await getElementsByKeys(modelURN, region, rowKeys);
         return items.map(item => {
-          const element = elements.find(e => e[QC.Key] === item.shortKey);
+          const element = elements.find(e => e[QC.Key] === item.rowKey);
           if (!element) return null;
           const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
           const categoryId = element[QC.CategoryId]?.[0];

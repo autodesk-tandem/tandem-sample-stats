@@ -2,7 +2,7 @@
  * Reusable modal dialog for displaying and copying element keys
  */
 
-import { viewAssetDetails } from '../features/assetDetails.js';
+import { viewAssetDetails } from '../version.js';
 
 let currentElementsByModel = [];
 let currentModalTitle = '';

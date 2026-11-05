@@ -1,11 +1,10 @@
 import { getLastSeenStreamValues, getStreamValues, getElementsByKeys, getStreamConfigs } from '../api.js';
-import { convertLongKeysToShortKeys } from '../utils.js';
 import { loadSchemaForModel, getPropertyDisplayName } from '../state/schemaCache.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { showStreamConfigModal } from '../components/streamConfigModal.js';
-import { viewAssetDetails } from './assetDetails.js';
-import { QC } from '../../tandem/constants.js';
-import { decodeXref, toShortKey } from '../../tandem/keys.js';
+import { viewAssetDetails, toRowKey } from '../version.js';
+import { QC } from '../../../tandem/constants.js';
+import { decodeXref } from '../../../tandem/keys.js';
 
 /**
  * Category ID to type name mapping
@@ -685,24 +684,25 @@ export async function displayStreams(container, streams, facilityURN, region) {
   const streamKeys = streams.map(s => s[QC.Key]);
   const lastSeenValuesRaw = await getLastSeenStreamValues(facilityURN, region, streamKeys);
   
-  // Convert long keys to short keys so we can match them with our stream objects
-  const lastSeenValues = convertLongKeysToShortKeys(lastSeenValuesRaw);
+  // Re-key the values to the form used by scan rows so they can be matched with our stream objects
+  const lastSeenValues = {};
+  for (const [key, value] of Object.entries(lastSeenValuesRaw)) {
+    lastSeenValues[toRowKey(key)] = value;
+  }
   
   // Fetch stream configurations
   const streamConfigs = await getStreamConfigs(facilityURN, region);
   
   // Create a map of stream key to config for quick lookup
-  // IMPORTANT: Config API returns long keys, but we need to match against short keys
+  // The config API returns long keys, so re-key them the same way as the scan rows
   const configMap = new Map();
   for (const config of streamConfigs) {
-    // Convert long key to short key for matching
-    const shortKey = toShortKey(config.elementId);
-    configMap.set(shortKey, config);
+    configMap.set(toRowKey(config.elementId), config);
   }
 
   // Decode xrefs and fetch host information
   const hostInfoMap = new Map(); // Map xref -> {name, type}
-  const xrefsByModel = new Map(); // Map modelURN -> array of {xref, shortKey}
+  const xrefsByModel = new Map(); // Map modelURN -> array of {xref, rowKey}
   
   // Decode all xrefs and group by model
   
@@ -713,15 +713,15 @@ export async function displayStreams(container, streams, facilityURN, region) {
     if (hostRef) {
       const decoded = decodeXref(hostRef);
       if (decoded) {
-        // Convert long key (from xref) to short key (for querying)
-        const shortKey = toShortKey(decoded.elementKey);
+        // Convert the xref's element key to the form used for querying
+        const rowKey = toRowKey(decoded.elementKey);
         
         if (!xrefsByModel.has(decoded.modelURN)) {
           xrefsByModel.set(decoded.modelURN, []);
         }
         xrefsByModel.get(decoded.modelURN).push({
           xref: hostRef,
-          shortKey: shortKey
+          rowKey
         });
       }
     }
@@ -730,11 +730,11 @@ export async function displayStreams(container, streams, facilityURN, region) {
   // Fetch host elements for all models simultaneously, then merge into map
   const hostResults = await Promise.all(
     Array.from(xrefsByModel.entries()).map(async ([modelURN, items]) => {
-      const shortKeys = items.map(item => item.shortKey);
+      const rowKeys = items.map(item => item.rowKey);
       try {
-        const elements = await getElementsByKeys(modelURN, region, shortKeys);
+        const elements = await getElementsByKeys(modelURN, region, rowKeys);
         return items.map(item => {
-          const element = elements.find(e => e[QC.Key] === item.shortKey);
+          const element = elements.find(e => e[QC.Key] === item.rowKey);
           if (!element) return null;
           // Name: Use override if present, otherwise standard
           const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';

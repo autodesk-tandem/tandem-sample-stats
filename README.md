@@ -18,10 +18,10 @@ This project is designed to be an **AI-friendly template** for building Tandem a
 
 **🎯 Quick Wins:** This codebase provides:
 - ⭐ **Account & Facility switching** - The essential pattern for accessing user data (`js/app.js`)
-- OAuth authentication flow with PKCE (`js/auth.js`)
-- API wrapper with proper headers and token refresh (`js/api.js`)
+- OAuth authentication flow with PKCE (`js/shared/auth.js`)
+- API wrapper with proper headers and token refresh (`js/shared/api.js`)
 - Key/xref conversion utilities (`tandem/keys.js`)
-- Schema caching pattern (`js/state/schemaCache.js`)
+- Schema caching pattern (`js/shared/state/schemaCache.js`)
 - Column name constants to avoid magic strings (`tandem/constants.js`)
 
 ### Key Implementation Challenges
@@ -110,7 +110,7 @@ For production deployment or customization:
    - Callback URL: Your deployment URL (e.g., `https://yourusername.github.io/tandem-sample-stats/`)
    - APIs: Data Management API + Tandem API
 
-2. **Update `js/config.js`**
+2. **Update `js/shared/config.js`**
    
    ```javascript
    apsKey: "YOUR_APS_CLIENT_ID_HERE",
@@ -137,40 +137,23 @@ tandem-sample-stats/
 │   └── README.md                 # Utilities guide and usage patterns
 ├── js/
 │   ├── app.js                    # Main application logic
-│   ├── auth.js                   # OAuth 3-legged PKCE flow
-│   ├── api.js                    # Tandem API wrapper
-│   ├── config.js                 # Environment configuration
-│   ├── utils.js                  # General utilities
-│   ├── utils/
-│   │   └── excelUtils.js         # Excel export helpers (xlsx-js-style)
-│   ├── state/
-│   │   └── schemaCache.js        # Schema caching pattern
-│   ├── components/
-│   │   ├── toggleHeader.js       # Collapsible sections
-│   │   ├── elementListModal.js   # Element list modal
-│   │   └── streamConfigModal.js  # Stream configuration modal
-│   └── features/                 # Feature-specific modules
-│       ├── assetDetails.js       # Asset details drilldown (standalone page)
-│       ├── diagnostics.js        # Schema diagnostics
-│       ├── documents.js          # Document listing
-│       ├── facilityHistory.js    # Facility change history
-│       ├── facilityUsers.js      # Facility users/permissions
-│       ├── facilityViews.js      # Saved facility views
-│       ├── levels.js             # Level listing
-│       ├── models.js             # Model listing and history
-│       ├── roomBarChart.js       # Room statistics chart
-│       ├── rooms.js              # Room statistics
-│       ├── schema.js             # Schema viewer with search
-│       ├── search.js             # Property value search
-│       ├── streams.js            # Stream monitoring & charts
-│       ├── systems.js            # MEP systems
-│       ├── taggedAssets.js       # Tagged assets
-│       ├── tickets.js            # Support tickets
-│       └── userResources.js      # User resources/permissions
+│   ├── shared/                   # Version-agnostic code (same for V2 and V3)
+│   │   ├── auth.js               # OAuth 3-legged PKCE flow
+│   │   ├── api.js                # Tandem API wrapper (version-agnostic calls)
+│   │   ├── config.js             # Environment configuration
+│   │   ├── version.js            # Registry of the active schema-version module
+│   │   ├── utils.js              # General utilities
+│   │   ├── utils/excelUtils.js   # Excel export helpers (xlsx-js-style)
+│   │   ├── state/schemaCache.js  # Schema caching pattern
+│   │   ├── components/           # Collapsible sections, element list modal, stream config modal
+│   │   └── features/             # The cards of the UI (models, levels, rooms, streams, tickets, systems, ...)
+│   ├── v2/                       # Loaders and asset details for the V2 schema
+│   └── v3/                       # Same interface for the V3 ("No-BIM") schema
 ├── docs/
 │   └── logical-element-scan-fix.md  # Physical vs logical key scanning
 ├── AGENTS.md                     # 📚 AI/developer guide
 ├── README.md                     # This file
+├── MIGRATION.md                  # V2/V3 migration notes: what we did and why, running against STG
 ├── QUICKSTART.md                 # Quick setup guide
 ├── CODE_ORGANIZATION.md          # Shared components and patterns
 ├── BADGE_REFERENCE.md            # Stream config badge guide
@@ -183,9 +166,13 @@ tandem-sample-stats/
 The application supports two environments:
 
 - **Production** (default): Uses `https://developer.api.autodesk.com/tandem/v1`
-- **Staging**: Uses `https://tandem-stg.autodesk.com/api/v1`
+- **Staging**: Uses `https://developer-stg.api.autodesk.com/tandem/v1` (the APS gateway, same as prod)
 
-To switch environments, edit `js/config.js` and change the return value in `getEnv()`.
+To use staging, see **[Running against staging](MIGRATION.md#1-running-the-app-against-stg)** in `MIGRATION.md` for the complete steps (branch, port 8000, Client ID, accounts). In short: open the app with `?env=stg` (for example `http://localhost:8000/?env=stg`). The choice is remembered, and a yellow STG badge is shown in the header. Use `?env=prod` to go back. Your redirect URI must be registered for the Client ID of the environment you use.
+
+## Schema versions (V2 and V3)
+
+Tandem facilities use either the V2 or the V3 ("No-BIM") data schema. Pick the version with the **V2 | V3** switch next to the Account and Facility selectors: the Facility list only shows facilities of that version, and switching reloads the facility. Version-specific code is kept in `js/v2/` and `js/v3/`; see `AGENTS.md` for how they differ. V3 facilities currently only exist in staging.
 
 ## Deployment to GitHub Pages
 
@@ -204,7 +191,7 @@ This application can be deployed to GitHub Pages with zero configuration:
 
 3. **Update your APS App**
    - Add the GitHub Pages URL as a callback: `https://yourusername.github.io/tandem-sample-stats/`
-   - Update `loginRedirect` in `js/config.js` to match
+   - Update `loginRedirect` in `js/shared/config.js` to match
 
 4. **Access your deployed app**
    - URL: `https://yourusername.github.io/tandem-sample-stats/`

@@ -2,7 +2,6 @@
  * Utility functions for Tandem Stats
  */
 
-import { toShortKey } from '../tandem/keys.js';
 
 /**
  * Attribute type enum mapping from Tandem
@@ -77,24 +76,6 @@ export function compareQualifiedColumnIds(aId, bId, ascending) {
   if (familyCompare !== 0) return ascending ? familyCompare : -familyCompare;
   const propCompare = aParts.property.toLowerCase().localeCompare(bParts.property.toLowerCase());
   return ascending ? propCompare : -propCompare;
-}
-
-/**
- * Create a map of stream data indexed by short keys
- * The API returns data with long keys, but we need to map them back to short keys
- * Uses toShortKey from keys.js for consistency
- * @param {Object} lastSeenValues - Object with long keys
- * @returns {Object} Object with short keys
- */
-export function convertLongKeysToShortKeys(lastSeenValues) {
-  const result = {};
-  
-  for (const [longKey, value] of Object.entries(lastSeenValues)) {
-    const shortKey = toShortKey(longKey);
-    result[shortKey] = value;
-  }
-  
-  return result;
 }
 
 /**

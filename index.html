@@ -131,6 +131,24 @@
 
                 <!-- Account and Facility Selectors -->
                 <div class="flex items-center space-x-3">
+                    <!-- Environment badge (shown only when not running against production) -->
+                    <span id="envBadge" class="hidden px-2 py-0.5 text-xs font-semibold rounded bg-yellow-900/40 text-yellow-300 border border-yellow-700" title="Running against the Tandem staging environment"></span>
+
+                    <!-- Schema Version Switch -->
+                    <div id="versionSwitchWrap" class="hidden flex items-center space-x-2">
+                        <span class="text-xs font-medium text-dark-text-secondary">Schema</span>
+                        <div id="versionSwitch" class="radio-button-group" role="radiogroup" aria-label="Facility schema version">
+                            <label title="Facilities that use the V2 schema">
+                                <input type="radio" name="schemaVersion" value="2">
+                                <span>V2</span>
+                            </label>
+                            <label title="Facilities that use the V3 (no-BIM) schema">
+                                <input type="radio" name="schemaVersion" value="3">
+                                <span>V3</span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Account Selector -->
                     <div class="flex items-center space-x-2">
                         <label for="accountSelect" class="text-xs font-medium text-dark-text-secondary">Account</label>

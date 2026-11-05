@@ -29,7 +29,7 @@ const name = element[QC.Name];  // element['n:n']
 const overrideName = element[QC.OName];  // element['n:!n']
 
 // Check element type using flags
-if (element[QC.ElementFlags]?.[0] === ElementFlags.Stream) {
+if (element[QC.ElementFlags]?.[0] === ElementFlags.StreamV2) {
   console.log('This is a stream element');
 }
 ```

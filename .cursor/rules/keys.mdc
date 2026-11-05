@@ -9,6 +9,13 @@ For Tandem API related code ALWAYS use the key utilities from `tandem/keys.js` i
 - `tandem/keys.js` - Key conversion utilities
 - `tandem/constants.js` - Key size constants
 
+## Schema versions ⚠️ READ FIRST
+
+Short keys only exist in **schema V2** (`js/v2/`). In **schema V3** (`js/v3/`) there is a single kind of key: the 24-byte key whose first 4 bytes are the element flags.
+V3 code must NOT call `toShortKey` / `toFullKey`; use keys exactly as returned by the API, and `getKeyFlags(key)` to read the element flags from a key.
+Code in `js/shared/` must not convert keys either - use `toRowKey` from `js/shared/version.js`, which converts in V2 and is the identity in V3.
+The rest of this document describes V2 keys.
+
 ## Short Keys vs. Long Keys ⚠️ CRITICAL
 
 This is the #1 source of confusion when working with Tandem. Understanding the difference is essential.

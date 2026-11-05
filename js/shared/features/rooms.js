@@ -1,6 +1,6 @@
 import { formatUnitName } from '../utils.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { viewAssetDetails } from './assetDetails.js';
+import { viewAssetDetails } from '../version.js';
 import { viewRoomBarChart } from './roomBarChart.js';
 
 // Listen for messages from bar chart window to open room details

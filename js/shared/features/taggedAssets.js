@@ -1,8 +1,8 @@
 import { createToggleFunction } from '../components/toggleHeader.js';
-import { getTaggedAssetsDetails, getElementsByProperty } from '../api.js';
+import { getElementsByProperty } from '../api.js';
 import { getSchemaCache } from '../state/schemaCache.js';
 import { compareQualifiedColumnIds, isDefaultModel } from '../utils.js';
-import { viewAssetDetails } from './assetDetails.js';
+import { viewAssetDetails, getTaggedAssetsDetails } from '../version.js';
 
 /**
  * Toggle tagged assets detail view

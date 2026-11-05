@@ -3,9 +3,17 @@
 ## Overview
 This document explains how shared components and utilities are organized to avoid code duplication.
 
+## Folder layout and schema versions
+
+- `js/shared/` - everything that is the same for schema V2 and V3 (auth, config, generic API calls, UI cards, components, utilities).
+- `js/v2/` and `js/v3/` - the code that depends on how a schema version stores data (loaders for streams, tickets, levels, rooms, systems and tagged assets, plus the asset details page). Both folders expose the same interface through their `index.js`.
+- `js/shared/version.js` - the registry that `js/app.js` fills with the selected version module. Shared code reaches version-specific behaviour through its delegates, never by importing from `v2/` or `v3/`.
+
+Duplicating code between `v2/` and `v3/` is intentional where the schemas differ. There must be no `if (version === ...)` in shared code.
+
 ## Shared Components
 
-### 1. Asset Details Page (`js/features/assetDetails.js`)
+### 1. Asset Details Page (`js/v2/features/assetDetails.js` and `js/v3/features/assetDetails.js`)
 **Purpose**: Reusable detail page for displaying element information across different features.
 
 **Exported Function**: `viewAssetDetails(elementsByModel, title)`
@@ -36,7 +44,7 @@ This document explains how shared components and utilities are organized to avoi
 - Excel export with summary and detail sheets
 - Category name resolution
 
-### 2. Toggle Header Component (`js/components/toggleHeader.js`)
+### 2. Toggle Header Component (`js/shared/components/toggleHeader.js`)
 **Purpose**: Reusable expand/collapse functionality for card details.
 
 **Used By**:
@@ -51,14 +59,14 @@ This document explains how shared components and utilities are organized to avoi
 
 ## Shared Utilities
 
-### 1. General Utilities (`js/utils.js`)
+### 1. General Utilities (`js/shared/utils.js`)
 **Functions**:
 - `formatUnitName(forgeUnit)`: Converts unit names to display format (e.g., "squareFeet" → "ft²")
 - `isDefaultModel(facilityURN, modelURN)`: Checks if a model is the default
 - `convertLongKeysToShortKeys(lastSeenValues)`: Converts API long keys to short keys
 - `getDataTypeName(typeCode)`: Human-readable data type names
 
-### 2. Excel Export Utilities (`js/utils/excelUtils.js`)
+### 2. Excel Export Utilities (`js/shared/utils/excelUtils.js`)
 **Purpose**: Shared utilities for Excel export functionality (for future main app exports).
 
 **Functions**:
@@ -113,8 +121,8 @@ const ExcelUtils = {
 ```
 
 **Used In**:
-- `js/features/streams.js` (Stream Chart page)
-- `js/features/assetDetails.js` (Asset Details page)
+- `js/shared/features/streams.js` (Stream Chart page)
+- `js/v2/features/assetDetails.js` (Asset Details page)
 
 ### Common Export Pattern
 ```javascript
@@ -161,7 +169,7 @@ async function exportToExcel() {
 
 ## Visualization Components
 
-### Room Bar Chart (`js/features/roomBarChart.js`)
+### Room Bar Chart (`js/shared/features/roomBarChart.js`)
 **Purpose**: Horizontal bar chart for room/space size visualization.
 
 **Exported Function**: `viewRoomBarChart(rooms)`
@@ -174,9 +182,9 @@ async function exportToExcel() {
 - Color-coded (rooms = purple gradient, spaces = orange gradient)
 - Statistics panel (total area, average, top 10%)
 
-## API Organization (`js/api.js`)
+## API Organization (`js/shared/api.js`, `js/v2/api.js`, `js/v3/api.js`)
 
-All API calls are centralized in `api.js`:
+Version-agnostic API calls are centralized in `js/shared/api.js`. The loaders that depend on the schema version (`getStreams`, `getTickets`, `getLevels`, `getRooms`, `getSystems`, `getTaggedAssetsDetails`) live in `js/v2/api.js` and `js/v3/api.js` and return the same shapes:
 - `getModels(facilityURN)`: Get all models
 - `getRooms(facilityURN)`: Get rooms/spaces with area
 - `getStreams(facilityURN)`: Get streams with metadata
@@ -187,7 +195,7 @@ All API calls are centralized in `api.js`:
 
 ## State Management
 
-### Schema Cache (`js/state/schemaCache.js`)
+### Schema Cache (`js/shared/state/schemaCache.js`)
 **Purpose**: Cache and lookup property display names.
 
 **Functions**:

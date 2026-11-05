@@ -130,7 +130,7 @@ Example:
 ## Implementation Details
 
 ### Badge Rendering Logic
-Location: `js/features/streams.js` → `renderConfigBadges(streamConfig)`
+Location: `js/shared/features/streams.js` → `renderConfigBadges(streamConfig)`
 
 The function checks:
 1. `streamSettings.frequency` exists → Show frequency badge

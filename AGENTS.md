@@ -59,7 +59,7 @@ Key Endpoints:
 
 ### 1. Short Keys vs. Long Keys ⚠️ IMPORTANT
 
-This is the #1 source of confusion when working with Tandem.
+This is the #1 source of confusion when working with Tandem. **It applies to schema V2 only**: schema V3 has a single 24-byte key (see section 7 below).
 
 **Short Keys (20 bytes):**
 - Just the element ID
@@ -166,9 +166,11 @@ const name = element[QC.OName] ?? element[QC.Name];
 
 Elements have type flags in their keys, i.e.:
 - `0x00000000` - Simple physical element
-- `0x01000000` - Logical element (Level, FamilyType, etc.)
-- `0x01000003` - Stream
-- `0x00000005` - Room
+- `0x01000000` - Logical element (Level, FamilyType, etc.) in V2; Stream in V3
+- `0x01000003` - Stream in V2 (`ElementFlags.StreamV2`), `ElementFlags.StreamV3` is 0x01000000
+- `0x00000005` - Room (V2)
+- `0x00000006` - Location: level or room in V3 (`ElementFlags.Location`)
+- `0x01000005` - GenericAsset (V3)
 
 See `tandem/constants.js` for full `ElementFlags` enum.
 
@@ -205,6 +207,31 @@ if (isDefaultModel(facilityURN, modelURN)) {
 }
 ```
 **Note** Always check if facility has default model. It is created by Tandem UI when needed i.e. when stream is created.
+
+### 7. Schema Versions (V2 and V3)
+
+Facilities exist in two schema versions that live side by side, and the app has a **V2 | V3 switch** in the header.
+The Facility dropdown only lists facilities of the selected version (`schemaVersion` comes from the twin list).
+
+**Rule: no version if/else in feature code.** Anything that depends on how a version stores data lives in `js/v2/` or `js/v3/`,
+behind the interface documented in `js/shared/version.js`. The shared UI renders the normalized result, and reaches
+version-specific behaviour through the delegates exported by `js/shared/version.js` (`toRowKey`, `viewAssetDetails`, `getTaggedAssetsDetails`).
+Duplicated code between `v2/` and `v3/` is fine when the schemas differ; code that is identical belongs in `js/shared/`.
+
+| Topic | V2 | V3 |
+|-------|----|----|
+| Keys | Scan rows use 20-byte short keys, other APIs return 24-byte long keys (`toShortKey` / `toFullKey` convert) | One kind of key: the 24-byte key, first 4 bytes are the `ElementFlags`. Never convert (`getKeyFlags` reads the flags) |
+| Xrefs | 16-byte model id + 24-byte key | Same |
+| Where logical elements live | Per model (levels, rooms) and default model (streams, tickets, systems) | All in the default model |
+| Stream flag | `ElementFlags.StreamV2` (0x01000003) | `ElementFlags.StreamV3` (0x01000000) |
+| Family type flag | `FamilyTypeV2` (0x01000000) | `FamilyTypeV3` (0x01000008) |
+| Levels / rooms | `ElementFlags.Level` / `ElementFlags.Room`, one set per BIM model | `ElementFlags.Location` with `QC.TandemCategory` = `TC.Levels` / `TC.Rooms`; `QC.Parent` of a room is its level |
+| Assets | BIM elements with `z:` properties (`n:ia` decides) | `ElementFlags.GenericAsset` elements with their own id, linked by `QC.HostOfAsset` / `QC.BimElmOfAsset` |
+
+When you add a feature that reads these things, add the loader to **both** `v2/api.js` and `v3/api.js`, return the same shape, and expose it on the version module.
+
+**Environments:** production is the default. Add `?env=stg` to the URL to use staging (remembered in localStorage, `?env=prod` goes back).
+V3 facilities currently only exist in staging.
 
 ---
 
@@ -274,7 +301,7 @@ const hostRef = stream[QC.XParent]?.[0] ?? stream[QC.OXRooms]?.[0] ?? stream[QC.
 
 **Problem:** Fetching schema on every property lookup (slow, wasteful).
 
-**Solution:** Cache schemas per model (see `js/state/schemaCache.js`).
+**Solution:** Cache schemas per model (see `js/shared/state/schemaCache.js`).
 
 ### Pitfall 7: Forgetting to Filter API Response
 
@@ -419,7 +446,7 @@ This pattern is production-tested and handles edge cases like shared facilities,
 
 ### Pattern 2: OAuth Authentication
 
-**Location:** `js/auth.js`
+**Location:** `js/shared/auth.js`
 
 **Key Functions:**
 - `login()` - Initiates PKCE flow
@@ -441,7 +468,7 @@ const token = await getAccessToken();
 
 ### Pattern 3: API Wrapper with Headers
 
-**Location:** `js/api.js`
+**Location:** `js/shared/api.js`
 
 **Pattern:** All API calls use consistent headers with retry logic.
 
@@ -495,7 +522,7 @@ for (const [modelURN, items] of elementsByModel.entries()) {
 
 ### Pattern 5: Schema Caching
 
-**Location:** `js/state/schemaCache.js`
+**Location:** `js/shared/state/schemaCache.js`
 
 **Pattern:**
 ```javascript
@@ -526,7 +553,7 @@ export function clearSchemaCache() {
 
 ### Pattern 6: Converting Stream Data
 
-**Location:** `js/utils.js`
+**Location:** `js/shared/utils.js`
 
 **Pattern:** API returns stream last-seen values with long keys, but elements use short keys.
 
@@ -610,40 +637,33 @@ tandem-sample-stats/
 │   ├── keys.js                 # Key/xref conversion utilities
 │   └── README.md               # Tandem utilities guide
 ├── js/
-│   ├── config.js               # Environment configuration (prod/stg)
-│   ├── auth.js                 # OAuth 3-legged PKCE flow
-│   ├── api.js                  # Tandem API wrappers
-│   ├── app.js                  # ⭐ Main app logic - includes account/facility switching pattern
-│   ├── utils.js                # General utilities (unit formatting, type names)
-│   ├── utils/
-│   │   └── excelUtils.js       # Excel export helpers (xlsx-js-style)
-│   ├── state/
-│   │   └── schemaCache.js      # Schema caching pattern
-│   ├── components/
-│   │   ├── toggleHeader.js     # Reusable toggle/collapse component
-│   │   ├── elementListModal.js # Element list modal component
-│   │   └── streamConfigModal.js # Stream configuration modal
-│   └── features/               # Feature-specific code
-│       ├── assetDetails.js     # Asset details drilldown (standalone page)
-│       ├── diagnostics.js      # Schema diagnostics
-│       ├── documents.js        # Document listing
-│       ├── facilityHistory.js  # Facility change history
-│       ├── facilityUsers.js    # Facility users/permissions
-│       ├── facilityViews.js    # Saved facility views
-│       ├── levels.js           # Level listing
-│       ├── models.js           # Model listing and history
-│       ├── roomBarChart.js     # Room statistics chart
-│       ├── rooms.js            # Room statistics
-│       ├── schema.js           # Schema viewer with search
-│       ├── search.js           # Property value search
-│       ├── streams.js          # Stream monitoring with charts
-│       ├── systems.js          # MEP systems
-│       ├── taggedAssets.js     # Tagged assets
-│       ├── tickets.js          # Support tickets
-│       └── userResources.js    # User resources/permissions
+│   ├── app.js                  # ⭐ App shell: login, account/facility/version selectors, loads the version module
+│   ├── shared/                 # Version-agnostic code (same for V2 and V3)
+│   │   ├── config.js           # Environment configuration (prod/stg, ?env=stg)
+│   │   ├── auth.js             # OAuth 3-legged PKCE flow
+│   │   ├── api.js              # Tandem API wrappers that do not depend on the schema version
+│   │   ├── version.js          # Registry of the active version module + delegates for shared UI code
+│   │   ├── utils.js            # General utilities (unit formatting, type names)
+│   │   ├── utils/
+│   │   │   └── excelUtils.js   # Excel export helpers (xlsx-js-style)
+│   │   ├── state/
+│   │   │   └── schemaCache.js  # Schema caching pattern
+│   │   ├── components/         # Toggle header, element list modal, stream config modal
+│   │   └── features/           # The cards of the UI (models, levels, rooms, streams, tickets, systems, ...)
+│   ├── v2/                     # Everything that depends on the V2 schema
+│   │   ├── index.js            # Version module: loaders, toRowKey, viewAssetDetails
+│   │   ├── api.js              # V2 loaders (streams, tickets, levels, rooms, systems, tagged assets)
+│   │   └── features/
+│   │       └── assetDetails.js # Asset details drilldown (standalone page, short/long keys)
+│   └── v3/                     # Same interface, implemented for the V3 ("No-BIM") schema
+│       ├── index.js
+│       ├── api.js
+│       └── features/
+│           └── assetDetails.js
 ├── docs/
 │   └── logical-element-scan-fix.md  # Deep dive: physical vs logical key scanning
 ├── AGENTS.md                   # This file (AI agent guide)
+├── MIGRATION.md                # V2/V3 migration notes: what we did and why, running against STG
 ├── README.md                   # User documentation
 ├── QUICKSTART.md               # Quick setup guide
 ├── CODE_ORGANIZATION.md        # Shared components and patterns
@@ -656,9 +676,9 @@ tandem-sample-stats/
 
 **Always Copy:**
 - ✅ `tandem/` directory - Core utilities
-- ✅ `js/auth.js` - OAuth implementation
-- ✅ `js/api.js` - API wrapper pattern
-- ✅ `js/config.js` - Environment config pattern
+- ✅ `js/shared/auth.js` - OAuth implementation
+- ✅ `js/shared/api.js` - API wrapper pattern
+- ✅ `js/shared/config.js` - Environment config pattern
 
 **Study & Adapt (Most Apps Need This):**
 - ⭐ **Account/Facility Switching** from `js/app.js` - The logic is reusable, customize the UI
@@ -666,8 +686,8 @@ tandem-sample-stats/
   - Keep the data flow, change the presentation (dropdowns → cards, list, sidebar, etc.)
 
 **Consider Copying:**
-- `js/state/schemaCache.js` - If you need property names
-- `js/utils.js` - General utilities (type names, unit formatting)
+- `js/shared/state/schemaCache.js` - If you need property names
+- `js/shared/utils.js` - General utilities (type names, unit formatting)
 - Feature files as examples
 
 **Customize:**
@@ -687,9 +707,9 @@ tandem-sample-stats/
 
 2. **Copy Auth & API:**
    ```bash
-   cp tandem-sample-stats/js/auth.js my-new-project/js/
-   cp tandem-sample-stats/js/api.js my-new-project/js/
-   cp tandem-sample-stats/js/config.js my-new-project/js/
+   cp tandem-sample-stats/js/shared/auth.js my-new-project/js/
+   cp tandem-sample-stats/js/shared/api.js my-new-project/js/
+   cp tandem-sample-stats/js/shared/config.js my-new-project/js/
    ```
 
 3. **Update config.js:**
@@ -731,20 +751,20 @@ console.log(`Flags: 0x${flags.toString(16).padStart(8, '0')}`);
 | Task | Solution | File |
 |------|----------|------|
 | **Account/Facility switching** ⭐ | See Pattern 1 in Reusable Patterns | `js/app.js` |
-| Get user's groups (accounts) | `getGroups()` | `js/api.js` |
-| Get group's facilities | `getFacilitiesForGroup(groupURN)` | `js/api.js` |
-| Get facility info | `getFacilityInfo(facilityURN)` | `js/api.js` |
-| OAuth login | `login()` | `js/auth.js` |
-| Get access token | `getAccessToken()` | `js/auth.js` |
+| Get user's groups (accounts) | `getGroups()` | `js/shared/api.js` |
+| Get group's facilities | `getFacilitiesForGroup(groupURN)` | `js/shared/api.js` |
+| Get facility info | `getFacilityInfo(facilityURN)` | `js/shared/api.js` |
+| OAuth login | `login()` | `js/shared/auth.js` |
+| Get access token | `getAccessToken()` | `js/shared/auth.js` |
 | Convert long key → short key | `toShortKey(longKey)` | `tandem/keys.js` |
 | Decode xref | `decodeXref(xref)` | `tandem/keys.js` |
 | Get column name constants | Import from `tandem/constants.js` | `tandem/constants.js` |
-| Query elements | `getElementsByKeys(modelURN, shortKeys)` | `js/api.js` |
-| Fetch schema | `loadSchemaForModel(modelURN)` | `js/state/schemaCache.js` |
-| Get property display name | `getPropertyDisplayName(modelURN, qualifiedProp)` | `js/state/schemaCache.js` |
-| Clear schema cache | `clearSchemaCache()` | `js/state/schemaCache.js` |
-| Check if default model | `isDefaultModel(facilityURN, modelURN)` | `js/utils.js` |
-| Get stream values | `getStreamValues(facilityURN, streamKey, daysBack)` | `js/api.js` |
+| Query elements | `getElementsByKeys(modelURN, shortKeys)` | `js/shared/api.js` |
+| Fetch schema | `loadSchemaForModel(modelURN)` | `js/shared/state/schemaCache.js` |
+| Get property display name | `getPropertyDisplayName(modelURN, qualifiedProp)` | `js/shared/state/schemaCache.js` |
+| Clear schema cache | `clearSchemaCache()` | `js/shared/state/schemaCache.js` |
+| Check if default model | `isDefaultModel(facilityURN, modelURN)` | `js/shared/utils.js` |
+| Get stream values | `getStreamValues(facilityURN, streamKey, daysBack)` | `js/shared/api.js` |
 
 ---
 
