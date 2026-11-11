@@ -21,8 +21,16 @@ import {
   tandemBaseURL,
   makeRequestOptionsPOST
 } from '../shared/api.js';
-import { ColumnFamilies, ElementFlags, QC, SystemClassNames, TC } from '../../tandem/constants.js';
-import { decodeXref, getElementFlags, toSystemId } from '../../tandem/keys.js';
+import { ColumnFamilies, ElementFlags, QC, TC } from '../../tandem/constants.js';
+import { decodeXref, fromXrefKeyArray, getElementFlags, toSystemId } from '../../tandem/keys.js';
+import { isDefaultModel } from '../shared/utils.js';
+
+/**
+ * Name of a model for display; the default model has no label of its own.
+ */
+function modelLabel(facilityURN, model) {
+  return model.label || (isDefaultModel(facilityURN, model.modelId) ? '** Default Model **' : 'Unknown Model');
+}
 
 // ── Scan helpers ───────────────────────────────────────────────────────────────
 
@@ -216,6 +224,54 @@ export async function getTickets(facilityURN, region) {
 // ── Levels and rooms (Location Breakdown Structure) ────────────────────────────
 
 /**
+ * Scan of all assets of the default model. Shared by the levels and tagged assets loaders.
+ * A scan only returns rows that have data in the requested families. An asset can have no name and
+ * no custom properties and still be an asset (it only links to its BIM element and location), so the
+ * reference families are needed too. Same list as tutorial-rest getTaggedAssets.
+ */
+const assetScan = {
+  families: [
+    ColumnFamilies.Standard,
+    ColumnFamilies.DtProperties,
+    ColumnFamilies.Refs,
+    ColumnFamilies.Xrefs,
+    ColumnFamilies.Status
+  ]
+};
+
+/**
+ * Group the assets by the locations they are placed in.
+ * @param {Array<object>} assetRows - Rows of the default model
+ * @returns {Map<string, Array<string>>} location key -> asset keys
+ */
+function groupAssetsByLocation(assetRows) {
+  const assetsByLocation = new Map();
+
+  for (const asset of assetRows.filter(row => flagsOf(row) === ElementFlags.GenericAsset)) {
+    for (const locationKey of locationKeysOf(asset)) {
+      const assetKeys = assetsByLocation.get(locationKey) ?? [];
+
+      assetKeys.push(asset[QC.Key]);
+      assetsByLocation.set(locationKey, assetKeys);
+    }
+  }
+  return assetsByLocation;
+}
+
+/**
+ * Keys of the locations (levels, rooms) an asset is placed in. QC.Location holds one string with
+ * any number of xrefs (for example a room and its level); the override column wins.
+ * @param {object} asset
+ * @returns {Array<string>} Location keys (all locations are in the default model)
+ */
+function locationKeysOf(asset) {
+  const value = asset[QC.OLocation] ?? asset[QC.Location];
+  const blobs = Array.isArray(value) ? value : (value ? [value] : []);
+
+  return blobs.flatMap(blob => fromXrefKeyArray(blob)[1]);
+}
+
+/**
  * Columns needed to read both levels and rooms, so one scan serves both loaders.
  */
 const locationScan = {
@@ -226,6 +282,7 @@ const locationScan = {
     QC.OName,
     QC.Elevation,
     QC.OElevation,
+    QC.Parent,
     QC.BimElmOfAsset,
     QC.Deleted,
     QC.ODeleted
@@ -236,25 +293,58 @@ const locationScan = {
  * Get levels. In V3 they are Location elements of the default model.
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
- * @returns {Promise<Array>} Array of level objects with modelId, modelName, key, name, and elevation
+ * @returns {Promise<Array>} Array of level objects with modelId, modelName, key, name, elevation,
+ *   roomKeys (rooms of the level) and assetKeys (assets in the level or in one of its rooms)
  */
 export async function getLevels(facilityURN, region) {
   try {
-    const [rows, modelName] = await Promise.all([
+    const [rows, assetRows, modelName] = await Promise.all([
       scanDefaultModel(facilityURN, region, locationScan),
+      scanDefaultModel(facilityURN, region, assetScan),
       getDefaultModelLabel(facilityURN, region)
     ]);
     const modelId = getDefaultModelURN(facilityURN);
 
+    // Same navigation as tutorial-rest list-facility-structure: a room belongs to the level in its
+    // QC.Parent, an asset belongs to every location in its QC.Location (a room, a level, or both).
+    const roomsByLevel = new Map();
+
+    for (const room of rows.filter(row => isLocationOfCategory(row, TC.Rooms))) {
+      const levelKey = firstValue(room[QC.Parent]);
+
+      if (!levelKey) {
+        continue;
+      }
+      const roomKeys = roomsByLevel.get(levelKey) ?? [];
+
+      roomKeys.push(room[QC.Key]);
+      roomsByLevel.set(levelKey, roomKeys);
+    }
+    const assetsByLocation = groupAssetsByLocation(assetRows);
+
     return rows
       .filter(row => isLocationOfCategory(row, TC.Levels))
-      .map(level => ({
-        modelId,
-        modelName,
-        key: level[QC.Key],
-        name: level[QC.OName]?.[0] ?? level[QC.Name]?.[0] ?? 'Unnamed Level',
-        elevation: level[QC.OElevation]?.[0] ?? level[QC.Elevation]?.[0]
-      }));
+      .map(level => {
+        const key = level[QC.Key];
+        const roomKeys = roomsByLevel.get(key) ?? [];
+        // a Set: an asset located in both a room and its level counts once
+        const assetKeys = new Set(assetsByLocation.get(key));
+
+        for (const roomKey of roomKeys) {
+          for (const assetKey of assetsByLocation.get(roomKey) ?? []) {
+            assetKeys.add(assetKey);
+          }
+        }
+        return {
+          modelId,
+          modelName,
+          key,
+          name: level[QC.OName]?.[0] ?? level[QC.Name]?.[0] ?? 'Unnamed Level',
+          elevation: level[QC.OElevation]?.[0] ?? level[QC.Elevation]?.[0],
+          roomKeys,
+          assetKeys: Array.from(assetKeys)
+        };
+      });
   } catch (error) {
     console.error('Error fetching levels:', error);
     return [];
@@ -268,16 +358,22 @@ export async function getLevels(facilityURN, region) {
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @param {Object} schemaCache - Optional pre-loaded schema cache to avoid duplicate API calls
- * @returns {Promise<Array>} Array of room objects with modelId, key, name, type, area, and volume
+ * @returns {Promise<Array>} Array of room objects with modelId, key, name, type, area, volume,
+ *   levelKey, levelName and assetKeys (assets placed in the room)
  */
 export async function getRooms(facilityURN, region, schemaCache = null) {
   try {
-    const [rows, modelName] = await Promise.all([
+    const [rows, assetRows, modelName] = await Promise.all([
       scanDefaultModel(facilityURN, region, locationScan),
+      scanDefaultModel(facilityURN, region, assetScan),
       getDefaultModelLabel(facilityURN, region)
     ]);
     const modelId = getDefaultModelURN(facilityURN);
     const roomRows = rows.filter(row => isLocationOfCategory(row, TC.Rooms));
+    const levelNames = new Map(rows
+      .filter(row => isLocationOfCategory(row, TC.Levels))
+      .map(level => [level[QC.Key], level[QC.OName]?.[0] ?? level[QC.Name]?.[0] ?? 'Unnamed Level']));
+    const assetsByLocation = groupAssetsByLocation(assetRows);
 
     // Group the source references by model so each BIM model is read once
     const sourcesByModel = new Map();
@@ -309,7 +405,11 @@ export async function getRooms(facilityURN, region, schemaCache = null) {
         areaUnit: source?.areaUnit ?? 'square feet',
         volume: source?.volume ?? null,
         volumeUnit: source?.volumeUnit ?? 'cubic feet',
-        type
+        type,
+        // the level of a room is its QC.Parent
+        levelKey: firstValue(room[QC.Parent]) ?? null,
+        levelName: levelNames.get(firstValue(room[QC.Parent])) ?? null,
+        assetKeys: assetsByLocation.get(room[QC.Key]) ?? []
       };
     });
   } catch (error) {
@@ -359,23 +459,11 @@ async function loadRoomSourceDetails(sourcesByModel, region, schemaCache) {
 
 // ── Systems ────────────────────────────────────────────────────────────────────
 
-function systemClassToList(flags) {
-  if (!flags) {
-    return [];
-  }
-  const result = [];
-
-  for (let i = 0; i < SystemClassNames.length; i++) {
-    if (flags & (1 << i)) {
-      result.push(SystemClassNames[i]);
-    }
-  }
-  return result;
-}
-
 /**
  * Get systems from the default model, with the number of elements (in all models) that belong
- * to each of them.
+ * to each of them. An element belongs to a system when it has the column of that system in the
+ * Systems family (m:<systemId>). The system classes of the element and of the system are not
+ * compared, the same as in tutorial-rest list-system-elements.
  * @param {string} facilityURN - Facility URN
  * @param {string} region - Region identifier
  * @param {Array} models - Array of model objects
@@ -425,7 +513,6 @@ export async function getSystems(facilityURN, region, models) {
       system.elementsByModel = {};
     }
     const systemElementsMap = {};
-    const systemClassMap = {};
 
     // Elements of every model can belong to a system: fetch all models in parallel, then
     // process the results sequentially (pure CPU, no shared-accumulator races)
@@ -451,17 +538,6 @@ export async function getSystems(facilityURN, region, models) {
         if (isDeleted(element) || flagsOf(element) === ElementFlags.System) {
           continue;
         }
-        const elementClass = element[QC.OSystemClass] ?? element[QC.SystemClass];
-
-        if (!elementClass) {
-          continue;
-        }
-        let elementClassNames = systemClassMap[elementClass];
-
-        if (!elementClassNames) {
-          elementClassNames = systemClassToList(elementClass);
-          systemClassMap[elementClass] = elementClassNames;
-        }
         for (const item in element) {
           // we need to handle both fam:col and fam:!col formats
           const [, family, systemId] = item.match(/^([^:]+):!?(.+)$/) ?? [];
@@ -474,15 +550,6 @@ export async function getSystems(facilityURN, region, models) {
           if (!system) {
             continue;
           }
-          let classNames = systemClassMap[system.systemClass];
-
-          if (!classNames) {
-            classNames = systemClassToList(system.systemClass);
-            systemClassMap[system.systemClass] = classNames;
-          }
-          if (!elementClassNames.some(name => classNames.includes(name))) {
-            continue;
-          }
           const elementList = systemElementsMap[systemId] || new Set();
 
           elementList.add(key);
@@ -491,7 +558,7 @@ export async function getSystems(facilityURN, region, models) {
           if (!system.elementsByModel[model.modelId]) {
             system.elementsByModel[model.modelId] = {
               modelURN: model.modelId,
-              modelName: model.label || 'Unknown Model',
+              modelName: modelLabel(facilityURN, model),
               keys: new Set()
             };
           }
@@ -530,18 +597,7 @@ export async function getSystems(facilityURN, region, models) {
 export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = false) {
   try {
     const [rows, modelName] = await Promise.all([
-      scanDefaultModel(facilityURN, region, {
-        // A scan only returns rows that have data in the requested families. An asset can have no name and
-        // no custom properties and still be an asset (it only links to its BIM element and location), so the
-        // reference families are needed too. Same list as tutorial-rest getTaggedAssets.
-        families: [
-          ColumnFamilies.Standard,
-          ColumnFamilies.DtProperties,
-          ColumnFamilies.Refs,
-          ColumnFamilies.Xrefs,
-          ColumnFamilies.Status
-        ]
-      }),
+      scanDefaultModel(facilityURN, region, assetScan),
       getDefaultModelLabel(facilityURN, region)
     ]);
     const modelId = getDefaultModelURN(facilityURN);

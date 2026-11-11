@@ -108,6 +108,10 @@ js/
 ### Counting assets
 An asset is an element of the **default model** whose key flags are `ElementFlags.GenericAsset` (0x01000005), read from the key with `getElementFlags`. It no longer matters whether the element has `z:` properties. Request the Standard family with the scan (see problem 9 below).
 
+### Levels, rooms and their assets
+
+Same navigation as `facility/list-facility-structure.js` in tutorial-rest. A level is a `Location` with `TC.Levels`. A room is a `Location` with `TC.Rooms`, and its `QC.Parent` is its level. An asset belongs to every location in its `QC.OLocation ?? QC.Location` (xref string, may hold a room and a level). The Levels card shows, per level, the rooms (rooms whose parent is the level) and the assets (in the level or in one of its rooms, each counted once). The counts open the details of those elements. The Rooms card shows the same the other way round: the level of each room (its `QC.Parent`) and the assets placed in it. V2 does not fill `roomKeys`, `assetKeys` and `levelName`, so these columns only appear for V3.
+
 ### Asset <-> BIM element links
 - The asset in the default model holds the user-defined `z:` properties and points to the Revit element with **`x:be`** (`QC.BimElmOfAsset`).
 - The BIM element points back with **`x:ha`** (`QC.HostOfAsset`).
@@ -137,6 +141,7 @@ These cost the most time. Check for them first in your own migration.
 9. **A scan with a family list only returns rows that have data in those families.** The first V3 asset count was 0 because the scan asked for `z:` and Status only, so assets without custom properties were skipped. The count was still too low afterwards (5 where the Tandem UI and Jan's migrated sample show 16): an asset does not need a name or custom properties, it can consist only of links to its BIM element (`x:be`) and location. Request every family that can carry data of such a row (`n`, `z`, `l`, `x`, as `getTaggedAssets` in tutorial-rest does) when you filter rows by key flags, or leave the family list out.
 10. **`getModels` returns `facilityInfo.links`**, which can be `null`. Guard it (`models?.find`).
 11. **`l:l` (Level) on an element of the default model points into a source model.** The value is a plain 24-byte key (flag `Level`, 0x01000001), but the level is in the BIM model the element came from, not in the default model, so looking in the same model gives "Referenced element not found". A same-model `l:` reference carries no model id. The asset details page therefore searches the other models of the facility when an `l:` key is not found in its own model, and shows the model it was found in. The `Location` links (`x:loc`) are real xrefs and do not have this problem. A `Location` value can hold several xrefs (for example a room and a level) joined in one string; the asset details page shows one clickable entry per xref, labelled with the element name. It is not yet known whether the server intends `l:l` to stay a bare key on default-model elements; worth asking.
+12. **System membership in V3 is the `m:<systemId>` column alone.** V2 also compared the system class of the element with that of the system and skipped elements without a class. tutorial-rest `list-system-elements.js` dropped that for V3, and so did `v3/api.js` `getSystems`. The V2 loader is unchanged.
 
 ---
 

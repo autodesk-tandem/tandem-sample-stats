@@ -34,7 +34,7 @@ const toggleRoomsDetail = createToggleFunction({
  * @param {Array} rooms - Array of room objects
  * @param {string} facilityURN - Facility URN for link generation
  * @param {string} [region] - Optional region identifier
- * @param {string} [sortColumn] - Sort by 'name', 'type', 'area', or 'volume' (default: null for no sorting)
+ * @param {string} [sortColumn] - Sort by 'name', 'type', 'level', 'area', 'volume' or 'assets' (default: null for no sorting)
  * @param {string} [sortDirection='asc'] - 'asc' or 'desc'
  */
 export async function displayRooms(container, rooms, facilityURN, region, sortColumn = null, sortDirection = 'asc') {
@@ -42,6 +42,9 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
     container.innerHTML = '<p class="text-dark-text-secondary">No rooms or spaces found in this facility.</p>';
     return;
   }
+
+  // Only some schema versions can say which level a room is on and which assets are in it
+  const hasContents = rooms.some(r => Array.isArray(r.assetKeys));
 
   // Calculate overall statistics
   const totalRooms = rooms.filter(r => r.type === 'Room').length;
@@ -147,6 +150,12 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
         if (sortColumn === 'name') {
           aVal = (a.name || '').toLowerCase();
           bVal = (b.name || '').toLowerCase();
+        } else if (sortColumn === 'assets') {
+          aVal = a.assetKeys?.length ?? 0;
+          bVal = b.assetKeys?.length ?? 0;
+        } else if (sortColumn === 'level') {
+          aVal = (a.levelName || '').toLowerCase();
+          bVal = (b.levelName || '').toLowerCase();
         } else if (sortColumn === 'type') {
           aVal = a.type || '';
           bVal = b.type || '';
@@ -206,6 +215,15 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
                   ${sortColumn === 'type' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </div>
               </th>
+              ${hasContents ? `
+              <th class="px-3 py-2 text-left font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
+                  data-column="level" data-direction="${sortColumn === 'level' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'asc'}" data-model="${modelId}">
+                <div class="flex items-center gap-1">
+                  <span>Level</span>
+                  ${sortColumn === 'level' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              ` : ''}
               <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
                   data-column="area" data-direction="${sortColumn === 'area' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc'}" data-model="${modelId}">
                 <div class="flex items-center justify-end gap-1">
@@ -220,6 +238,15 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
                   ${sortColumn === 'volume' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </div>
               </th>
+              ${hasContents ? `
+              <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" 
+                  data-column="assets" data-direction="${sortColumn === 'assets' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc'}" data-model="${modelId}">
+                <div class="flex items-center justify-end gap-1">
+                  <span>Assets</span>
+                  ${sortColumn === 'assets' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              ` : ''}
             </tr>
           </thead>
           <tbody class="divide-y divide-dark-border">
@@ -244,8 +271,10 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
           <td class="px-3 py-2">
             <span class="px-2 py-0.5 text-xs font-medium ${isSpace ? 'bg-orange-500/20 text-orange-300' : 'bg-indigo-500/20 text-indigo-300'} rounded">${room.type}</span>
           </td>
+          ${hasContents ? `<td class="px-3 py-2 text-dark-text">${room.levelName || '-'}</td>` : ''}
           <td class="px-3 py-2 text-right text-dark-text font-mono">${areaDisplay}</td>
           <td class="px-3 py-2 text-right text-dark-text font-mono">${volumeDisplay}</td>
+          ${hasContents ? `<td class="px-3 py-2 text-right">${renderAssetCount(room)}</td>` : ''}
         </tr>
       `;
     });
@@ -276,6 +305,22 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
     });
   });
   
+  // The asset count opens the details of the assets in the room
+  container.querySelectorAll('.room-assets-link').forEach(link => {
+    link.addEventListener('click', () => {
+      const room = rooms.find(r => r.key === link.getAttribute('data-room-key'));
+
+      if (!room || !room.assetKeys?.length) {
+        return;
+      }
+      viewAssetDetails([{
+        modelURN: room.modelId,
+        modelName: room.modelName || 'Unknown Model',
+        keys: room.assetKeys
+      }], `Assets in ${room.name}`, facilityURN, region);
+    });
+  });
+
   // Add Visualize button event listener
   const visualizeBtn = document.getElementById('rooms-visualize-btn');
   if (visualizeBtn) {
@@ -312,3 +357,19 @@ export async function displayRooms(container, rooms, facilityURN, region, sortCo
   }
 }
 
+
+/**
+ * Count of the assets in a room; a link to their details when there is at least one.
+ * @param {object} room
+ * @returns {string} HTML
+ */
+function renderAssetCount(room) {
+  const count = room.assetKeys?.length ?? 0;
+
+  if (count === 0) {
+    return '<span class="text-dark-text-secondary">0</span>';
+  }
+  const keyAttr = String(room.key).replace(/"/g, '&quot;');
+
+  return `<button class="room-assets-link text-tandem-blue hover:underline font-mono" data-room-key="${keyAttr}" title="View details">${count}</button>`;
+}

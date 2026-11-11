@@ -1,8 +1,8 @@
 import { getElementsByKeys } from '../api.js';
 import { createToggleFunction } from '../components/toggleHeader.js';
 import { viewAssetDetails, toRowKey } from '../version.js';
-import { QC } from '../../../tandem/constants.js';
-import { decodeXref } from '../../../tandem/keys.js';
+import { QC, TC } from '../../../tandem/constants.js';
+import { fromXrefKeyArray } from '../../../tandem/keys.js';
 
 /**
  * Category ID to type name mapping
@@ -70,66 +70,111 @@ function getDaysOpen(openDate, closeDate) {
 }
 
 /**
- * Fetch parent asset info for all tickets. Returns a Map of xref → {name, type}.
+ * Elements a column of xrefs points to. The value is one string holding any number of xrefs
+ * (a ticket can have several assets, and several locations such as a room and its level).
+ * @param {Array<string>|string|undefined} value
+ * @returns {Array<{modelURN: string, elementKey: string}>}
+ */
+function refsOf(value) {
+  const blobs = Array.isArray(value) ? value : (value ? [value] : []);
+
+  return blobs.flatMap(blob => {
+    const [modelIds, elementKeys] = fromXrefKeyArray(blob);
+
+    return elementKeys.map((elementKey, i) => ({ modelURN: `urn:adsk.dtm:${modelIds[i]}`, elementKey }));
+  });
+}
+
+/** Assets a ticket is about. */
+function parentRefsOf(ticket) {
+  return refsOf(ticket[QC.XParent]);
+}
+
+/** Where a ticket is: its locations (V3), or its rooms (V2). The override column wins. */
+function locationRefsOf(ticket) {
+  return refsOf(ticket[QC.OLocation] ?? ticket[QC.Location] ?? ticket[QC.OXRooms] ?? ticket[QC.XRooms]);
+}
+
+function refId(ref) {
+  return `${ref.modelURN}|${ref.elementKey}`;
+}
+
+/**
+ * Fetch name and type of every asset and location the tickets point to.
  * @param {Array} tickets
  * @param {string} region
- * @returns {Promise<Map>}
+ * @returns {Promise<Map<string, {name: string, type: string}>>} modelURN|elementKey -> info
  */
-async function buildParentInfoMap(tickets, region) {
-  const parentInfoMap = new Map();
-  const xrefsByModel = new Map();
+async function buildRefInfoMap(tickets, region) {
+  const infoMap = new Map();
+  const keysByModel = new Map();
 
   for (const ticket of tickets) {
-    const parentRef = ticket[QC.XParent]?.[0];
-    if (parentRef) {
-      const decoded = decodeXref(parentRef);
-      if (decoded) {
-        const rowKey = toRowKey(decoded.elementKey);
-        if (!xrefsByModel.has(decoded.modelURN)) {
-          xrefsByModel.set(decoded.modelURN, []);
-        }
-        xrefsByModel.get(decoded.modelURN).push({ xref: parentRef, rowKey });
-      }
+    for (const ref of [...parentRefsOf(ticket), ...locationRefsOf(ticket)]) {
+      const keys = keysByModel.get(ref.modelURN) ?? new Set();
+
+      keys.add(ref.elementKey);
+      keysByModel.set(ref.modelURN, keys);
     }
   }
 
   // Fetch element details for all models simultaneously, then merge into map
-  const results = await Promise.all(
-    Array.from(xrefsByModel.entries()).map(async ([modelURN, items]) => {
-      const rowKeys = items.map(item => item.rowKey);
+  await Promise.all(
+    Array.from(keysByModel.entries()).map(async ([modelURN, elementKeys]) => {
+      // toRowKey: the form the scan of this schema version uses for keys
+      const byRowKey = new Map(Array.from(elementKeys).map(elementKey => [toRowKey(elementKey), elementKey]));
+
       try {
-        const elements = await getElementsByKeys(modelURN, region, rowKeys);
-        return items.map(item => {
-          const element = elements.find(e => e[QC.Key] === item.rowKey);
-          if (!element) return null;
-          const name = element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed';
+        const elements = await getElementsByKeys(modelURN, region, Array.from(byRowKey.keys()));
+
+        for (const element of elements) {
+          const elementKey = byRowKey.get(element[QC.Key]);
+
+          if (!elementKey) continue;
+          const category = element[QC.OTandemCategory]?.[0] ?? element[QC.TandemCategory]?.[0];
           const categoryId = element[QC.CategoryId]?.[0];
-          const type = CATEGORY_NAMES[categoryId] || 'Asset';
-          return { xref: item.xref, name, type };
-        }).filter(Boolean);
+          const type = category === TC.Levels ? 'Level'
+            : category === TC.Rooms ? 'Room'
+            : CATEGORY_NAMES[categoryId] || 'Asset';
+
+          infoMap.set(refId({ modelURN, elementKey }), {
+            name: element[QC.OName]?.[0] || element[QC.Name]?.[0] || 'Unnamed',
+            type
+          });
+        }
       } catch (error) {
-        console.error(`Error fetching parent assets from model ${modelURN}:`, error);
-        return [];
+        console.error(`Error fetching assets and locations from model ${modelURN}:`, error);
       }
     })
   );
 
-  for (const entries of results) {
-    for (const { xref, name, type } of entries) {
-      parentInfoMap.set(xref, { name, type });
-    }
-  }
+  return infoMap;
+}
 
-  return parentInfoMap;
+/**
+ * Names of the elements a list of references points to, comma separated. The type is added in
+ * brackets only when the label of the line does not already say it: for an element that is not
+ * of the expected type, or when the list mixes types (a room and its level).
+ * @param {Array} refs
+ * @param {Map} infoMap
+ * @param {string} [expectedType] - Type implied by the label; omit when any type is expected
+ */
+function describeRefs(refs, infoMap, expectedType) {
+  const infos = refs.map(ref => infoMap.get(refId(ref))).filter(Boolean);
+  const mixed = new Set(infos.map(info => info.type)).size > 1;
+
+  return infos
+    .map(info => (mixed || (expectedType && info.type !== expectedType)) ? `${info.name} (${info.type})` : info.name)
+    .join(', ');
 }
 
 /**
  * Render the filtered ticket list into #tickets-list and update the count label.
  * @param {Array} filtered - Already-filtered ticket objects
  * @param {number} total - Total (unfiltered) ticket count
- * @param {Map} parentInfoMap
+ * @param {Map} infoMap - modelURN|elementKey -> {name, type}
  */
-function renderTicketList(filtered, total, parentInfoMap) {
+function renderTicketList(filtered, total, infoMap) {
   const listEl = document.getElementById('tickets-list');
   const countEl = document.getElementById('tickets-filtered-count');
   if (!listEl) return;
@@ -158,8 +203,8 @@ function renderTicketList(filtered, total, parentInfoMap) {
 
     const priorityConfig = PRIORITY_CONFIG[priority] || PRIORITY_CONFIG['Unknown'];
 
-    const parentRef = ticket[QC.XParent]?.[0];
-    const parentInfo = parentRef ? parentInfoMap.get(parentRef) : null;
+    const assetText = describeRefs(parentRefsOf(ticket), infoMap, 'Asset');
+    const locationText = describeRefs(locationRefsOf(ticket), infoMap);
 
     html += `
       <div class="border border-dark-border rounded p-4 hover:border-tandem-blue transition">
@@ -174,9 +219,14 @@ function renderTicketList(filtered, total, parentInfoMap) {
                 ${isOpen ? 'Open' : 'Closed'}
               </span>
             </div>
-            ${parentInfo ? `
+            ${assetText ? `
               <p class="text-xs text-dark-text-secondary mt-1">
-                Asset: ${parentInfo.name} (${parentInfo.type})
+                Asset: ${assetText}
+              </p>
+            ` : ''}
+            ${locationText ? `
+              <p class="text-xs text-dark-text-secondary mt-1">
+                Location: ${locationText}
               </p>
             ` : ''}
             <p class="text-xs text-dark-text-secondary mt-1">Key: <span class="font-mono">${ticketKey}</span></p>
@@ -303,7 +353,7 @@ export async function displayTickets(container, tickets, facilityURN, region) {
   container.innerHTML = headerHtml + summaryHtml + detailHtml;
 
   // Fetch parent info once (async, after HTML is in place)
-  const parentInfoMap = await buildParentInfoMap(tickets, region);
+  const refInfoMap = await buildRefInfoMap(tickets, region);
 
   // Filter state
   let currentStatus = 'all';
@@ -317,11 +367,11 @@ export async function displayTickets(container, tickets, facilityURN, region) {
       const priority = t[QC.Priority]?.[0] || 'Unknown';
       return activePriorities.has(priority);
     });
-    renderTicketList(filtered, tickets.length, parentInfoMap);
+    renderTicketList(filtered, tickets.length, refInfoMap);
   }
 
   // Initial render (no filter applied)
-  renderTicketList(tickets, tickets.length, parentInfoMap);
+  renderTicketList(tickets, tickets.length, refInfoMap);
 
   // Toggle expand/collapse
   const toggleBtn = document.getElementById('toggle-tickets-btn');

@@ -18,7 +18,7 @@ const toggleLevelsDetail = createToggleFunction({
  * @param {Array} levels - Array of level objects
  * @param {string} facilityURN - Facility URN for link generation
  * @param {string} [region] - Optional region identifier
- * @param {string} [sortColumn] - Sort by 'name' or 'elevation' (default: null for no sorting)
+ * @param {string} [sortColumn] - Sort by 'name', 'elevation', 'rooms' or 'assets' (default: null for no sorting)
  * @param {string} [sortDirection='asc'] - 'asc' or 'desc'
  */
 export async function displayLevels(container, levels, facilityURN, region, sortColumn = null, sortDirection = 'asc') {
@@ -26,6 +26,9 @@ export async function displayLevels(container, levels, facilityURN, region, sort
     container.innerHTML = '<p class="text-dark-text-secondary">No levels found in this facility.</p>';
     return;
   }
+
+  // Only some schema versions can say which rooms and assets belong to a level
+  const hasContents = levels.some(l => Array.isArray(l.roomKeys));
 
   // Calculate overall statistics
   const levelsWithElevation = levels.filter(l => l.elevation !== null && l.elevation !== undefined);
@@ -111,6 +114,12 @@ export async function displayLevels(container, levels, facilityURN, region, sort
         if (sortColumn === 'name') {
           aVal = (a.name || '').toLowerCase();
           bVal = (b.name || '').toLowerCase();
+        } else if (sortColumn === 'rooms') {
+          aVal = a.roomKeys?.length ?? 0;
+          bVal = b.roomKeys?.length ?? 0;
+        } else if (sortColumn === 'assets') {
+          aVal = a.assetKeys?.length ?? 0;
+          bVal = b.assetKeys?.length ?? 0;
         } else if (sortColumn === 'elevation') {
           // Treat null/undefined as -Infinity for sorting (push to bottom)
           aVal = a.elevation !== null && a.elevation !== undefined ? a.elevation : -Infinity;
@@ -159,6 +168,22 @@ export async function displayLevels(container, levels, facilityURN, region, sort
                   ${sortColumn === 'elevation' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
                 </div>
               </th>
+              ${hasContents ? `
+              <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none"
+                  data-column="rooms" data-direction="${sortColumn === 'rooms' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc'}" data-model="${modelId}">
+                <div class="flex items-center justify-end gap-1">
+                  <span>Rooms</span>
+                  ${sortColumn === 'rooms' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              <th class="px-3 py-2 text-right font-semibold text-dark-text cursor-pointer hover:bg-dark-bg/50 select-none" title="Assets in the level or in one of its rooms"
+                  data-column="assets" data-direction="${sortColumn === 'assets' ? (sortDirection === 'asc' ? 'desc' : 'asc') : 'desc'}" data-model="${modelId}">
+                <div class="flex items-center justify-end gap-1">
+                  <span>Assets</span>
+                  ${sortColumn === 'assets' ? (sortDirection === 'asc' ? '▲' : '▼') : ''}
+                </div>
+              </th>
+              ` : ''}
             </tr>
           </thead>
           <tbody class="divide-y divide-dark-border">
@@ -177,6 +202,10 @@ export async function displayLevels(container, levels, facilityURN, region, sort
           <td class="px-3 py-2 text-dark-text-secondary">${levelCounter}</td>
           <td class="px-3 py-2 text-dark-text">${level.name}</td>
           <td class="px-3 py-2 text-right text-dark-text font-mono">${elevationDisplay}</td>
+          ${hasContents ? `
+          <td class="px-3 py-2 text-right">${renderCountLink(level, 'roomKeys')}</td>
+          <td class="px-3 py-2 text-right">${renderCountLink(level, 'assetKeys')}</td>
+          ` : ''}
         </tr>
       `;
     });
@@ -207,6 +236,25 @@ export async function displayLevels(container, levels, facilityURN, region, sort
     });
   });
   
+  // Counts open the details of the rooms or assets they count
+  container.querySelectorAll('.level-count-link').forEach(link => {
+    link.addEventListener('click', () => {
+      const level = levels.find(l => l.key === link.getAttribute('data-level-key'));
+      const listName = link.getAttribute('data-list');
+
+      if (!level || !level[listName]?.length) {
+        return;
+      }
+      const what = listName === 'roomKeys' ? 'Rooms' : 'Assets';
+
+      viewAssetDetails([{
+        modelURN: level.modelId,
+        modelName: level.modelName || 'Unknown Model',
+        keys: level[listName]
+      }], `${what} of ${level.name}`, facilityURN, region);
+    });
+  });
+
   // Add Details button event listener
   const detailsBtn = document.getElementById('levels-details-btn');
   if (detailsBtn) {
@@ -235,3 +283,20 @@ export async function displayLevels(container, levels, facilityURN, region, sort
   }
 }
 
+
+/**
+ * Count of rooms or assets of a level; a link to their details when there is at least one.
+ * @param {object} level
+ * @param {'roomKeys'|'assetKeys'} listName
+ * @returns {string} HTML
+ */
+function renderCountLink(level, listName) {
+  const count = level[listName]?.length ?? 0;
+
+  if (count === 0) {
+    return '<span class="text-dark-text-secondary">0</span>';
+  }
+  const keyAttr = String(level.key).replace(/"/g, '&quot;');
+
+  return `<button class="level-count-link text-tandem-blue hover:underline font-mono" data-level-key="${keyAttr}" data-list="${listName}" title="View details">${count}</button>`;
+}

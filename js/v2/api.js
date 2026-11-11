@@ -17,6 +17,15 @@ import {
 } from '../shared/api.js';
 import { ColumnFamilies, ElementFlags, QC, SystemClassNames } from '../../tandem/constants.js';
 import { toFullKey, toSystemId } from '../../tandem/keys.js';
+import { isDefaultModel } from '../shared/utils.js';
+
+
+/**
+ * Name of a model for display; the default model has no label of its own.
+ */
+function modelLabel(facilityURN, model) {
+  return model.label || (isDefaultModel(facilityURN, model.modelId) ? '** Default Model **' : 'Unknown Model');
+}
 
 /**
  * Get streams from the default model
@@ -394,7 +403,7 @@ export async function getSystems(facilityURN, region, models) {
             if (!system.elementsByModel[model.modelId]) {
               system.elementsByModel[model.modelId] = {
                 modelURN: model.modelId,
-                modelName: model.label || 'Unknown Model',
+                modelName: modelLabel(facilityURN, model),
                 keys: new Set()
               };
             }
@@ -543,7 +552,7 @@ export async function getTaggedAssetsDetails(facilityURN, region, includeKeys = 
       if (includeKeys && modelKeys.length > 0) {
         elementsByModel.push({
           modelURN:  model.modelId,
-          modelName: model.label || 'Unknown Model',
+          modelName: modelLabel(facilityURN, model),
           keys:      modelKeys
         });
       }
